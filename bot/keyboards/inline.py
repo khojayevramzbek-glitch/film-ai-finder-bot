@@ -92,8 +92,12 @@ def get_movie_keyboard(ai_data: Dict[str, Any], tmdb_data: Optional[Dict[str, An
 
 
 def get_genres_keyboard(lang: str = "uz") -> InlineKeyboardMarkup:
-    """Returns interactive genre buttons for /random movie picker."""
+    """Returns interactive genre buttons for /random AI movie picker."""
     buttons = [
+        # AI Surprise Me!
+        [
+            InlineKeyboardButton(text=get_msg(lang, "btn_surprise_me"), callback_data="rand_genre:surprise"),
+        ],
         [
             InlineKeyboardButton(text=get_msg(lang, "genre_action"), callback_data="rand_genre:action"),
             InlineKeyboardButton(text=get_msg(lang, "genre_comedy"), callback_data="rand_genre:comedy"),
@@ -105,6 +109,10 @@ def get_genres_keyboard(lang: str = "uz") -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text=get_msg(lang, "genre_drama"), callback_data="rand_genre:drama"),
             InlineKeyboardButton(text=get_msg(lang, "genre_cartoon"), callback_data="rand_genre:cartoon"),
+        ],
+        [
+            InlineKeyboardButton(text=get_msg(lang, "genre_thriller"), callback_data="rand_genre:thriller"),
+            InlineKeyboardButton(text=get_msg(lang, "genre_romance"), callback_data="rand_genre:romance"),
         ],
         [
             InlineKeyboardButton(text=get_msg(lang, "genre_anime"), callback_data="rand_genre:anime"),
@@ -119,7 +127,6 @@ def get_random_movie_keyboard(title: str, genre_key: str, lang: str = "uz") -> I
     yt_url = f"https://www.youtube.com/results?search_query={encoded_title}+trailer"
     watch_url = f"https://www.google.com/search?q={encoded_title}+tarjima+kino+uzbek+tilida+skachat+korish"
 
-    # Safely embed previous title in callback data to avoid duplicates
     clean_title = title.replace(":", " ").strip()[:20]
     next_cb = safe_callback_data(f"rand_genre:{genre_key}:", clean_title)
 

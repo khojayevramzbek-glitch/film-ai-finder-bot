@@ -46,8 +46,8 @@ def build_system_prompt(lang: str = "uz") -> str:
     return f"""
 Siz kino, serial, multfilm, anime va premyeralarni aniqlovchi professional sun'iy intellekt ekspertisiz.
 
-Sizga videodan olingan asosiy kadrlar (yoki bitta rasm/skrinshot yoki matnli syujet/sarlavha) beriladi.
-Vazifangiz: Berilgan ma'lumotdan foydalanib, bu qaysi kino, serial, multfilm, dorama yoki animatsiya ekanligini ANIQ aniqlash.
+Sizga videodan olingan asosiy kadrlar (yoki bitta rasm/skrinshot yoki matnli syujet/sarlavha/kayfiyat) beriladi.
+Vazifangiz: Berilgan ma'lumotdan foydalanib, bu qaysi kino, serial, multfilm, dorama yoki animatsiya ekanligini ANIQ aniqlash yoki tavsiya etish.
 
 JUDA MUHIM QOIDALAR:
 1. Agar bu kino/serial hali rasman chiqmagan bo'lsa (masalan yaqinda e'lon qilingan treyler, tizer yoki kelgusi premyera), "is_premiere": true deb belgilang va kutilayotgan premyera sanasini/yilini yozing.
@@ -237,20 +237,20 @@ class AIService:
     async def analyze_image(self, image_path: Path, caption: str = "", lang: str = "uz") -> Dict[str, Any]:
         return await asyncio.to_thread(self._sync_analyze_image, image_path, caption, lang)
 
-    # 3. Plot Description Text Search ("Kino nomini unutdim")
-    def _sync_analyze_plot_text(self, plot_description: str, lang: str = "uz") -> Dict[str, Any]:
+    # 3. Plot Description & Mood-Based Text Search
+    def _sync_analyze_plot_text(self, text_input: str, lang: str = "uz") -> Dict[str, Any]:
         system_prompt = build_system_prompt(lang=lang)
         prompt_content = (
             f"{system_prompt}\n\n"
-            f"Foydalanuvchi film nomini eslay olmay, quyidagi syujet/voqea/sarlavha tavsifini yozdi:\n"
-            f"\"{plot_description}\"\n\n"
-            f"Ushbu tavsif qaysi film, serial, anime yoki multfilmga tegishli ekanligini eng yuqori ehtimollik bilan toping."
+            f"Foydalanuvchi quyidagi matnni yozdi (bu unutilgan film syujeti, kino qahramonlari yoki ko'rishni xohlayotgan kayfiyati bo'lishi mumkin):\n"
+            f"\"{text_input}\"\n\n"
+            f"Ushbu tavsifga yoki kayfiyatga eng mukammal mos keluvchi haqiqiy film, serial, anime yoki multfilmni toping va ma'lumotlarini bering."
         )
-        resp_text = self._execute_gemini_request([prompt_content], response_json=True, temperature=0.3)
+        resp_text = self._execute_gemini_request([prompt_content], response_json=True, temperature=0.4)
         return self._parse_json_response(resp_text)
 
-    async def analyze_plot_text(self, plot_description: str, lang: str = "uz") -> Dict[str, Any]:
-        return await asyncio.to_thread(self._sync_analyze_plot_text, plot_description, lang)
+    async def analyze_plot_text(self, text_input: str, lang: str = "uz") -> Dict[str, Any]:
+        return await asyncio.to_thread(self._sync_analyze_plot_text, text_input, lang)
 
     # 4. Similar Movies Recommendations
     def _sync_get_similar_movies(self, title: str, lang: str = "uz") -> List[Dict[str, Any]]:
@@ -296,8 +296,8 @@ Javobni FAQAT quyidagi JSON ro'yxati formatida qaytaring:
     async def get_similar_movies(self, title: str, lang: str = "uz") -> List[Dict[str, Any]]:
         return await asyncio.to_thread(self._sync_get_similar_movies, title, lang)
 
-    # 5. Random Movie Pick by Genre (/random) with Dynamic Variety & Exclusions
-    def _sync_get_random_movie(self, genre: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
+    # 5. /random AI Movie Curator (Genres, Moods, and Surprise Me!)
+    def _sync_get_random_movie(self, genre_or_mood: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
         lang_instruction = {
             "uz": "Mazmun va tavsiyani O'zbek tilida (lotin) yozing.",
             "uz_kr": "Мазмун ва тавсияни Ўзбек тилида (кирилл) ёзинг.",
@@ -305,26 +305,26 @@ Javobni FAQAT quyidagi JSON ro'yxati formatida qaytaring:
             "en": "Write summary and recommendation in English."
         }.get(lang, "Mazmunni O'zbek tilida yozing.")
 
-        eras = [
-            "2018-2024 yillardagi zamonaviy blokbaster",
-            "2005-2017 yillardagi mashhur dunyo durdonasi",
-            "1995-2005 yillardagi eng qiziqarli kult film",
-            "kutilmagan burilishlarga (plot twist) boy aqlbovar qilmas",
-            "o'ta yuqori reytingli (IMDb 8+) afsonaviy",
-            "tomoshabin e'tiboridan chetda qolgan, lekin o'ta qiziqarli (underrated)"
-        ]
-        selected_style = random.choice(eras)
         random_seed = random.randint(1000, 99999)
-
         exclude_clause = ""
         if exclude_title:
             exclude_clause = f"JUDA MUHIM: Quyidagi filmlarni TAVSIYA QILMANG (foydalanuvchi buni ko'rgan): \"{exclude_title}\". Mutlaqo boshqa, yangi film tanlang!"
 
-        prompt = f"""
-Siz professional kinoshunos va kino tavsiya etuvchi sun'iy intellektsiz.
-Foydalanuvchi bugun ko'rish uchun "{genre}" janridagi {selected_style} 1 TA YANGI VA QIZIQARLI FILMNI tavsiya qilishni so'radi.
+        is_surprise = "surprise" in genre_or_mood.lower() or "hayrat" in genre_or_mood.lower()
 
-Tasodifiy kalit: #{random_seed}
+        if is_surprise:
+            genres_pool = ["Aqlbovar qilmas Fantastika", "Kutilmagan burilishlarga boy Triller", "Chuqur Psixologik Drama", "Hayotbaxsh va Ilhomlantiruvchi Sarguzasht", "Kult klassika"]
+            picked_style = random.choice(genres_pool)
+            task_description = f"Butun dunyo kinematografiyasidagi eng sara, yuqori reytingli (IMDb 8+) va tomoshabinni lol qoldiradigan 1 TA AQLBOVAR QILMAS DURDONA FILMNI ({picked_style}) tanlang."
+        else:
+            task_description = f"\"{genre_or_mood}\" janri yoki kayfiyatiga mos, eng sara, qiziqarli va yuqori reytingli 1 TA FILMNI tanlang."
+
+        prompt = f"""
+Siz butun dunyo kinematografiyasini mukammal biluvchi Sun'iy Intellekt Kino Kuratorisiz.
+Foydalanuvchi bugun kechqurun maroq bilan ko'rish uchun quyidagi so'rovni yubordi:
+{task_description}
+
+Tasodifiy seed: #{random_seed}
 {exclude_clause}
 
 {lang_instruction}
@@ -334,20 +334,20 @@ Javobni FAQAT quyidagi JSON formatida qaytaring:
 {{
   "title_original": "Movie Title",
   "title_local": "Mahalliy nomi",
-  "release_year": "2021",
-  "rating": "8.4",
-  "genres": "{genre}",
+  "release_year": "2022",
+  "rating": "8.5",
+  "genres": "{genre_or_mood if not is_surprise else 'Top Masterpiece'}",
   "actors": ["Actor 1", "Actor 2"],
   "summary": "Filmning qisqacha maftunkor syujeti",
-  "why_watch": "Nima uchun aynan shu filmni ko'rish shart (taassurot)"
+  "why_watch": "Nima uchun aynan shu filmni ko'rish shart (taassurot va kayfiyat)"
 }}
 ```
 """
         resp_text = self._execute_gemini_request([prompt], response_json=True, temperature=0.95)
         return self._parse_json_response(resp_text)
 
-    async def get_random_movie(self, genre: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
-        return await asyncio.to_thread(self._sync_get_random_movie, genre, exclude_title, lang)
+    async def get_random_movie(self, genre_or_mood: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
+        return await asyncio.to_thread(self._sync_get_random_movie, genre_or_mood, exclude_title, lang)
 
 
 ai_service = AIService()
