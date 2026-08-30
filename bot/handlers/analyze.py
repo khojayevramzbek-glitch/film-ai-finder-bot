@@ -149,15 +149,21 @@ async def handle_text(message: Message, bot: Bot):
             await status_msg.edit_text(fail_text, parse_mode="HTML")
             return
 
-        video_path = download_result["file_path"]
+        file_path = download_result["file_path"]
+        is_fallback_img = download_result.get("is_image_fallback", False)
         meta_text = f"Title: {download_result.get('title', '')}\nDescription: {download_result.get('description', '')}"
 
         try:
-            await status_msg.edit_text(get_msg(lang, "status_analyzing"), parse_mode="HTML")
-            ai_data = await ai_service.analyze_video(video_path, metadata_text=meta_text, lang=lang)
+            if is_fallback_img:
+                await status_msg.edit_text(get_msg(lang, "status_photo_search"), parse_mode="HTML")
+                ai_data = await ai_service.analyze_image(file_path, caption=meta_text, lang=lang)
+            else:
+                await status_msg.edit_text(get_msg(lang, "status_analyzing"), parse_mode="HTML")
+                ai_data = await ai_service.analyze_video(file_path, metadata_text=meta_text, lang=lang)
+
             await process_and_send_result(bot=bot, message=message, ai_data=ai_data, status_msg=status_msg, lang=lang)
         finally:
-            safe_remove(video_path)
+            safe_remove(file_path)
         return
 
     # 2. If no URL and length is too short
