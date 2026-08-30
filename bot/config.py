@@ -8,8 +8,14 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-# Telegram Bot Token
+# Telegram Main Bot Token
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+
+# Telegram Admin Bot Token
+ADMIN_BOT_TOKEN = os.getenv("ADMIN_BOT_TOKEN", "8898606125:AAHi2BMQdes6LhHXgvykQP4XTAzTp5Idov4").strip()
+
+# Admin usernames and IDs
+ADMIN_USERNAMES = ["khojayev_ramz"]
 
 
 def parse_key_list(env_val: str) -> List[str]:
@@ -28,7 +34,7 @@ GEMINI_API_KEYS: List[str] = parse_key_list(_raw_gemini)
 _raw_tmdb = os.getenv("TMDB_API_KEYS", "") or os.getenv("TMDB_API_KEY", "")
 TMDB_API_KEYS: List[str] = parse_key_list(_raw_tmdb)
 
-# Gemini Model Name (Default to stable high-quota gemini-3.5-flash)
+# Gemini Model Name
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
 
 # Optional Proxy URL

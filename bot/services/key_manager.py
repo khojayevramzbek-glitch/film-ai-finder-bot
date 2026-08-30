@@ -1,7 +1,7 @@
 import time
 import threading
 import logging
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -48,14 +48,12 @@ class APIKeyPool:
         now = time.time()
         with self._lock:
             total = len(self.keys)
-            # Try to find a non-cooldown key starting from current index
             for _ in range(total):
                 key = self.keys[self._current_index]
                 self._current_index = (self._current_index + 1) % total
                 if self._cooldowns.get(key, 0) <= now:
                     return key
 
-            # If all keys are currently cooling down, return the one that will expire first
             earliest_key = min(self.keys, key=lambda k: self._cooldowns.get(k, 0))
             logger.warning(
                 f"[{self.service_name}] Barcha {total} ta API kalitlari vaqtinchalik limitda. "
@@ -64,9 +62,7 @@ class APIKeyPool:
             return earliest_key
 
     def report_rate_limit(self, key: str, cooldown_seconds: Optional[int] = None) -> None:
-        """
-        Marks a key as rate-limited (HTTP 429 / Quota Exceeded) and sets a cooldown timer.
-        """
+        """Marks a key as rate-limited (HTTP 429 / Quota Exceeded) and sets a cooldown timer."""
         if not key:
             return
 
@@ -89,3 +85,39 @@ class APIKeyPool:
         with self._lock:
             if key in self._cooldowns and self._cooldowns[key] <= time.time():
                 del self._cooldowns[key]
+
+    def reset_all_cooldowns(self) -> int:
+        """Resets all cooldown timers immediately."""
+        with self._lock:
+            count = len(self._cooldowns)
+            self._cooldowns.clear()
+            return count
+
+    def get_pool_status(self) -> Dict[str, Any]:
+        """Returns detailed real-time health metrics of all keys in the pool."""
+        now = time.time()
+        with self._lock:
+            key_details = []
+            active_cnt = 0
+            for idx, key in enumerate(self.keys, 1):
+                exp = self._cooldowns.get(key, 0)
+                is_active = exp <= now
+                remaining = max(0, int(exp - now)) if not is_active else 0
+                if is_active:
+                    active_cnt += 1
+
+                masked = f"{key[:8]}...{key[-4:]}" if len(key) > 12 else key
+                key_details.append({
+                    "index": idx,
+                    "masked": masked,
+                    "is_active": is_active,
+                    "remaining_cooldown": remaining
+                })
+
+            return {
+                "service_name": self.service_name,
+                "total": len(self.keys),
+                "active": active_cnt,
+                "cooldown": len(self.keys) - active_cnt,
+                "keys": key_details
+            }

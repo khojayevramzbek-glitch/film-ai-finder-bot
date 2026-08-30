@@ -16,8 +16,9 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-from bot.config import BOT_TOKEN, validate_config, GEMINI_API_KEYS
+from bot.config import BOT_TOKEN, ADMIN_BOT_TOKEN, validate_config, GEMINI_API_KEYS
 from bot.handlers import start, analyze
+from admin_bot import handlers as admin_handlers
 
 # Setup logging
 logging.basicConfig(
@@ -30,8 +31,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def set_bot_commands(bot: Bot):
-    """Sets up the bot menu commands in Telegram."""
+async def set_main_bot_commands(bot: Bot):
+    """Sets up the bot menu commands for Main Bot."""
     commands = [
         BotCommand(command="start", description="🚀 Boshlash / Start"),
         BotCommand(command="random", description="🎲 Bugun nima ko'rsam ekan? / What to watch"),
@@ -42,12 +43,21 @@ async def set_bot_commands(bot: Bot):
     await bot.set_my_commands(commands)
 
 
+async def set_admin_bot_commands(bot: Bot):
+    """Sets up the bot menu commands for Admin Bot."""
+    commands = [
+        BotCommand(command="start", description="👑 Boshqaruv Markazi / Dashboard"),
+        BotCommand(command="cancel", description="❌ Jarayonni bekor qilish"),
+    ]
+    await bot.set_my_commands(commands)
+
+
 async def health_check_handler(request):
     """Health check endpoint for Render/Cloud platforms."""
     return web.json_response({
         "status": "online",
-        "service": "AI FilmFinder Bot",
-        "version": "2.5 Super AI"
+        "service": "AI FilmFinder Multi-Bot Cluster",
+        "version": "3.0 Master Edition"
     })
 
 
@@ -65,20 +75,19 @@ async def start_web_server(port: int):
 
 
 async def main():
-    """Main application entry point."""
-    logger.info("🚀 AI Movie Finder Bot ishga tushirilmoqda (Super AI 2.5)...")
+    """Main cluster entry point."""
+    logger.info("🚀 AI Movie Finder Bot Cluster ishga tushirilmoqda...")
 
     # Check configuration
     errors = validate_config()
     if errors:
         for err in errors:
             logger.error(f"❌ Sozlama xatosi: {err}")
-        logger.warning("Iltimos, .env faylini to'ldiring va qayta ishga tushiring.")
         return
 
     logger.info(f"🔑 Yuklangan Gemini API kalitlari soni: {len(GEMINI_API_KEYS)} ta (Auto-Rotation faol)")
 
-    # If running on Render or any cloud with $PORT set, start background health server
+    # Start background health server if PORT is defined (Render.com)
     port = os.getenv("PORT")
     if port:
         try:
@@ -86,36 +95,53 @@ async def main():
         except Exception as e:
             logger.warning(f"[Web Server Warning] Port {port} da web server ishga tushmadi: {e}")
 
-    # Initialize Bot & Dispatcher
-    bot = Bot(
+    # 1. Initialize Main Search Bot
+    main_bot = Bot(
         token=BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
-    dp = Dispatcher()
+    main_dp = Dispatcher()
+    main_dp.include_router(start.router)
+    main_dp.include_router(analyze.router)
+    await set_main_bot_commands(main_bot)
+    await main_bot.delete_webhook(drop_pending_updates=True)
 
-    # Register handlers
-    dp.include_router(start.router)
-    dp.include_router(analyze.router)
+    main_me = await main_bot.get_me()
+    logger.info(f"✅ Asosiy qidiruv boti ulandi: @{main_me.username} ({main_me.first_name})")
 
-    # Set command menu
-    await set_bot_commands(bot)
+    polling_tasks = [main_dp.start_polling(main_bot)]
 
-    # Get bot info
-    me = await bot.get_me()
-    logger.info(f"✅ Bot muvaffaqiyatli ulandi: @{me.username} ({me.first_name})")
+    # 2. Initialize Dedicated Admin Bot
+    admin_bot = None
+    if ADMIN_BOT_TOKEN:
+        try:
+            admin_bot = Bot(
+                token=ADMIN_BOT_TOKEN,
+                default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+            )
+            admin_dp = Dispatcher()
+            admin_dp.include_router(admin_handlers.router)
+            await set_admin_bot_commands(admin_bot)
+            await admin_bot.delete_webhook(drop_pending_updates=True)
 
-    # Delete existing webhook to enable polling
-    await bot.delete_webhook(drop_pending_updates=True)
-    logger.info("🎬 Bot xabarlarni qabul qilishga tayyor! (Long-polling boshlandi)")
+            admin_me = await admin_bot.get_me()
+            logger.info(f"👑 Maxsus Admin Boti ulandi: @{admin_me.username} ({admin_me.first_name})")
+            polling_tasks.append(admin_dp.start_polling(admin_bot))
+        except Exception as e:
+            logger.error(f"❌ Admin Botni ishga tushirishda xatolik: {e}")
+
+    logger.info("🎬 Barcha botlar 24/7 rejimda to'liq ishga tushdi!")
 
     try:
-        await dp.start_polling(bot)
+        await asyncio.gather(*polling_tasks)
     finally:
-        await bot.session.close()
+        await main_bot.session.close()
+        if admin_bot:
+            await admin_bot.session.close()
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logger.info("🛑 Bot to'xtatildi.")
+        logger.info("🛑 Botlar to'xtatildi.")
