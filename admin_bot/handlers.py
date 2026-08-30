@@ -1,4 +1,5 @@
 import os
+import re
 import csv
 import html
 import asyncio
@@ -12,7 +13,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 
-from bot.config import ADMIN_USERNAMES, GEMINI_API_KEYS, TMDB_API_KEYS
+from bot.config import ADMIN_USERNAMES, GEMINI_API_KEYS, TMDB_API_KEYS, BOT_TOKEN
 from bot.services.db import (
     DB_PATH,
     get_stats,
@@ -222,9 +223,12 @@ async def cb_sponsor_channels(callback: CallbackQuery):
         lines.append("")
 
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append("➕ <b>Yangi kanal qo'shish uchun quyidagi buyruqni yuboring:</b>")
-    lines.append("<code>/addchannel -100123456789 Kanal_Nomi https://t.me/kanal_link</code>")
-    lines.append("\n⚠️ <i>Muhim: Botni avval o'sha kanalga <b>Admin</b> qilib qo'shishingiz shart!</i>")
+    lines.append("➕ <b>Kanal qo'shish juda oson:</b>")
+    lines.append("Shunchaki buyruqni yuboring:")
+    lines.append("👉 <code>/addchannel @khojayev_gaz</code>")
+    lines.append("yoki")
+    lines.append("👉 <code>/addchannel https://t.me/khojayev_gaz</code>")
+    lines.append("\n⚠️ <i>Muhim qoida: Asosiy botingiz (<b>@FilmAiFinderbot</b>) o'sha kanalga <b>Administrator</b> qilib qo'shilgan bo'lishi kerak!</i>")
 
     buttons.append([InlineKeyboardButton(text="🔙 Boshqaruv Paneliga Qaytish", callback_data="adm:menu")])
 
@@ -236,27 +240,90 @@ async def cb_sponsor_channels(callback: CallbackQuery):
 
 
 @router.message(Command("addchannel"))
-async def cmd_add_channel(message: Message):
-    """Adds sponsor channel: /addchannel -100123456789 Kanal_Nomi https://t.me/link."""
+async def cmd_add_channel(message: Message, bot: Bot):
+    """
+    Intelligent 1-click sponsor channel adder.
+    Accepts: /addchannel @username or /addchannel https://t.me/username or /addchannel -100xxx Title URL
+    """
     user_id = message.from_user.id if message.from_user else 0
     username = message.from_user.username or ""
     if not is_admin(user_id, username):
         return
 
-    parts = message.text.split(maxsplit=3)
-    if len(parts) < 4:
+    text = message.text.replace("/addchannel", "").strip()
+    if not text:
         await message.answer(
-            "⚠️ <b>Noto'g'ri format!</b>\n\nFoydalanish:\n<code>/addchannel -100123456789 Kanal_Nomi https://t.me/kanal_link</code>",
+            "⚠️ <b>Kanal manzilini kiriting!</b>\n\nMasalan:\n<code>/addchannel @khojayev_gaz</code>\nyoki\n<code>/addchannel https://t.me/khojayev_gaz</code>",
             parse_mode="HTML"
         )
         return
 
-    ch_id = parts[1]
-    ch_title = parts[2]
-    ch_url = parts[3]
+    # Extract username or URL
+    raw_input = text.split()[0]
+    channel_username = raw_input.replace("https://t.me/", "").replace("t.me/", "").lstrip("@").strip()
 
-    add_sponsor_channel(channel_id=ch_id, channel_title=ch_title, channel_url=ch_url)
-    await message.answer(f"✅ <b>'{html.escape(ch_title)}' kanali muvaffaqiyatli qo'shildi!</b>", parse_mode="HTML")
+    if not channel_username:
+        await message.answer("❌ Kanal username yoki havolasi noto'g'ri.", parse_mode="HTML")
+        return
+
+    target_chat = f"@{channel_username}" if not channel_username.startswith("-100") else channel_username
+    channel_url = f"https://t.me/{channel_username.lstrip('@')}"
+
+    # Use main search bot to verify and get channel details
+    from aiogram import Bot as SearchBot
+    main_bot = SearchBot(token=BOT_TOKEN)
+
+    try:
+        chat = await main_bot.get_chat(target_chat)
+        ch_id = str(chat.id)
+        ch_title = chat.title or channel_username
+
+        # Verify bot is administrator in the channel
+        me = await main_bot.get_me()
+        try:
+            member = await main_bot.get_chat_member(chat_id=chat.id, user_id=me.id)
+            if member.status not in ["administrator", "creator"]:
+                await message.answer(
+                    f"⚠️ <b>E'tibor bering:</b>\n\n"
+                    f"<b>@{me.username}</b> boti <b>'{html.escape(ch_title)}'</b> kanaliga <b>Administrator</b> qilinmagan!\n\n"
+                    f"Foydalanuvchilar obunasini tekshirishi uchun botni kanalga admin qilib qo'shing.",
+                    parse_mode="HTML"
+                )
+        except Exception:
+            pass
+
+        # Save to database
+        add_sponsor_channel(channel_id=ch_id, channel_title=ch_title, channel_url=channel_url)
+
+        await message.answer(
+            f"✅ <b>Kanal muvaffaqiyatli qo'shildi!</b>\n\n"
+            f"📢 <b>Nomi:</b> {html.escape(ch_title)}\n"
+            f"🆔 <b>ID:</b> <code>{ch_id}</code>\n"
+            f"🔗 <b>Havola:</b> {channel_url}\n\n"
+            f"Endi barcha yangi foydalanuvchilar botdan foydalanishdan oldin ushbu kanalga a'zo bo'lishadi!",
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+
+    except Exception as e:
+        logger.error(f"[AddChannel Error] {e}")
+        # Fallback: if user provided custom title
+        parts = text.split(maxsplit=2)
+        if len(parts) >= 3:
+            ch_id = parts[0]
+            ch_title = parts[1]
+            ch_url = parts[2]
+            add_sponsor_channel(channel_id=ch_id, channel_title=ch_title, channel_url=ch_url)
+            await message.answer(f"✅ <b>'{html.escape(ch_title)}' kanali qo'shildi!</b>", parse_mode="HTML")
+        else:
+            await message.answer(
+                f"❌ <b>Kanal topilmadi!</b>\n\n"
+                f"Iltimos, avval <b>@FilmAiFinderbot</b> ni o'sha kanalga <b>Administrator</b> qilib qo'shing va qayta yuboring:\n"
+                f"<code>/addchannel @{channel_username}</code>",
+                parse_mode="HTML"
+            )
+    finally:
+        await main_bot.session.close()
 
 
 @router.callback_query(F.data.startswith("adm:del_ch:"))
