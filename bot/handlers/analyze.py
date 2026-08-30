@@ -1,6 +1,7 @@
 import re
 import html
 import uuid
+import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from aiogram import Router, F, Bot
@@ -16,7 +17,18 @@ from bot.services.ai_service import ai_service
 from bot.services.tmdb_service import tmdb_service
 from bot.keyboards.inline import get_movie_keyboard
 
+logger = logging.getLogger(__name__)
 router = Router()
+
+
+async def safe_edit_text(message: Optional[Message], text: str, reply_markup=None) -> Optional[Message]:
+    """Safely edits text message without crashing if message was already modified or deleted."""
+    if not message:
+        return None
+    try:
+        return await message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
+    except Exception:
+        return message
 
 
 async def process_and_send_result(
@@ -30,23 +42,23 @@ async def process_and_send_result(
     try:
         if not ai_data or not ai_data.get("found"):
             reason = ai_data.get("reason", "Film aniqlanmadi.") if ai_data else "Error"
-            fail_text = get_msg(lang, "error_not_found", reason=reason)
+            fail_text = get_msg(lang, "error_not_found", reason=html.escape(str(reason)))
             if status_msg:
-                await status_msg.edit_text(fail_text, parse_mode="HTML")
+                await safe_edit_text(status_msg, fail_text)
             else:
                 await message.answer(fail_text, parse_mode="HTML")
             return
 
         # Fetch extra metadata from TMDb
         if status_msg:
-            await status_msg.edit_text(get_msg(lang, "status_db"), parse_mode="HTML")
+            await safe_edit_text(status_msg, get_msg(lang, "status_db"))
 
         query_title = ai_data.get("title_original") or ai_data.get("title_ru") or ai_data.get("title_uz")
         release_year = str(ai_data.get("release_year") or "")
         tmdb_data = await tmdb_service.search_media(query_title, year=release_year)
 
-        # Format final message and localized keyboard
-        formatted_caption = format_movie_response(ai_data, tmdb_data, lang=lang)
+        # Format final message and localized keyboard (safe 1000 char max for photo captions)
+        formatted_caption = format_movie_response(ai_data, tmdb_data, lang=lang, max_len=1000)
         reply_markup = get_movie_keyboard(ai_data, tmdb_data, lang=lang)
 
         poster_url = tmdb_data.get("poster_url") if tmdb_data else None
@@ -63,20 +75,20 @@ async def process_and_send_result(
                 )
                 return
             except Exception as e:
-                print(f"[Photo Send Warning] Poster yuborishda xatolik: {e}")
+                logger.warning(f"[Photo Send Warning] Poster yuborishda xatolik: {e}")
 
         # If no poster or send failed, send text message
         if status_msg:
-            await status_msg.edit_text(formatted_caption, reply_markup=reply_markup, parse_mode="HTML")
+            await safe_edit_text(status_msg, formatted_caption, reply_markup=reply_markup)
         else:
             await message.answer(formatted_caption, reply_markup=reply_markup, parse_mode="HTML")
 
     except Exception as e:
-        print(f"[Process Error] Xatolik: {e}")
+        logger.error(f"[Process Error] Xatolik: {e}")
         error_msg = get_msg(lang, "error_general")
         if status_msg:
             try:
-                await status_msg.edit_text(error_msg, parse_mode="HTML")
+                await safe_edit_text(status_msg, error_msg)
             except Exception:
                 await message.answer(error_msg, parse_mode="HTML")
         else:
@@ -88,6 +100,9 @@ async def handle_photo(message: Message, bot: Bot):
     """Handles screenshots or photos from movies."""
     user_id = message.from_user.id if message.from_user else 0
     lang = get_user_lang(user_id) or "uz"
+
+    if not message.photo:
+        return
 
     status_msg = await message.answer(get_msg(lang, "status_photo_search"), parse_mode="HTML")
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
@@ -112,15 +127,15 @@ async def handle_photo(message: Message, bot: Bot):
         )
 
     except Exception as e:
-        print(f"[Photo Handler Error] {e}")
-        await status_msg.edit_text(get_msg(lang, "error_general"), parse_mode="HTML")
+        logger.error(f"[Photo Handler Error] {e}")
+        await safe_edit_text(status_msg, get_msg(lang, "error_general"))
     finally:
         safe_remove(photo_path)
 
 
-@router.message(F.text)
+@router.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: Message, bot: Bot):
-    """Handles text: either video URLs (Reels/Shorts) or plot description queries."""
+    """Handles text: either video URLs (Reels/Shorts) or plot description queries (ignores slash commands)."""
     user_id = message.from_user.id if message.from_user else 0
     lang = get_user_lang(user_id) or "uz"
     text = message.text.strip()
@@ -139,14 +154,14 @@ async def handle_text(message: Message, bot: Bot):
             # Smart fallback: if user included text/hashtags, try searching by text
             cleaned_prompt = re.sub(r'https?:\/\/\S+', '', text).strip()
             if len(cleaned_prompt) > 4:
-                await status_msg.edit_text(get_msg(lang, "status_plot_search"), parse_mode="HTML")
+                await safe_edit_text(status_msg, get_msg(lang, "status_plot_search"))
                 ai_data = await ai_service.analyze_plot_text(cleaned_prompt, lang=lang)
                 if ai_data and ai_data.get("found"):
                     await process_and_send_result(bot=bot, message=message, ai_data=ai_data, status_msg=status_msg, lang=lang)
                     return
 
             fail_text = get_msg(lang, "error_download")
-            await status_msg.edit_text(fail_text, parse_mode="HTML")
+            await safe_edit_text(status_msg, fail_text)
             return
 
         file_path = download_result["file_path"]
@@ -155,10 +170,10 @@ async def handle_text(message: Message, bot: Bot):
 
         try:
             if is_fallback_img:
-                await status_msg.edit_text(get_msg(lang, "status_photo_search"), parse_mode="HTML")
+                await safe_edit_text(status_msg, get_msg(lang, "status_photo_search"))
                 ai_data = await ai_service.analyze_image(file_path, caption=meta_text, lang=lang)
             else:
-                await status_msg.edit_text(get_msg(lang, "status_analyzing"), parse_mode="HTML")
+                await safe_edit_text(status_msg, get_msg(lang, "status_analyzing"))
                 ai_data = await ai_service.analyze_video(file_path, metadata_text=meta_text, lang=lang)
 
             await process_and_send_result(bot=bot, message=message, ai_data=ai_data, status_msg=status_msg, lang=lang)
@@ -216,7 +231,7 @@ async def handle_direct_video(message: Message, bot: Bot):
         await bot.download_file(file_info.file_path, destination=dest_path)
 
         caption_text = message.caption or ""
-        await status_msg.edit_text(get_msg(lang, "status_analyzing"), parse_mode="HTML")
+        await safe_edit_text(status_msg, get_msg(lang, "status_analyzing"))
         ai_data = await ai_service.analyze_video(dest_path, metadata_text=caption_text, lang=lang)
 
         await process_and_send_result(
@@ -228,20 +243,23 @@ async def handle_direct_video(message: Message, bot: Bot):
         )
 
     except Exception as e:
-        print(f"[Direct Video Error] {e}")
-        await status_msg.edit_text(get_msg(lang, "error_general"), parse_mode="HTML")
+        logger.error(f"[Direct Video Error] {e}")
+        await safe_edit_text(status_msg, get_msg(lang, "error_general"))
     finally:
         safe_remove(dest_path)
 
 
-@router.callback_query(F.data.startswith("similar:"))
+@router.callback_query(F.data.startswith("sim:") | F.data.startswith("similar:"))
 async def cb_similar_movies(callback: CallbackQuery, bot: Bot):
     """Generates and displays 3 similar movie recommendations."""
     user_id = callback.from_user.id if callback.from_user else 0
     lang = get_user_lang(user_id) or "uz"
     
     title = callback.data.split(":", 1)[1]
-    await callback.answer(get_msg(lang, "status_similar_search"), show_alert=False)
+    try:
+        await callback.answer(get_msg(lang, "status_similar_search"), show_alert=False)
+    except Exception:
+        pass
 
     status_msg = await callback.message.reply(get_msg(lang, "status_similar_search"), parse_mode="HTML")
     await bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
@@ -249,7 +267,7 @@ async def cb_similar_movies(callback: CallbackQuery, bot: Bot):
     recommendations = await ai_service.get_similar_movies(title, lang=lang)
 
     if not recommendations:
-        await status_msg.edit_text(get_msg(lang, "error_not_found", reason="O'xshash filmlar topilmadi."), parse_mode="HTML")
+        await safe_edit_text(status_msg, get_msg(lang, "error_not_found", reason="O'xshash filmlar topilmadi."))
         return
 
     lines = [f"🎭 <b>'{html.escape(title)}'</b> filmiga o'xshash eng yaxshi filmlar:\n"]
@@ -267,4 +285,4 @@ async def cb_similar_movies(callback: CallbackQuery, bot: Bot):
         lines.append("")
 
     lines.append("🍿 <i>Yoqimli tomosha tilaymiz!</i>")
-    await status_msg.edit_text("\n".join(lines), parse_mode="HTML")
+    await safe_edit_text(status_msg, "\n".join(lines))

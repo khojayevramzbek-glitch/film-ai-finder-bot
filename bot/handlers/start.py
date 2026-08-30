@@ -1,4 +1,5 @@
 import html
+import logging
 from aiogram import Router, F, Bot
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -10,7 +11,19 @@ from bot.keyboards.inline import get_language_keyboard, get_genres_keyboard, get
 from bot.services.ai_service import ai_service
 from bot.services.tmdb_service import tmdb_service
 
+logger = logging.getLogger(__name__)
 router = Router()
+
+
+async def safe_answer_cb(callback: CallbackQuery, text: str = "", show_alert: bool = False):
+    """Safely acknowledges callback queries without throwing expired query errors."""
+    try:
+        if text:
+            await callback.answer(text, show_alert=show_alert)
+        else:
+            await callback.answer()
+    except Exception:
+        pass
 
 
 @router.message(CommandStart())
@@ -27,7 +40,7 @@ async def cmd_start(message: Message):
         return
 
     # Existing user -> Show welcome message in their language
-    text = get_msg(current_lang, "welcome", name=user_name)
+    text = get_msg(current_lang, "welcome", name=html.escape(user_name))
     menu_btns = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text=get_msg(current_lang, "btn_random_more"), callback_data="rand_menu"),
@@ -52,8 +65,11 @@ async def cb_random_menu(callback: CallbackQuery):
     user_id = callback.from_user.id if callback.from_user else 0
     lang = get_user_lang(user_id) or "uz"
     text = get_msg(lang, "random_choose_genre")
-    await callback.message.edit_text(text, reply_markup=get_genres_keyboard(lang), parse_mode="HTML")
-    await callback.answer()
+    try:
+        await callback.message.edit_text(text, reply_markup=get_genres_keyboard(lang), parse_mode="HTML")
+    except Exception:
+        pass
+    await safe_answer_cb(callback)
 
 
 @router.callback_query(F.data.startswith("rand_genre:"))
@@ -64,18 +80,25 @@ async def cb_pick_random_genre(callback: CallbackQuery, bot: Bot):
     genre_key = callback.data.split(":")[1]
 
     genre_name = get_msg(lang, f"genre_{genre_key}")
-    await callback.answer(f"🎲 {genre_name}...")
+    await safe_answer_cb(callback, f"🎲 {genre_name}...")
 
-    status_msg = await callback.message.edit_text(
-        f"🎲 <b>{html.escape(genre_name)}</b> janridagi eng zo'r film tanlanmoqda...",
-        parse_mode="HTML"
-    )
+    try:
+        status_msg = await callback.message.edit_text(
+            f"🎲 <b>{html.escape(genre_name)}</b> janridagi eng zo'r film tanlanmoqda...",
+            parse_mode="HTML"
+        )
+    except Exception:
+        status_msg = callback.message
+
     await bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
 
     movie = await ai_service.get_random_movie(genre_name, lang=lang)
 
     if not movie or not movie.get("title_original"):
-        await status_msg.edit_text("❌ Film tanlashda xatolik yuz berdi. Qayta urinib ko'ring.", parse_mode="HTML")
+        try:
+            await status_msg.edit_text("❌ Film tanlashda xatolik yuz berdi. Qayta urinib ko'ring.", parse_mode="HTML")
+        except Exception:
+            pass
         return
 
     title_orig = html.escape(str(movie.get("title_original", "")))
@@ -115,7 +138,7 @@ async def cb_pick_random_genre(callback: CallbackQuery, bot: Bot):
             await status_msg.delete()
             await callback.message.answer_photo(
                 photo=poster_url,
-                caption="\n".join(lines),
+                caption="\n".join(lines)[:1000],
                 reply_markup=reply_markup,
                 parse_mode="HTML"
             )
@@ -123,7 +146,10 @@ async def cb_pick_random_genre(callback: CallbackQuery, bot: Bot):
         except Exception:
             pass
 
-    await status_msg.edit_text("\n".join(lines), reply_markup=reply_markup, parse_mode="HTML")
+    try:
+        await status_msg.edit_text("\n".join(lines), reply_markup=reply_markup, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer("\n".join(lines), reply_markup=reply_markup, parse_mode="HTML")
 
 
 @router.message(Command("lang"))
@@ -142,8 +168,11 @@ async def cb_change_lang(callback: CallbackQuery):
     user_id = callback.from_user.id if callback.from_user else 0
     current_lang = get_user_lang(user_id) or "uz"
     text = get_msg(current_lang, "choose_lang")
-    await callback.message.edit_text(text, reply_markup=get_language_keyboard(), parse_mode="HTML")
-    await callback.answer()
+    try:
+        await callback.message.edit_text(text, reply_markup=get_language_keyboard(), parse_mode="HTML")
+    except Exception:
+        pass
+    await safe_answer_cb(callback)
 
 
 @router.callback_query(F.data.startswith("lang:"))
@@ -155,7 +184,7 @@ async def cb_set_language(callback: CallbackQuery):
     selected_lang = callback.data.split(":")[1]
     set_user_lang(user_id, selected_lang)
 
-    welcome_text = get_msg(selected_lang, "welcome", name=user_name)
+    welcome_text = get_msg(selected_lang, "welcome", name=html.escape(user_name))
     menu_btns = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text=get_msg(selected_lang, "btn_random_more"), callback_data="rand_menu"),
@@ -163,8 +192,11 @@ async def cb_set_language(callback: CallbackQuery):
         ]
     ])
 
-    await callback.message.edit_text(welcome_text, reply_markup=menu_btns, parse_mode="HTML")
-    await callback.answer(get_msg(selected_lang, "lang_changed"), show_alert=False)
+    try:
+        await callback.message.edit_text(welcome_text, reply_markup=menu_btns, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(welcome_text, reply_markup=menu_btns, parse_mode="HTML")
+    await safe_answer_cb(callback, get_msg(selected_lang, "lang_changed"), show_alert=False)
 
 
 @router.message(Command("help"))

@@ -19,13 +19,22 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def safe_callback_data(prefix: str, data: str, max_bytes: int = 64) -> str:
+    """Ensures callback_data does not exceed Telegram's strict 64-byte limit."""
+    prefix_bytes_len = len(prefix.encode('utf-8'))
+    allowed_len = max_bytes - prefix_bytes_len
+    encoded = data.encode('utf-8')[:allowed_len]
+    return f"{prefix}{encoded.decode('utf-8', errors='ignore')}"
+
+
 def get_movie_keyboard(ai_data: Dict[str, Any], tmdb_data: Optional[Dict[str, Any]] = None, lang: str = "uz") -> InlineKeyboardMarkup:
     """
     Creates rich movie action buttons: Trailer, Watch Uzbek, Similar Movies, IMDb, Share.
+    Safely enforces Telegram 64-byte callback_data limits.
     """
     buttons = []
 
-    title = ai_data.get("title_original") or (tmdb_data.get("title") if tmdb_data else "") or ""
+    title = str(ai_data.get("title_original") or (tmdb_data.get("title") if tmdb_data else "") or "Movie")
     encoded_title = urllib.parse.quote(title)
 
     # 1. Trailer & Watch Online in Uzbek
@@ -41,10 +50,10 @@ def get_movie_keyboard(ai_data: Dict[str, Any], tmdb_data: Optional[Dict[str, An
     row1.append(InlineKeyboardButton(text=get_msg(lang, "btn_watch_uz"), url=watch_uz_url))
     buttons.append(row1)
 
-    # 2. Similar Movies (AI recommendation)
-    safe_cb_title = title[:30].replace(":", "").replace("|", "")
+    # 2. Similar Movies (Safe 64-byte callback data)
+    cb_data = safe_callback_data("sim:", title)
     buttons.append([
-        InlineKeyboardButton(text=get_msg(lang, "btn_similar"), callback_data=f"similar:{safe_cb_title}")
+        InlineKeyboardButton(text=get_msg(lang, "btn_similar"), callback_data=cb_data)
     ])
 
     # 3. IMDb / Kinopoisk / TMDb

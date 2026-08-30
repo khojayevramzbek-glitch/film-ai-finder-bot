@@ -14,6 +14,7 @@ URL_REGEX = re.compile(
 # Supported popular platform domains
 SUPPORTED_DOMAINS = [
     "instagram.com",
+    "instagr.am",
     "tiktok.com",
     "youtube.com",
     "youtu.be",
@@ -34,7 +35,7 @@ def extract_urls(text: str) -> List[str]:
     matches = URL_REGEX.findall(text)
     cleaned = []
     for url in matches:
-        url = url.strip().rstrip(".,!?:;)")
+        url = url.strip().rstrip(".,!?:;)\"'>")
         if url:
             cleaned.append(url)
     return cleaned
@@ -74,9 +75,10 @@ def get_media_type_badge(media_type: str, lang: str = "uz") -> str:
     return get_msg(lang, "type_movie")
 
 
-def format_movie_response(ai_data: Dict[str, Any], tmdb_data: Optional[Dict[str, Any]] = None, lang: str = "uz") -> str:
+def format_movie_response(ai_data: Dict[str, Any], tmdb_data: Optional[Dict[str, Any]] = None, lang: str = "uz", max_len: int = 1000) -> str:
     """
     Formats AI and TMDb data into a rich Telegram HTML message in user's preferred language.
+    Guarantees that length does not exceed max_len (Telegram photo caption limit is 1024).
     """
     title_orig = ai_data.get("title_original") or (tmdb_data.get("title") if tmdb_data else None) or "Unknown"
     title_uz = ai_data.get("title_uz") or ""
@@ -98,8 +100,8 @@ def format_movie_response(ai_data: Dict[str, Any], tmdb_data: Optional[Dict[str,
     actors = ai_data.get("characters_or_actors") or (tmdb_data.get("cast") if tmdb_data else [])
 
     # Overview / Plot
-    summary = ai_data.get("summary") or ai_data.get("summary_uz") or (tmdb_data.get("overview") if tmdb_data else "")
-    scene_desc = ai_data.get("scene_description", "")
+    summary = str(ai_data.get("summary") or (tmdb_data.get("overview") if tmdb_data else "") or "").strip()
+    scene_desc = str(ai_data.get("scene_description") or "").strip()
 
     # Build HTML Message
     lines = []
@@ -130,27 +132,34 @@ def format_movie_response(ai_data: Dict[str, Any], tmdb_data: Optional[Dict[str,
         lines.append(f"{get_msg(lang, 'label_rating')} {rating}/10")
 
     # Genres
-    if genres:
-        genre_str = ", ".join([html.escape(g) for g in genres[:4]])
-        lines.append(f"{get_msg(lang, 'label_genres')} {genre_str}")
+    if genres and isinstance(genres, list):
+        genre_str = ", ".join([html.escape(str(g)) for g in genres[:4] if g])
+        if genre_str:
+            lines.append(f"{get_msg(lang, 'label_genres')} {genre_str}")
 
     # Actors
     if actors:
         actor_list = actors[:4] if isinstance(actors, list) else [str(actors)]
-        actor_str = ", ".join([html.escape(str(a)) for a in actor_list])
-        lines.append(f"{get_msg(lang, 'label_actors')} {actor_str}")
+        actor_str = ", ".join([html.escape(str(a)) for a in actor_list if a])
+        if actor_str:
+            lines.append(f"{get_msg(lang, 'label_actors')} {actor_str}")
 
     # Scene context
     if scene_desc:
         lines.append("")
-        lines.append(f"{get_msg(lang, 'label_scene')}\n<i>{html.escape(str(scene_desc))}</i>")
+        lines.append(f"{get_msg(lang, 'label_scene')}\n<i>{html.escape(scene_desc[:250])}</i>")
 
-    # Summary
+    # Summary (truncated safely if needed)
     if summary:
         lines.append("")
-        lines.append(f"{get_msg(lang, 'label_summary')}\n{html.escape(str(summary))}")
+        max_summary_len = 300
+        truncated_summary = summary[:max_summary_len] + "..." if len(summary) > max_summary_len else summary
+        lines.append(f"{get_msg(lang, 'label_summary')}\n{html.escape(truncated_summary)}")
 
     lines.append("")
     lines.append(get_msg(lang, "label_found_by"))
 
-    return "\n".join(lines)
+    full_text = "\n".join(lines)
+    if len(full_text) > max_len:
+        return full_text[:max_len - 10] + "..."
+    return full_text
