@@ -17,7 +17,7 @@ if sys.platform == "win32":
         pass
 
 from bot.config import BOT_TOKEN, ADMIN_BOT_TOKEN, validate_config, GEMINI_API_KEYS
-from bot.handlers import start, analyze
+from bot.handlers import start, analyze, watchlist, quiz
 from admin_bot import handlers as admin_handlers
 
 # Setup logging
@@ -32,12 +32,15 @@ logger = logging.getLogger(__name__)
 
 
 async def set_main_bot_commands(bot: Bot):
-    """Sets up the bot menu commands for Main Bot."""
+    """Sets up rich menu commands for Main Bot."""
     commands = [
         BotCommand(command="start", description="🚀 Boshlash / Start"),
-        BotCommand(command="random", description="🎲 Bugun nima ko'rsam ekan? / What to watch"),
-        BotCommand(command="lang", description="🌐 Tilni tanlash / Change Language"),
-        BotCommand(command="help", description="💡 Yordam / Help / Помощь"),
+        BotCommand(command="random", description="🎲 AI Kino Tanlash / Mood Curator"),
+        BotCommand(command="saved", description="❤️ Saqlanganlar / Watchlist"),
+        BotCommand(command="quiz", description="🎮 AI Kino Viktorinasi / Quiz"),
+        BotCommand(command="alerts", description="🔔 Premyera eslatmalari"),
+        BotCommand(command="lang", description="🌐 Tilni tanlash / Language"),
+        BotCommand(command="help", description="💡 Yordam / Help"),
         BotCommand(command="about", description="ℹ️ Bot haqida / About"),
     ]
     await bot.set_my_commands(commands)
@@ -56,8 +59,8 @@ async def health_check_handler(request):
     """Health check endpoint for Render/Cloud platforms."""
     return web.json_response({
         "status": "online",
-        "service": "AI FilmFinder Multi-Bot Cluster",
-        "version": "3.0 Master Edition"
+        "service": "AI FilmFinder Super Multi-Bot Cluster",
+        "version": "3.5 Master AI Edition"
     })
 
 
@@ -76,7 +79,7 @@ async def start_web_server(port: int):
 
 async def main():
     """Main cluster entry point."""
-    logger.info("🚀 AI Movie Finder Bot Cluster ishga tushirilmoqda...")
+    logger.info("🚀 AI Movie Finder Bot Cluster 3.5 ishga tushirilmoqda...")
 
     # Check configuration
     errors = validate_config()
@@ -102,6 +105,8 @@ async def main():
     )
     main_dp = Dispatcher()
     main_dp.include_router(start.router)
+    main_dp.include_router(watchlist.router)
+    main_dp.include_router(quiz.router)
     main_dp.include_router(analyze.router)
     await set_main_bot_commands(main_bot)
     await main_bot.delete_webhook(drop_pending_updates=True)

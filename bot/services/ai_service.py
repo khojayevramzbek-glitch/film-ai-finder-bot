@@ -349,5 +349,47 @@ Javobni FAQAT quyidagi JSON formatida qaytaring:
     async def get_random_movie(self, genre_or_mood: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
         return await asyncio.to_thread(self._sync_get_random_movie, genre_or_mood, exclude_title, lang)
 
+    # 6. Interactive Movie Quiz Generator (🎮 Viktorina)
+    def _sync_generate_quiz(self, lang: str = "uz") -> Dict[str, Any]:
+        lang_instruction = {
+            "uz": "Savol, variantlar va tushuntirishni O'ZBEK tilida (lotin) yozing.",
+            "uz_kr": "Савол, вариантлар ва тушунтиришни ЎЗБЕК тилида (кирилл) ёзинг.",
+            "ru": "Вопрос, варианты и объяснение пишите на РУССКОМ языке.",
+            "en": "Write the question, options, and explanation in ENGLISH."
+        }.get(lang, "Savolni O'zbek tilida yozing.")
+
+        random_topics = [
+            "mashhur kult filmning kutilmagan syujeti (plot twist)",
+            "afsonaviy qahramonning mashhur iqtibosi (quote)",
+            "mashhur Gollivud aktyorining o'ynagan roli",
+            "Oskar olgan eng buyuk durdona film siri",
+            "Marvel, Garri Potter, Avatar yoki Titanik filmlari bo'yicha qiziqarli fakt"
+        ]
+        topic = random.choice(random_topics)
+        random_seed = random.randint(1000, 99999)
+
+        prompt = f"""
+Siz kino viktorina va qiziqarli savol-javoblar bo'yicha ekspert Sun'iy Intellektsiz.
+Foydalanuvchilar uchun "{topic}" mavzusida juda qiziqarli, o'ylantiradigan 1 TA KINO TEST SAVOLINI tuzing.
+
+Tasodifiy seed: #{random_seed}
+{lang_instruction}
+
+Javobni FAQAT quyidagi JSON formatida qaytaring:
+```json
+{{
+  "question": "Savol matni (masalan: Qaysi filmda bosh qahramon tush ichidagi tushga kiradi?)",
+  "options": ["A javob", "B javob", "C javob", "D javob"],
+  "correct_index": 0,
+  "explanation": "Nima uchun ushbu javob to'g'riligi va film haqida qiziqarli fakt"
+}}
+```
+"""
+        resp_text = self._execute_gemini_request([prompt], response_json=True, temperature=0.9)
+        return self._parse_json_response(resp_text)
+
+    async def generate_quiz(self, lang: str = "uz") -> Dict[str, Any]:
+        return await asyncio.to_thread(self._sync_generate_quiz, lang)
+
 
 ai_service = AIService()

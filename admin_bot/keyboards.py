@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
 def get_admin_main_keyboard() -> InlineKeyboardMarkup:
@@ -10,10 +10,13 @@ def get_admin_main_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(text="📢 Xabar Tarqatish", callback_data="adm:broadcast"),
-            InlineKeyboardButton(text="👥 Foydalanuvchilar", callback_data="adm:users"),
+            InlineKeyboardButton(text="📢 Homiy Kanallar", callback_data="adm:channels"),
         ],
         [
+            InlineKeyboardButton(text="👥 Foydalanuvchilar", callback_data="adm:users"),
             InlineKeyboardButton(text="📥 Baza Faylini Yuklash", callback_data="adm:export_db"),
+        ],
+        [
             InlineKeyboardButton(text="🔄 Kalitlarni Tiklash", callback_data="adm:reset_keys"),
         ]
     ]

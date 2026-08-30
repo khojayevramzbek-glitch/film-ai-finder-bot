@@ -9,12 +9,13 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.enums import ChatAction
 
 from bot.config import DOWNLOAD_DIR, MAX_VIDEO_SIZE_MB
-from bot.services.db import get_user_lang
+from bot.services.db import get_user_lang, is_user_banned, is_in_watchlist, log_search
 from bot.locales import get_msg
 from bot.utils import extract_urls, format_movie_response, safe_remove
 from bot.services.downloader import downloader
 from bot.services.ai_service import ai_service
 from bot.services.tmdb_service import tmdb_service
+from bot.services.subscription import check_user_subscription, get_subscription_keyboard
 from bot.keyboards.inline import get_movie_keyboard
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ router = Router()
 
 
 async def safe_edit_text(message: Optional[Message], text: str, reply_markup=None) -> Optional[Message]:
-    """Safely edits text message without crashing if message was already modified or deleted."""
+    """Safely edits text message without crashing."""
     if not message:
         return None
     try:
@@ -39,10 +40,12 @@ async def process_and_send_result(
     lang: str = "uz"
 ):
     """Formats AI and TMDb results and sends response with poster and buttons."""
+    user_id = message.from_user.id if message.from_user else 0
     try:
         if not ai_data or not ai_data.get("found"):
             reason = ai_data.get("reason", "Film aniqlanmadi.") if ai_data else "Error"
             fail_text = get_msg(lang, "error_not_found", reason=html.escape(str(reason)))
+            log_search(user_id, search_type="unknown", query="", found=False)
             if status_msg:
                 await safe_edit_text(status_msg, fail_text)
             else:
@@ -57,9 +60,15 @@ async def process_and_send_result(
         release_year = str(ai_data.get("release_year") or "")
         tmdb_data = await tmdb_service.search_media(query_title, year=release_year)
 
+        # Log search
+        log_search(user_id, search_type=ai_data.get("media_type", "movie"), query=query_title, found=True)
+
+        # Check if already saved
+        saved = is_in_watchlist(user_id, query_title)
+
         # Format final message and localized keyboard (safe 1000 char max for photo captions)
         formatted_caption = format_movie_response(ai_data, tmdb_data, lang=lang, max_len=1000)
-        reply_markup = get_movie_keyboard(ai_data, tmdb_data, lang=lang)
+        reply_markup = get_movie_keyboard(ai_data, tmdb_data, is_saved=saved, lang=lang)
 
         poster_url = tmdb_data.get("poster_url") if tmdb_data else None
 
@@ -95,11 +104,38 @@ async def process_and_send_result(
             await message.answer(error_msg, parse_mode="HTML")
 
 
+@router.callback_query(F.data == "check_subscription")
+async def cb_check_subscription(callback: CallbackQuery, bot: Bot):
+    """Verifies user sponsor channel subscription."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    lang = get_user_lang(user_id) or "uz"
+
+    is_sub, missing = await check_user_subscription(bot, user_id)
+    if is_sub:
+        await callback.answer(get_msg(lang, "sub_success"), show_alert=True)
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await callback.message.answer(get_msg(lang, "send_prompt"), parse_mode="HTML")
+    else:
+        await callback.answer(get_msg(lang, "sub_failed"), show_alert=True)
+
+
 @router.message(F.photo)
 async def handle_photo(message: Message, bot: Bot):
     """Handles screenshots or photos from movies."""
     user_id = message.from_user.id if message.from_user else 0
+    if is_user_banned(user_id):
+        return
+
     lang = get_user_lang(user_id) or "uz"
+
+    # Sponsor subscription check
+    is_sub, missing = await check_user_subscription(bot, user_id)
+    if not is_sub:
+        await message.answer(get_msg(lang, "sub_required"), reply_markup=get_subscription_keyboard(missing, lang), parse_mode="HTML")
+        return
 
     if not message.photo:
         return
@@ -135,9 +171,19 @@ async def handle_photo(message: Message, bot: Bot):
 
 @router.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: Message, bot: Bot):
-    """Handles text: either video URLs (Reels/Shorts) or plot description queries (ignores slash commands)."""
+    """Handles text: either video URLs (Reels/Shorts) or plot description queries."""
     user_id = message.from_user.id if message.from_user else 0
+    if is_user_banned(user_id):
+        return
+
     lang = get_user_lang(user_id) or "uz"
+
+    # Sponsor subscription check
+    is_sub, missing = await check_user_subscription(bot, user_id)
+    if not is_sub:
+        await message.answer(get_msg(lang, "sub_required"), reply_markup=get_subscription_keyboard(missing, lang), parse_mode="HTML")
+        return
+
     text = message.text.strip()
 
     # 1. Check if message contains URLs
@@ -151,7 +197,6 @@ async def handle_text(message: Message, bot: Bot):
         download_result = await downloader.download_video_from_url(url)
 
         if not download_result or not download_result.get("file_path"):
-            # Smart fallback: if user included text/hashtags, try searching by text
             cleaned_prompt = re.sub(r'https?:\/\/\S+', '', text).strip()
             if len(cleaned_prompt) > 4:
                 await safe_edit_text(status_msg, get_msg(lang, "status_plot_search"))
@@ -186,7 +231,7 @@ async def handle_text(message: Message, bot: Bot):
         await message.answer(get_msg(lang, "send_prompt"), parse_mode="HTML")
         return
 
-    # 3. Text Plot Search ("Kino nomini unutdim")
+    # 3. Text Plot / Mood Search ("Kino nomini unutdim" or Mood Query)
     status_msg = await message.answer(get_msg(lang, "status_plot_search"), parse_mode="HTML")
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
@@ -204,7 +249,15 @@ async def handle_text(message: Message, bot: Bot):
 async def handle_direct_video(message: Message, bot: Bot):
     """Handles directly uploaded video files or video notes."""
     user_id = message.from_user.id if message.from_user else 0
+    if is_user_banned(user_id):
+        return
+
     lang = get_user_lang(user_id) or "uz"
+
+    is_sub, missing = await check_user_subscription(bot, user_id)
+    if not is_sub:
+        await message.answer(get_msg(lang, "sub_required"), reply_markup=get_subscription_keyboard(missing, lang), parse_mode="HTML")
+        return
 
     video_obj = message.video or message.video_note or message.animation or message.document
     if not video_obj:

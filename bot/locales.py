@@ -6,12 +6,14 @@ MESSAGES = {
             "👋 Assalomu alaykum, <b>{name}</b>!\n\n"
             "🎬 <b>AI FilmFinder</b> botiga xush kelibsiz!\n"
             "Men Instagram Reels, YouTube Shorts, skrinshot, foto yoki matnli voqea tavsifidan filmlar, seriallar va multfilmlarni aniqlab beruvchi <b>Sun'iy Intellekt</b> yordamchingizman.\n\n"
-            "✨ <b>Imkoniyatlar:</b>\n"
+            "✨ <b>Asosiy Imkoniyatlar:</b>\n"
             "1️⃣ <b>Video orqali:</b> Instagram Reels yoki YouTube Shorts havolasini yuboring.\n"
             "2️⃣ <b>Skrinshot orqali:</b> Kinodan olingan bitta rasm/foto yuboring.\n"
-            "3️⃣ <b>Matn orqali:</b> Kino nomini eslay olmasangiz, esingizda qolgan voqeani yozing (masalan: <i>\"Bitta kishi orolda to'p bilan qolib ketadi\"</i>).\n"
+            "3️⃣ <b>Matn orqali:</b> Kino nomini eslay olmasangiz, esingizda qolgan voqeani yozing.\n"
             "4️⃣ <b>Kayfiyat orqali:</b> <i>\"Yomg'irli kunda ko'rishga yoqimli kino top\"</i> deb yozing.\n\n"
-            "🎲 Nima ko'rishni bilmayotgan bo'lsangiz, /random buyrug'ini bosing!\n\n"
+            "🎲 <b>/random</b> — AI orqali kayfiyatga mos kino tanlash!\n"
+            "❤️ <b>/saved</b> — Saqlangan kinolar ro'yxatingiz (Watchlist)\n"
+            "🎮 <b>/quiz</b> — Qiziqarli AI Kino Viktorinasi va ballar yig'ish!\n\n"
             "🚀 <i>Hoziroq birorta havola, rasm yoki matn yuborib sinab ko'ring!</i>"
         ),
         "choose_lang": "🌐 <b>Iltimos, muloqot tilini tanlang:</b>\n<i>Пожалуйста, выберите язык:</i>\n<i>Please choose your language:</i>",
@@ -48,6 +50,10 @@ MESSAGES = {
         "btn_trailer_search": "🎬 Treylerni qidirish",
         "btn_watch_uz": "🍿 O'zbek tilida ko'rish",
         "btn_similar": "🎭 Shunga o'xshash filmlar",
+        "btn_save_movie": "❤️ Saqlab qo'yish",
+        "btn_saved_done": "💖 Saqlangan",
+        "btn_premiere_alert": "🔔 Chiqqanda xabar ber",
+        "btn_alert_done": "🔕 Eslatma o'rnatildi",
         "btn_imdb": "⭐️ IMDb",
         "btn_kinopoisk": "🍿 Kinopoisk",
         "btn_tmdb": "🌐 TMDb",
@@ -58,6 +64,26 @@ MESSAGES = {
         "btn_random_more": "🔄 Boshqa kino tavsiya qilish",
         "btn_back_genres": "🔙 Janrlar ro'yxati",
         "btn_surprise_me": "🔮 AI Meni hayratda qoldir! (Surprise Me)",
+        "btn_check_sub": "✅ Obunani tekshirish",
+        "btn_next_quiz": "🎮 Keyingi savol",
+        "btn_leaderboard": "🏆 TOP O'yinchilar",
+        "sub_required": (
+            "📢 <b>Botdan to'liq foydalanish uchun quyidagi homiy kanalimizga a'zo bo'ling:</b>\n\n"
+            "<i>A'zo bo'lgach, 'Obunani tekshirish' tugmasini bosing:</i>"
+        ),
+        "sub_success": "✅ <b>Obuna tasdiqlandi!</b> Botdan bemalol foydalanishingiz mumkin.",
+        "sub_failed": "❌ <b>Siz hali barcha kanallarga a'zo bo'lmadingiz!</b> Iltimos, a'zo bo'lib qayta tekshiring.",
+        "watchlist_title": "❤️ <b>SIZNING SAQLANGAN KINOLARINGIZ (Watchlist):</b>\n━━━━━━━━━━━━━━━━━━━━━━━\n",
+        "watchlist_empty": "📭 <b>Sizda hali saqlangan kinolar yo'q.</b>\nTopilgan kinolar ostidagi '❤️ Saqlab qo'yish' tugmasini bosib to'plam hosil qiling!",
+        "alerts_title": "🔔 <b>SIZ KUTAYOTGAN PREMYERALAR:</b>\n━━━━━━━━━━━━━━━━━━━━━━━\n",
+        "alerts_empty": "📭 <b>Hozircha premyera eslatmalari o'rnatilmagan.</b>",
+        "quiz_welcome": (
+            "🎮 <b>AI KINO VIKTORINASIGA XUSH KELIBSIZ!</b>\n\n"
+            "Har bir to'g'ri javob uchun <b>+10 ball</b> beriladi. Qani, bilimlaringizni sinab ko'ramiz!\n\n"
+            "⏳ <i>Savol tayyorlanmoqda...</i>"
+        ),
+        "quiz_correct": "🎉 <b>BARAKALLA, TO'G'RI JAVOB! (+10 Ball)</b>\n\n💡 <i>{explanation}</i>",
+        "quiz_wrong": "❌ <b>Afsus, noto'g'ri javob!</b>\n\n✅ <b>To'g'ri javob:</b> {correct}\n💡 <i>{explanation}</i>",
         "genre_action": "💥 Jangari (Action)",
         "genre_comedy": "😂 Komediya",
         "genre_scifi": "🚀 Fantastika & Kosmos",
@@ -74,32 +100,19 @@ MESSAGES = {
         ),
         "help": (
             "💡 <b>Botdan qanday foydalaniladi?</b>\n\n"
-            "1️⃣ <b>Instagram yoki YouTube Shorts havolasini yuboring:</b>\n"
-            "Shunchaki havolani botga tashlang, sun'iy intellekt kinoni aniqlab beradi.\n\n"
-            "2️⃣ <b>Skrinshot / Foto yuboring:</b>\n"
-            "Kinodan olingan bitta suratni yuborsangiz ham AI uni taniydi.\n\n"
-            "3️⃣ <b>Matnli syujet qidiruvi:</b>\n"
-            "Kino nomini eslay olmasangiz, esda qolgan voqeani yozing (masalan: <i>\"bitta bola o'rgimchak chaqib qahramon bo'ladi\"</i>).\n\n"
-            "4️⃣ <b>Kayfiyatingizni yozing:</b>\n"
-            "<i>\"Bugun zerikdim, kayfiyatni ko'taradigan komediya top\"</i> deb yozing.\n\n"
-            "5️⃣ <b>🎲 /random buyrug'i:</b>\n"
-            "Janr va kayfiyatingizga qarab AI eng sara filmlarni tavsiya qiladi.\n\n"
-            "6️⃣ <b>🌐 /lang buyrug'i:</b>\n"
-            "Muloqot tilini (O'zbek, Rus, Ingliz) o'zgartirish.\n\n"
+            "1️⃣ <b>Video orqali:</b> Instagram yoki YouTube Shorts havolasini yuboring.\n"
+            "2️⃣ <b>Skrinshot / Foto orqali:</b> Kinodan olingan bitta suratni yuboring.\n"
+            "3️⃣ <b>Matn orqali:</b> Kino voqeasini yoki kayfiyatingizni yozing.\n"
+            "4️⃣ <b>🎲 /random:</b> AI kayfiyat kuratori orqali kino tanlash.\n"
+            "5️⃣ <b>❤️ /saved:</b> Saqlangan sevimli kinolaringiz.\n"
+            "6️⃣ <b>🎮 /quiz:</b> AI kino viktorinasi o'yini.\n\n"
             "👨‍💻 <b>Savollar va takliflar uchun:</b> @khojayev_ramz"
         ),
         "about": (
             "ℹ️ <b>FilmFinder AI Bot haqida</b>\n\n"
             "Ushbu bot eng ilg'or <b>Google Gemini 3.5 Flash</b> sun'iy intellekti va <b>TMDb</b> kino bazasi integratsiyasi asosida ishlaydi.\n\n"
-            "⚡️ <b>Imkoniyatlar:</b>\n"
-            "• Instagram Reels va YouTube Shorts tahlili\n"
-            "• Skrinshot va fotosuratlardan kinoni aniqlash\n"
-            "• Matnli syujet qidiruvi ('Kino nomini unutdim')\n"
-            "• Kayfiyat bo'yicha AI kino kuratori\n"
-            "• O'xshash kinolar tavsiyasi (AI Recommendations)\n"
-            "• O'zbek tilida tomosha qilish havolalari\n\n"
             "👨‍💻 <b>Muallif:</b> @khojayev_ramz\n"
-            "🚀 <b>Versiya:</b> 3.0 Super AI Edition"
+            "🚀 <b>Versiya:</b> 3.5 Master AI Edition"
         ),
         "share_text": "🎬 Ushbu bot orqali istalgan video, skrinshot yoki syujet matnidan kinolarni bir zumda topishingiz mumkin: @FilmAiFinderbot",
         "type_movie": "Film (Kino)",
@@ -112,8 +125,9 @@ MESSAGES = {
         "welcome": (
             "👋 Ассалому алайкум, <b>{name}</b>!\n\n"
             "🎬 <b>AI FilmFinder</b> ботига хуш келибсиз!\n"
-            "Мен видео, скриншот ёки матнли воқеа тавсифидан фильмлар, сериаллар ва мультфильмларни аниқлаб берувчи <b>Сунъий Интеллект</b> ёрдамчингизман.\n\n"
-            "🎲 Нима кўришни билмаётган бўлсангиз, /random буйруғини босинг!"
+            "🎲 <b>/random</b> — AI кино танлаш\n"
+            "❤️ <b>/saved</b> — Сақланганлар\n"
+            "🎮 <b>/quiz</b> — Кино викторинаси"
         ),
         "choose_lang": "🌐 <b>Илтимос, мулоқот тилини танланг:</b>",
         "lang_changed": "✅ Тил муваффақиятли ўзгартирилди!",
@@ -140,6 +154,10 @@ MESSAGES = {
         "btn_trailer_search": "🎬 Трейлерни қидириш",
         "btn_watch_uz": "🍿 Ўзбек тилида кўриш",
         "btn_similar": "🎭 Шунга ўхшаш фильмлар",
+        "btn_save_movie": "❤️ Сақлаб қўйиш",
+        "btn_saved_done": "💖 Сақланган",
+        "btn_premiere_alert": "🔔 Чиққанда хабар бер",
+        "btn_alert_done": "🔕 Эслатма ўрнатилди",
         "btn_imdb": "⭐️ IMDb",
         "btn_kinopoisk": "🍿 Кинопоиск",
         "btn_tmdb": "🌐 TMDb",
@@ -150,6 +168,19 @@ MESSAGES = {
         "btn_random_more": "🔄 Бошқа кино тавсия қилиш",
         "btn_back_genres": "🔙 Жанрлар рўйхати",
         "btn_surprise_me": "🔮 AI Мени ҳайратда қолдир! (Surprise Me)",
+        "btn_check_sub": "✅ Обунани текшириш",
+        "btn_next_quiz": "🎮 Кейинги савол",
+        "btn_leaderboard": "🏆 ТОП Ўйинчилар",
+        "sub_required": "📢 <b>Ботдан фойдаланиш учун каналга аъзо бўлинг:</b>",
+        "sub_success": "✅ <b>Обуна тасдиқланди!</b>",
+        "sub_failed": "❌ <b>Сиз ҳали аъзо бўлмадингиз!</b>",
+        "watchlist_title": "❤️ <b>САҚЛАНГАН КИНОЛАРИНГИЗ:</b>\n━━━━━━━━━━━━━━━━━━━━━━━\n",
+        "watchlist_empty": "📭 <b>Сақланган кинолар йўқ.</b>",
+        "alerts_title": "🔔 <b>КУТИЛАЁТГАН ПРЕМЬЕРАЛАР:</b>\n━━━━━━━━━━━━━━━━━━━━━━━\n",
+        "alerts_empty": "📭 <b>Премьера эслатмалари йўқ.</b>",
+        "quiz_welcome": "🎮 <b>КИНО ВИКТОРИНАСИ!</b> (+10 балл)\n\n⏳ <i>Савол тайёрланмоқда...</i>",
+        "quiz_correct": "🎉 <b>ТЎҒРИ ЖАВОБ! (+10 Балл)</b>\n\n💡 <i>{explanation}</i>",
+        "quiz_wrong": "❌ <b>Нотўғри!</b>\n\n✅ <b>Тўғри жавоб:</b> {correct}\n💡 <i>{explanation}</i>",
         "genre_action": "💥 Жангари (Action)",
         "genre_comedy": "😂 Комедия",
         "genre_scifi": "🚀 Фантастика & Космос",
@@ -159,11 +190,11 @@ MESSAGES = {
         "genre_anime": "🌸 Аниме",
         "genre_thriller": "🕵️‍♂️ Триллер & Детектив",
         "genre_romance": "❤️ Романтика & Севги",
-        "random_choose_genre": "🎲 <b>AI Бугун нима кўришни тавсия қилсин?</b>\n\nЖанрни танланг ёки кайфиятингизни ёзиб юборинг:",
-        "help": "💡 <b>Ботдан қандай фойдаланилади?</b>\n\nҲавола, расм ёки сюжет матнини юборинг.\n👨‍💻 <b>Алоқа:</b> @khojayev_ramz",
-        "about": "ℹ️ <b>FilmFinder AI Bot ҳақида</b>\n\nGoogle Gemini AI асосида ишлайди.\n👨‍💻 <b>Муаллиф:</b> @khojayev_ramz",
-        "share_text": "🎬 Кино ва сериалларни зудлик билан топувчи сунъий интеллект боти: @FilmAiFinderbot",
-        "type_movie": "Фильм (Кино)",
+        "random_choose_genre": "🎲 <b>AI Бугун нима кўришни тавсия қилсин?</b>",
+        "help": "💡 <b>Ботдан қандай фойдаланилади?</b>\n👨‍💻 <b>Алоқа:</b> @khojayev_ramz",
+        "about": "ℹ️ <b>FilmFinder AI Bot ҳақида</b>\n👨‍💻 <b>Муаллиф:</b> @khojayev_ramz",
+        "share_text": "🎬 Кино ва сериалларни топувчи бот: @FilmAiFinderbot",
+        "type_movie": "Фильм",
         "type_series": "Сериал",
         "type_cartoon": "Мультфильм",
         "type_anime": "Аниме",
@@ -173,8 +204,9 @@ MESSAGES = {
         "welcome": (
             "👋 Здравствуйте, <b>{name}</b>!\n\n"
             "🎬 Добро пожаловать в <b>AI FilmFinder</b> бот!\n"
-            "Я ваш <b>Искусственный Интеллект</b> помощник для распознавания фильмов, сериалов и аниме по видео (Instagram Reels, YouTube Shorts), скриншотам или описанию сюжета.\n\n"
-            "🎲 Не знаете, что посмотреть? Нажмите /random!"
+            "🎲 <b>/random</b> — AI Подбор фильмов\n"
+            "❤️ <b>/saved</b> — Избранное (Watchlist)\n"
+            "🎮 <b>/quiz</b> — Киновикторина с баллами"
         ),
         "choose_lang": "🌐 <b>Пожалуйста, выберите язык общения:</b>",
         "lang_changed": "✅ Язык успешно изменён!",
@@ -201,6 +233,10 @@ MESSAGES = {
         "btn_trailer_search": "🎬 Найти трейлер",
         "btn_watch_uz": "🍿 Смотреть онлайн",
         "btn_similar": "🎭 Похожие фильмы",
+        "btn_save_movie": "❤️ В избранное",
+        "btn_saved_done": "💖 Сохранено",
+        "btn_premiere_alert": "🔔 Напомнить о премьере",
+        "btn_alert_done": "🔕 Напоминание включено",
         "btn_imdb": "⭐️ IMDb",
         "btn_kinopoisk": "🍿 Кинопоиск",
         "btn_tmdb": "🌐 TMDb",
@@ -211,6 +247,19 @@ MESSAGES = {
         "btn_random_more": "🔄 Другой фильм",
         "btn_back_genres": "🔙 Выбор жанра",
         "btn_surprise_me": "🔮 AI Удиви меня! (Surprise Me)",
+        "btn_check_sub": "✅ Проверить подписку",
+        "btn_next_quiz": "🎮 Следующий вопрос",
+        "btn_leaderboard": "🏆 ТОП Игроков",
+        "sub_required": "📢 <b>Для использования бота подпишитесь на наш канал:</b>",
+        "sub_success": "✅ <b>Подписка подтверждена!</b>",
+        "sub_failed": "❌ <b>Вы еще не подписались на каналы!</b>",
+        "watchlist_title": "❤️ <b>ВАШИ СОХРАНЕННЫЕ ФИЛЬМЫ:</b>\n━━━━━━━━━━━━━━━━━━━━━━━\n",
+        "watchlist_empty": "📭 <b>У вас пока нет сохраненных фильмов.</b>",
+        "alerts_title": "🔔 <b>ОЖИДАЕМЫЕ ПРЕМЬЕРЫ:</b>\n━━━━━━━━━━━━━━━━━━━━━━━\n",
+        "alerts_empty": "📭 <b>Напоминаний нет.</b>",
+        "quiz_welcome": "🎮 <b>КИНО-ВИКТОРИНА!</b> (+10 баллов)\n\n⏳ <i>Вопрос генерируется...</i>",
+        "quiz_correct": "🎉 <b>ВЕРНО! (+10 Баллов)</b>\n\n💡 <i>{explanation}</i>",
+        "quiz_wrong": "❌ <b>Неверно!</b>\n\n✅ <b>Правильный ответ:</b> {correct}\n💡 <i>{explanation}</i>",
         "genre_action": "💥 Боевик (Action)",
         "genre_comedy": "😂 Комедия",
         "genre_scifi": "🚀 Фантастика",
@@ -220,10 +269,10 @@ MESSAGES = {
         "genre_anime": "🌸 Аниме",
         "genre_thriller": "🕵️‍♂️ Триллер & Детектив",
         "genre_romance": "❤️ Мелодрама & Романтика",
-        "random_choose_genre": "🎲 <b>Что вам порекомендовать сегодня?</b>\n\nВыберите жанр или опишите ваше настроение словами:",
-        "help": "💡 <b>Как пользоваться ботом:</b>\nОтправьте ссылку на видео, фото или опишите сюжет.\n👨‍💻 <b>Связь:</b> @khojayev_ramz",
-        "about": "ℹ️ <b>О боте FilmFinder AI</b>\nРаботает на базе Google Gemini AI.\n👨‍💻 <b>Автор:</b> @khojayev_ramz",
-        "share_text": "🎬 Бот с искусственным интеллектом для поиска фильмов по видео и фото: @FilmAiFinderbot",
+        "random_choose_genre": "🎲 <b>Что вам порекомендовать сегодня?</b>",
+        "help": "💡 <b>Как пользоваться:</b>\nОтправьте ссылку на видео или фото.\n👨‍💻 <b>Связь:</b> @khojayev_ramz",
+        "about": "ℹ️ <b>О боте FilmFinder AI</b>\n👨‍💻 <b>Автор:</b> @khojayev_ramz",
+        "share_text": "🎬 Бот с ИИ для поиска фильмов: @FilmAiFinderbot",
         "type_movie": "Фильм",
         "type_series": "Сериал",
         "type_cartoon": "Мультфильм",
@@ -234,8 +283,9 @@ MESSAGES = {
         "welcome": (
             "👋 Hello, <b>{name}</b>!\n\n"
             "🎬 Welcome to <b>AI FilmFinder</b> bot!\n"
-            "I am your <b>Artificial Intelligence</b> movie assistant. I recognize movies, TV series, cartoons, and anime from Instagram Reels, YouTube Shorts, screenshots, or plot descriptions.\n\n"
-            "🎲 Don't know what to watch? Try /random!"
+            "🎲 <b>/random</b> — AI Movie Curator\n"
+            "❤️ <b>/saved</b> — Your Watchlist\n"
+            "🎮 <b>/quiz</b> — AI Movie Quiz & Points"
         ),
         "choose_lang": "🌐 <b>Please choose your language:</b>",
         "lang_changed": "✅ Language successfully updated!",
@@ -262,6 +312,10 @@ MESSAGES = {
         "btn_trailer_search": "🎬 Search Trailer",
         "btn_watch_uz": "🍿 Watch Online",
         "btn_similar": "🎭 Similar Movies",
+        "btn_save_movie": "❤️ Save to Watchlist",
+        "btn_saved_done": "💖 Saved",
+        "btn_premiere_alert": "🔔 Remind on Premiere",
+        "btn_alert_done": "🔕 Reminder set",
         "btn_imdb": "⭐️ IMDb",
         "btn_kinopoisk": "🍿 Kinopoisk",
         "btn_tmdb": "🌐 TMDb",
@@ -272,6 +326,19 @@ MESSAGES = {
         "btn_random_more": "🔄 Recommend Another Movie",
         "btn_back_genres": "🔙 Genres List",
         "btn_surprise_me": "🔮 AI Surprise Me!",
+        "btn_check_sub": "✅ Check Subscription",
+        "btn_next_quiz": "🎮 Next Question",
+        "btn_leaderboard": "🏆 Top Players",
+        "sub_required": "📢 <b>Please subscribe to our channel to continue:</b>",
+        "sub_success": "✅ <b>Subscription verified!</b>",
+        "sub_failed": "❌ <b>You are not subscribed yet!</b>",
+        "watchlist_title": "❤️ <b>YOUR SAVED MOVIES (Watchlist):</b>\n━━━━━━━━━━━━━━━━━━━━━━━\n",
+        "watchlist_empty": "📭 <b>You have no saved movies yet.</b>",
+        "alerts_title": "🔔 <b>UPCOMING PREMIERE REMINDERS:</b>\n━━━━━━━━━━━━━━━━━━━━━━━\n",
+        "alerts_empty": "📭 <b>No premiere alerts set.</b>",
+        "quiz_welcome": "🎮 <b>AI MOVIE QUIZ!</b> (+10 points)\n\n⏳ <i>Generating question...</i>",
+        "quiz_correct": "🎉 <b>CORRECT! (+10 Points)</b>\n\n💡 <i>{explanation}</i>",
+        "quiz_wrong": "❌ <b>Wrong!</b>\n\n✅ <b>Correct answer:</b> {correct}\n💡 <i>{explanation}</i>",
         "genre_action": "💥 Action",
         "genre_comedy": "😂 Comedy",
         "genre_scifi": "🚀 Sci-Fi",
@@ -281,10 +348,10 @@ MESSAGES = {
         "genre_anime": "🌸 Anime",
         "genre_thriller": "🕵️‍♂️ Thriller & Mystery",
         "genre_romance": "❤️ Romance",
-        "random_choose_genre": "🎲 <b>What would you like to watch today?</b>\n\nChoose a category or type your mood in natural text:",
+        "random_choose_genre": "🎲 <b>What would you like to watch today?</b>",
         "help": "💡 <b>How to use:</b>\nSend a video link, photo, or describe the plot.\n👨‍💻 <b>Contact:</b> @khojayev_ramz",
-        "about": "ℹ️ <b>About FilmFinder AI</b>\nPowered by Google Gemini AI.\n👨‍💻 <b>Author:</b> @khojayev_ramz",
-        "share_text": "🎬 AI Movie Finder Bot: Identify movies from clips, photos or plot: @FilmAiFinderbot",
+        "about": "ℹ️ <b>About FilmFinder AI</b>\n👨‍💻 <b>Author:</b> @khojayev_ramz",
+        "share_text": "🎬 AI Movie Finder Bot: @FilmAiFinderbot",
         "type_movie": "Movie",
         "type_series": "TV Series",
         "type_cartoon": "Animation",

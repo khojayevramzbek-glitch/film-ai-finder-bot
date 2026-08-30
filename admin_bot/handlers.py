@@ -19,7 +19,10 @@ from bot.services.db import (
     get_recent_users,
     get_all_active_users,
     set_user_ban_status,
-    is_user_banned
+    is_user_banned,
+    get_active_channels,
+    add_sponsor_channel,
+    remove_sponsor_channel
 )
 from bot.services.ai_service import gemini_key_pool
 from bot.services.tmdb_service import tmdb_key_pool
@@ -99,10 +102,11 @@ async def cb_stats(callback: CallbackQuery):
     banned_users = stats.get("banned_users", 0)
     total_searches = stats.get("total_searches", 0)
     today_searches = stats.get("today_searches", 0)
+    saved_count = stats.get("saved_count", 0)
+    alerts_count = stats.get("alerts_count", 0)
     lang_counts = stats.get("lang_counts", {})
     search_types = stats.get("search_types", {})
 
-    # Format languages
     lang_labels = {
         "uz": "🇺🇿 O'zbekcha (Lotin)",
         "uz_kr": "🇺🇿 Ўзбекча (Кирилл)",
@@ -117,7 +121,6 @@ async def cb_stats(callback: CallbackQuery):
 
     lang_text = "\n".join(lang_lines) if lang_lines else "  • Hozircha ma'lumot yo'q"
 
-    # Format search types
     type_lines = []
     for s_type, cnt in search_types.items():
         type_lines.append(f"  • {s_type.title()}: <b>{cnt} ta</b>")
@@ -130,7 +133,9 @@ async def cb_stats(callback: CallbackQuery):
         f"🆕 <b>Bugun Qo'shilganlar:</b> <code>+{today_users} ta</code>\n"
         f"🚫 <b>Bloklanganlar:</b> <code>{banned_users} ta</code>\n\n"
         f"🔍 <b>Jami Qidiruvlar:</b> <code>{total_searches} ta</code>\n"
-        f"⚡️ <b>Bugungi Qidiruvlar:</b> <code>{today_searches} ta</code>\n\n"
+        f"⚡️ <b>Bugungi Qidiruvlar:</b> <code>{today_searches} ta</code>\n"
+        f"❤️ <b>Saqlangan Kinolar:</b> <code>{saved_count} ta</code>\n"
+        f"🔔 <b>Premyera Eslatmalari:</b> <code>{alerts_count} ta</code>\n\n"
         "🌐 <b>Tillar Taqsimoti:</b>\n"
         f"{lang_text}\n\n"
         "📂 <b>Qidiruv Turlari:</b>\n"
@@ -181,15 +186,86 @@ async def cb_api_keys(callback: CallbackQuery):
     await callback.answer()
 
 
-# 3. RESET API COOLDOWNS
 @router.callback_query(F.data == "adm:reset_keys")
 async def cb_reset_keys(callback: CallbackQuery):
     """Instantly clears all cooldown timers on API keys."""
     g_cnt = gemini_key_pool.reset_all_cooldowns()
     t_cnt = tmdb_key_pool.reset_all_cooldowns()
     await callback.answer(f"✅ Barcha {g_cnt + t_cnt} ta kalitlar zudlik bilan faollashtirildi!", show_alert=True)
-    # Refresh view
     await cb_api_keys(callback)
+
+
+# 3. SPONSOR CHANNELS (HOMIY KANALLAR)
+@router.callback_query(F.data == "adm:channels")
+async def cb_sponsor_channels(callback: CallbackQuery):
+    """Manages sponsor channels for mandatory subscription."""
+    channels = get_active_channels()
+
+    lines = [
+        "📢 <b>HOMIY KANALLAR BOSHQARUVI (Majburiy Obuna)</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━\n"
+    ]
+
+    buttons = []
+    if not channels:
+        lines.append("<i>Hozircha hech qanday homiy kanal qo'shilmagan (Barcha foydalanuvchilar to'siqsiz kirmoqda).</i>\n")
+    else:
+        lines.append("🟢 <b>Faol Homiy Kanallar:</b>")
+        for idx, ch in enumerate(channels, 1):
+            c_id = ch["channel_id"]
+            c_title = html.escape(ch["channel_title"])
+            c_url = ch["channel_url"]
+            lines.append(f"<b>{idx}. {c_title}</b> (<code>{c_id}</code>)\n   🔗 <a href='{c_url}'>{c_url}</a>")
+            buttons.append([
+                InlineKeyboardButton(text=f"🗑 O'chirish: {c_title[:20]}", callback_data=f"adm:del_ch:{ch['id']}")
+            ])
+        lines.append("")
+
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("➕ <b>Yangi kanal qo'shish uchun quyidagi buyruqni yuboring:</b>")
+    lines.append("<code>/addchannel -100123456789 Kanal_Nomi https://t.me/kanal_link</code>")
+    lines.append("\n⚠️ <i>Muhim: Botni avval o'sha kanalga <b>Admin</b> qilib qo'shishingiz shart!</i>")
+
+    buttons.append([InlineKeyboardButton(text="🔙 Boshqaruv Paneliga Qaytish", callback_data="adm:menu")])
+
+    try:
+        await callback.message.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML", disable_web_page_preview=True)
+    except Exception:
+        await callback.message.answer("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML", disable_web_page_preview=True)
+    await callback.answer()
+
+
+@router.message(Command("addchannel"))
+async def cmd_add_channel(message: Message):
+    """Adds sponsor channel: /addchannel -100123456789 Kanal_Nomi https://t.me/link."""
+    user_id = message.from_user.id if message.from_user else 0
+    username = message.from_user.username or ""
+    if not is_admin(user_id, username):
+        return
+
+    parts = message.text.split(maxsplit=3)
+    if len(parts) < 4:
+        await message.answer(
+            "⚠️ <b>Noto'g'ri format!</b>\n\nFoydalanish:\n<code>/addchannel -100123456789 Kanal_Nomi https://t.me/kanal_link</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    ch_id = parts[1]
+    ch_title = parts[2]
+    ch_url = parts[3]
+
+    add_sponsor_channel(channel_id=ch_id, channel_title=ch_title, channel_url=ch_url)
+    await message.answer(f"✅ <b>'{html.escape(ch_title)}' kanali muvaffaqiyatli qo'shildi!</b>", parse_mode="HTML")
+
+
+@router.callback_query(F.data.startswith("adm:del_ch:"))
+async def cb_del_channel(callback: CallbackQuery):
+    """Deletes sponsor channel by database ID."""
+    ch_db_id = callback.data.split(":")[2]
+    remove_sponsor_channel(ch_db_id)
+    await callback.answer("🗑 Kanal muvaffaqiyatli o'chirildi!", show_alert=True)
+    await cb_sponsor_channels(callback)
 
 
 # 4. RECENT USERS & MANAGEMENT
@@ -206,8 +282,9 @@ async def cb_recent_users(callback: CallbackQuery):
         u_id = u["user_id"]
         lang = u["language_code"]
         banned = "🚫 Bloklangan" if u.get("is_banned") else "🟢 Faol"
+        points = u.get("points", 0)
         created = str(u.get("created_at", ""))[:16]
-        lines.append(f"<b>{idx}. ID:</b> <code>{u_id}</code> | {lang.upper()} | {banned}\n   <i>Sana: {created}</i>")
+        lines.append(f"<b>{idx}. ID:</b> <code>{u_id}</code> | {lang.upper()} | {points} ball | {banned}\n   <i>Sana: {created}</i>")
 
     lines.append("\n━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append("💡 <i>Foydalanuvchini bloklash yoki ochish uchun: /ban ID yoki /unban ID yozing.</i>")
@@ -229,7 +306,6 @@ async def cb_export_db(callback: CallbackQuery):
         await callback.message.answer("❌ Baza fayli topilmadi.")
         return
 
-    # Create CSV export
     csv_path = Path("downloads") / "users_export.csv"
     csv_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -237,15 +313,13 @@ async def cb_export_db(callback: CallbackQuery):
         users = get_recent_users(limit=10000)
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["user_id", "language_code", "is_banned", "created_at"])
+            writer.writerow(["user_id", "language_code", "is_banned", "points", "created_at"])
             for u in users:
-                writer.writerow([u["user_id"], u["language_code"], u["is_banned"], u["created_at"]])
+                writer.writerow([u["user_id"], u["language_code"], u["is_banned"], u.get("points", 0), u["created_at"]])
 
-        # Send SQLite DB
         db_file = FSInputFile(str(DB_PATH), filename="filmfinder_users.db")
         await callback.message.answer_document(db_file, caption="📁 <b>Asosiy SQLite Ma'lumotlar Bazasi (users.db)</b>", parse_mode="HTML")
 
-        # Send CSV
         csv_file = FSInputFile(str(csv_path), filename="users_export.csv")
         await callback.message.answer_document(csv_file, caption="📊 <b>Foydalanuvchilar Ro'yxati (Excel / CSV)</b>", parse_mode="HTML")
     except Exception as e:
@@ -345,7 +419,6 @@ async def cb_execute_broadcast(callback: CallbackQuery, state: FSMContext, bot: 
         except Exception:
             blocked_cnt += 1
 
-        # Update progress every 25 users
         if idx % 25 == 0 or idx == total_users:
             try:
                 await progress_msg.edit_text(
@@ -356,7 +429,7 @@ async def cb_execute_broadcast(callback: CallbackQuery, state: FSMContext, bot: 
                 )
             except Exception:
                 pass
-        await asyncio.sleep(0.05)  # Telegram rate limit prevention (20-30 msg/sec)
+        await asyncio.sleep(0.05)
 
     summary_text = (
         "✅ <b>XABAR TARQATISH YAKUNLANDI!</b>\n"
