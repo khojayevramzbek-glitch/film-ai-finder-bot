@@ -28,10 +28,10 @@ GEMINI_API_KEYS: List[str] = parse_key_list(_raw_gemini)
 _raw_tmdb = os.getenv("TMDB_API_KEYS", "") or os.getenv("TMDB_API_KEY", "")
 TMDB_API_KEYS: List[str] = parse_key_list(_raw_tmdb)
 
-# Gemini Model Name (Default to gemini-3.6-flash)
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip() or "gemini-3.6-flash"
+# Gemini Model Name (Default to stable high-quota gemini-3.5-flash)
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
 
-# Optional Proxy URL (e.g., http://127.0.0.1:10808 or socks5://127.0.0.1:10808 for blocked regions like TikTok)
+# Optional Proxy URL
 PROXY_URL = os.getenv("PROXY_URL", "").strip()
 
 # Temporary downloads directory

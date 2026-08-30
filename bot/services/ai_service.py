@@ -24,12 +24,11 @@ logger = logging.getLogger(__name__)
 gemini_key_pool = APIKeyPool(keys=GEMINI_API_KEYS, service_name="Gemini AI", default_cooldown=60)
 
 FALLBACK_MODELS = [
-    GEMINI_MODEL,
-    "gemini-3.6-flash",
-    "gemini-flash-latest",
-    "gemini-3-flash-preview",
-    "gemini-2.5-pro",
-    "gemini-pro-latest"
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.7-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3.6-flash"
 ]
 
 
@@ -46,7 +45,7 @@ def build_system_prompt(lang: str = "uz") -> str:
     return f"""
 Siz kino, serial, multfilm, anime va premyeralarni aniqlovchi professional sun'iy intellekt ekspertisiz.
 
-Sizga videodan olingan asosiy kadrlar (yoki bitta rasm/skrinshot yoki matnli syujet) beriladi.
+Sizga videodan olingan asosiy kadrlar (yoki bitta rasm/skrinshot yoki matnli syujet/sarlavha) beriladi.
 Vazifangiz: Berilgan ma'lumotdan foydalanib, bu qaysi kino, serial, multfilm, dorama yoki animatsiya ekanligini ANIQ aniqlash.
 
 JUDA MUHIM QOIDALAR:
@@ -150,7 +149,8 @@ class AIService:
                         self.model_name = model_candidate
                         break
                     except Exception as model_err:
-                        if "404" in str(model_err) or "not found" in str(model_err).lower():
+                        err_text = str(model_err).lower()
+                        if "404" in err_text or "not found" in err_text or "429" in err_text or "quota" in err_text:
                             continue
                         raise model_err
 
@@ -241,7 +241,7 @@ class AIService:
         system_prompt = build_system_prompt(lang=lang)
         prompt_content = (
             f"{system_prompt}\n\n"
-            f"Foydalanuvchi film nomini eslay olmay, quyidagi syujet/voqea tavsifini yozdi:\n"
+            f"Foydalanuvchi film nomini eslay olmay, quyidagi syujet/voqea/sarlavha tavsifini yozdi:\n"
             f"\"{plot_description}\"\n\n"
             f"Ushbu tavsif qaysi film, serial, anime yoki multfilmga tegishli ekanligini eng yuqori ehtimollik bilan toping."
         )
@@ -274,8 +274,7 @@ Javobni FAQAT quyidagi JSON ro'yxati formatida qaytaring:
     "year": "2023",
     "genres": "Janri",
     "reason": "Nima uchun ushbu filmga o'xshash va nima uchun ko'rish tavsiya etiladi"
-  }},
-  ...
+  }}
 ]
 ```
 """

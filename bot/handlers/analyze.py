@@ -1,3 +1,4 @@
+import re
 import html
 import uuid
 from pathlib import Path
@@ -91,7 +92,6 @@ async def handle_photo(message: Message, bot: Bot):
     status_msg = await message.answer(get_msg(lang, "status_photo_search"), parse_mode="HTML")
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
-    # Download highest resolution photo
     photo = message.photo[-1]
     unique_id = uuid.uuid4().hex[:12]
     photo_path = DOWNLOAD_DIR / f"photo_{unique_id}.jpg"
@@ -136,6 +136,15 @@ async def handle_text(message: Message, bot: Bot):
         download_result = await downloader.download_video_from_url(url)
 
         if not download_result or not download_result.get("file_path"):
+            # Smart fallback: if user included text/hashtags, try searching by text
+            cleaned_prompt = re.sub(r'https?:\/\/\S+', '', text).strip()
+            if len(cleaned_prompt) > 4:
+                await status_msg.edit_text(get_msg(lang, "status_plot_search"), parse_mode="HTML")
+                ai_data = await ai_service.analyze_plot_text(cleaned_prompt, lang=lang)
+                if ai_data and ai_data.get("found"):
+                    await process_and_send_result(bot=bot, message=message, ai_data=ai_data, status_msg=status_msg, lang=lang)
+                    return
+
             fail_text = get_msg(lang, "error_download")
             await status_msg.edit_text(fail_text, parse_mode="HTML")
             return
