@@ -3,6 +3,7 @@ import glob
 import json
 import time
 import uuid
+import random
 import asyncio
 import logging
 import subprocess
@@ -115,8 +116,8 @@ class AIService:
             logger.warning(f"[Frame Extraction Warning] Kadrlar ajratib olinmadi: {e}")
             return []
 
-    def _execute_gemini_request(self, contents: List[Any], response_json: bool = True) -> Optional[str]:
-        """Executes request with auto-retry and multi-key rotation."""
+    def _execute_gemini_request(self, contents: List[Any], response_json: bool = True, temperature: float = 0.3) -> Optional[str]:
+        """Executes request with auto-retry, custom temperature, and multi-key rotation."""
         if self.pool.is_empty():
             return None
 
@@ -134,7 +135,7 @@ class AIService:
 
                 client = genai.Client(api_key=api_key)
 
-                config_kwargs = {"temperature": 0.3}
+                config_kwargs = {"temperature": temperature}
                 if response_json:
                     config_kwargs["response_mime_type"] = "application/json"
 
@@ -205,7 +206,7 @@ class AIService:
         prompt_content = f"{system_prompt}\n\nQo'shimcha metadata / Sarlavha: {metadata_text}"
         contents.append(prompt_content)
 
-        resp_text = self._execute_gemini_request(contents, response_json=True)
+        resp_text = self._execute_gemini_request(contents, response_json=True, temperature=0.3)
 
         for f_path in frames:
             try:
@@ -230,7 +231,7 @@ class AIService:
         prompt_content = f"{system_prompt}\n\nFoydalanuvchi yuborgan rasm/skrinshot. Qo'shimcha izoh: {caption}"
         contents.append(prompt_content)
 
-        resp_text = self._execute_gemini_request(contents, response_json=True)
+        resp_text = self._execute_gemini_request(contents, response_json=True, temperature=0.3)
         return self._parse_json_response(resp_text)
 
     async def analyze_image(self, image_path: Path, caption: str = "", lang: str = "uz") -> Dict[str, Any]:
@@ -245,7 +246,7 @@ class AIService:
             f"\"{plot_description}\"\n\n"
             f"Ushbu tavsif qaysi film, serial, anime yoki multfilmga tegishli ekanligini eng yuqori ehtimollik bilan toping."
         )
-        resp_text = self._execute_gemini_request([prompt_content], response_json=True)
+        resp_text = self._execute_gemini_request([prompt_content], response_json=True, temperature=0.3)
         return self._parse_json_response(resp_text)
 
     async def analyze_plot_text(self, plot_description: str, lang: str = "uz") -> Dict[str, Any]:
@@ -278,7 +279,7 @@ Javobni FAQAT quyidagi JSON ro'yxati formatida qaytaring:
 ]
 ```
 """
-        resp_text = self._execute_gemini_request([prompt], response_json=True)
+        resp_text = self._execute_gemini_request([prompt], response_json=True, temperature=0.5)
         try:
             cleaned = resp_text.strip()
             if cleaned.startswith("```json"):
@@ -295,8 +296,8 @@ Javobni FAQAT quyidagi JSON ro'yxati formatida qaytaring:
     async def get_similar_movies(self, title: str, lang: str = "uz") -> List[Dict[str, Any]]:
         return await asyncio.to_thread(self._sync_get_similar_movies, title, lang)
 
-    # 5. Random Movie Pick by Genre (/random)
-    def _sync_get_random_movie(self, genre: str, lang: str = "uz") -> Dict[str, Any]:
+    # 5. Random Movie Pick by Genre (/random) with Dynamic Variety & Exclusions
+    def _sync_get_random_movie(self, genre: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
         lang_instruction = {
             "uz": "Mazmun va tavsiyani O'zbek tilida (lotin) yozing.",
             "uz_kr": "Мазмун ва тавсияни Ўзбек тилида (кирилл) ёзинг.",
@@ -304,31 +305,49 @@ Javobni FAQAT quyidagi JSON ro'yxati formatida qaytaring:
             "en": "Write summary and recommendation in English."
         }.get(lang, "Mazmunni O'zbek tilida yozing.")
 
+        eras = [
+            "2018-2024 yillardagi zamonaviy blokbaster",
+            "2005-2017 yillardagi mashhur dunyo durdonasi",
+            "1995-2005 yillardagi eng qiziqarli kult film",
+            "kutilmagan burilishlarga (plot twist) boy aqlbovar qilmas",
+            "o'ta yuqori reytingli (IMDb 8+) afsonaviy",
+            "tomoshabin e'tiboridan chetda qolgan, lekin o'ta qiziqarli (underrated)"
+        ]
+        selected_style = random.choice(eras)
+        random_seed = random.randint(1000, 99999)
+
+        exclude_clause = ""
+        if exclude_title:
+            exclude_clause = f"JUDA MUHIM: Quyidagi filmlarni TAVSIYA QILMANG (foydalanuvchi buni ko'rgan): \"{exclude_title}\". Mutlaqo boshqa, yangi film tanlang!"
+
         prompt = f"""
-Siz professional kinoshunos sun'iy intellektsiz.
-Foydalanuvchi bugun kechqurun ko'rish uchun "{genre}" janridagi eng zo'r, yuqori reytingli va hayratlanarli 1 TA FILMNI tavsiya qilishni so'radi.
+Siz professional kinoshunos va kino tavsiya etuvchi sun'iy intellektsiz.
+Foydalanuvchi bugun ko'rish uchun "{genre}" janridagi {selected_style} 1 TA YANGI VA QIZIQARLI FILMNI tavsiya qilishni so'radi.
+
+Tasodifiy kalit: #{random_seed}
+{exclude_clause}
 
 {lang_instruction}
 
 Javobni FAQAT quyidagi JSON formatida qaytaring:
 ```json
 {{
-  "title_original": "Inception",
+  "title_original": "Movie Title",
   "title_local": "Mahalliy nomi",
-  "release_year": "2010",
-  "rating": "8.8",
+  "release_year": "2021",
+  "rating": "8.4",
   "genres": "{genre}",
-  "actors": ["Leonardo DiCaprio", "Joseph Gordon-Levitt"],
+  "actors": ["Actor 1", "Actor 2"],
   "summary": "Filmning qisqacha maftunkor syujeti",
   "why_watch": "Nima uchun aynan shu filmni ko'rish shart (taassurot)"
 }}
 ```
 """
-        resp_text = self._execute_gemini_request([prompt], response_json=True)
+        resp_text = self._execute_gemini_request([prompt], response_json=True, temperature=0.95)
         return self._parse_json_response(resp_text)
 
-    async def get_random_movie(self, genre: str, lang: str = "uz") -> Dict[str, Any]:
-        return await asyncio.to_thread(self._sync_get_random_movie, genre, lang)
+    async def get_random_movie(self, genre: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
+        return await asyncio.to_thread(self._sync_get_random_movie, genre, exclude_title, lang)
 
 
 ai_service = AIService()

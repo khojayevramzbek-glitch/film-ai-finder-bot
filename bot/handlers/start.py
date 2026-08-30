@@ -68,23 +68,27 @@ async def cb_random_menu(callback: CallbackQuery):
     try:
         await callback.message.edit_text(text, reply_markup=get_genres_keyboard(lang), parse_mode="HTML")
     except Exception:
-        pass
+        await callback.message.answer(text, reply_markup=get_genres_keyboard(lang), parse_mode="HTML")
     await safe_answer_cb(callback)
 
 
 @router.callback_query(F.data.startswith("rand_genre:"))
 async def cb_pick_random_genre(callback: CallbackQuery, bot: Bot):
-    """Fetches a high-rated movie from selected genre."""
+    """Fetches a high-rated unique movie from selected genre, excluding previously recommended title."""
     user_id = callback.from_user.id if callback.from_user else 0
     lang = get_user_lang(user_id) or "uz"
-    genre_key = callback.data.split(":")[1]
+
+    # Extract genre and optional exclusion title from callback data
+    parts = callback.data.split(":")
+    genre_key = parts[1]
+    exclude_title = parts[2] if len(parts) > 2 else ""
 
     genre_name = get_msg(lang, f"genre_{genre_key}")
     await safe_answer_cb(callback, f"🎲 {genre_name}...")
 
     try:
         status_msg = await callback.message.edit_text(
-            f"🎲 <b>{html.escape(genre_name)}</b> janridagi eng zo'r film tanlanmoqda...",
+            f"🎲 <b>{html.escape(genre_name)}</b> janridagi yangi sara film tanlanmoqda...",
             parse_mode="HTML"
         )
     except Exception:
@@ -92,7 +96,8 @@ async def cb_pick_random_genre(callback: CallbackQuery, bot: Bot):
 
     await bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
 
-    movie = await ai_service.get_random_movie(genre_name, lang=lang)
+    # Fetch with exclusion
+    movie = await ai_service.get_random_movie(genre_name, exclude_title=exclude_title, lang=lang)
 
     if not movie or not movie.get("title_original"):
         try:

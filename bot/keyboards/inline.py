@@ -114,10 +114,14 @@ def get_genres_keyboard(lang: str = "uz") -> InlineKeyboardMarkup:
 
 
 def get_random_movie_keyboard(title: str, genre_key: str, lang: str = "uz") -> InlineKeyboardMarkup:
-    """Buttons for recommended random movie."""
+    """Buttons for recommended random movie with safe exclusion callback data."""
     encoded_title = urllib.parse.quote(title)
     yt_url = f"https://www.youtube.com/results?search_query={encoded_title}+trailer"
     watch_url = f"https://www.google.com/search?q={encoded_title}+tarjima+kino+uzbek+tilida+skachat+korish"
+
+    # Safely embed previous title in callback data to avoid duplicates
+    clean_title = title.replace(":", " ").strip()[:20]
+    next_cb = safe_callback_data(f"rand_genre:{genre_key}:", clean_title)
 
     buttons = [
         [
@@ -125,7 +129,7 @@ def get_random_movie_keyboard(title: str, genre_key: str, lang: str = "uz") -> I
             InlineKeyboardButton(text=get_msg(lang, "btn_watch_uz"), url=watch_url),
         ],
         [
-            InlineKeyboardButton(text=get_msg(lang, "btn_random_more"), callback_data=f"rand_genre:{genre_key}"),
+            InlineKeyboardButton(text=get_msg(lang, "btn_random_more"), callback_data=next_cb),
             InlineKeyboardButton(text=get_msg(lang, "btn_back_genres"), callback_data="rand_menu"),
         ]
     ]
