@@ -16,8 +16,8 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-from bot.config import BOT_TOKEN, ADMIN_BOT_TOKEN, validate_config, GEMINI_API_KEYS
-from bot.handlers import start, analyze, watchlist, quiz
+from bot.config import BOT_TOKEN, ADMIN_BOT_TOKEN, validate_config, GEMINI_API_KEYS, GROQ_API_KEYS
+from bot.handlers import start, analyze, watchlist, quiz, actor
 from admin_bot import handlers as admin_handlers
 
 # Setup logging
@@ -36,6 +36,7 @@ async def set_main_bot_commands(bot: Bot):
     commands = [
         BotCommand(command="start", description="🚀 Boshlash / Start"),
         BotCommand(command="random", description="🎲 AI Kino Tanlash / Mood Curator"),
+        BotCommand(command="actor", description="🎭 Aktyor / Rejissyor filmlari"),
         BotCommand(command="saved", description="❤️ Saqlanganlar / Watchlist"),
         BotCommand(command="quiz", description="🎮 AI Kino Viktorinasi / Quiz"),
         BotCommand(command="alerts", description="🔔 Premyera eslatmalari"),
@@ -60,7 +61,9 @@ async def health_check_handler(request):
     return web.json_response({
         "status": "online",
         "service": "AI FilmFinder Super Multi-Bot Cluster",
-        "version": "3.5 Master AI Edition"
+        "version": "3.5 Master AI Edition",
+        "gemini_keys": len(GEMINI_API_KEYS),
+        "groq_keys": len(GROQ_API_KEYS)
     })
 
 
@@ -88,7 +91,7 @@ async def main():
             logger.error(f"❌ Sozlama xatosi: {err}")
         return
 
-    logger.info(f"🔑 Yuklangan Gemini API kalitlari soni: {len(GEMINI_API_KEYS)} ta (Auto-Rotation faol)")
+    logger.info(f"🔑 Gemini Kalitlar: {len(GEMINI_API_KEYS)} ta | Groq Kalitlar: {len(GROQ_API_KEYS)} ta")
 
     # Start background health server if PORT is defined (Render.com)
     port = os.getenv("PORT")
@@ -105,6 +108,7 @@ async def main():
     )
     main_dp = Dispatcher()
     main_dp.include_router(start.router)
+    main_dp.include_router(actor.router)
     main_dp.include_router(watchlist.router)
     main_dp.include_router(quiz.router)
     main_dp.include_router(analyze.router)

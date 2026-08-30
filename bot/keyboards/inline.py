@@ -200,3 +200,22 @@ def get_saved_item_keyboard(movie_title: str, lang: str = "uz") -> InlineKeyboar
             InlineKeyboardButton(text="🗑 O'chirish", callback_data=unsave_cb)
         ]
     ])
+
+
+def get_actor_filmography_keyboard(actor_name: str, top_movies: List[Dict[str, Any]], lang: str = "uz") -> InlineKeyboardMarkup:
+    """Generates interactive buttons for Actor's top movies."""
+    buttons = []
+    for idx, m in enumerate(top_movies[:5], 1):
+        m_title = m.get("title", f"Film #{idx}")
+        encoded_m = urllib.parse.quote(m_title)
+        watch_url = f"https://www.google.com/search?q={encoded_m}+tarjima+kino+uzbek+tilida+skachat+korish"
+        buttons.append([
+            InlineKeyboardButton(text=f"🎬 {idx}. {m_title[:22]}", url=watch_url)
+        ])
+
+    encoded_actor = urllib.parse.quote(actor_name)
+    google_actor_url = f"https://www.google.com/search?q={encoded_actor}+actor+filmography"
+    buttons.append([
+        InlineKeyboardButton(text="🌐 Barcha filmlari (Google)", url=google_actor_url)
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

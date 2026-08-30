@@ -6,28 +6,22 @@ from bot.services.key_manager import APIKeyPool
 
 logger = logging.getLogger(__name__)
 
-TMDB_BASE_URL = "https://api.themoviedb.org/3"
-TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w780"
-
 # Initialize Key Pool for TMDb
 tmdb_key_pool = APIKeyPool(keys=TMDB_API_KEYS, service_name="TMDb", default_cooldown=60)
 
+TMDB_BASE_URL = "https://api.themoviedb.org/3"
+TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
+
 
 class TMDbService:
-    """Service to fetch rich movie/TV metadata with multi-key rotation support."""
+    """Service to interact with TMDb API with multi-key rotation."""
 
     def __init__(self):
         self.pool = tmdb_key_pool
 
-    async def search_media(self, query: str, year: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """
-        Searches for a movie or TV show with automatic key rotation and failover.
-        """
-        if self.pool.is_empty() or not query:
-            return None
-
-        query = query.strip()
-        if not query:
+    async def _make_request(self, endpoint: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Makes an HTTP GET request using an active TMDb API key from the pool."""
+        if self.pool.is_empty():
             return None
 
         max_attempts = max(self.pool.total_count, 1)
@@ -37,131 +31,123 @@ class TMDbService:
             if not api_key:
                 break
 
+            req_params = dict(params)
+            req_params["api_key"] = api_key
+
             try:
                 async with aiohttp.ClientSession() as session:
-                    # 1. Search Multi
-                    search_url = f"{TMDB_BASE_URL}/search/multi"
-                    params = {
-                        "api_key": api_key,
-                        "query": query,
-                        "language": "ru-RU",
-                        "include_adult": "false"
-                    }
-                    if year and year.isdigit():
-                        params["year"] = year
-
-                    async with session.get(search_url, params=params, timeout=10) as resp:
-                        if resp.status == 429:
+                    url = f"{TMDB_BASE_URL}{endpoint}"
+                    async with session.get(url, params=req_params, timeout=aiohttp.ClientTimeout(total=4)) as resp:
+                        if resp.status == 200:
+                            self.pool.report_success(api_key)
+                            return await resp.json()
+                        elif resp.status in (429, 401, 403):
                             self.pool.report_rate_limit(api_key, cooldown_seconds=60)
                             continue
-                        if resp.status != 200:
-                            continue
-                        data = await resp.json()
-                        results = data.get("results", [])
-
-                    if not results:
-                        # Fallback to English query
-                        params["language"] = "en-US"
-                        async with session.get(search_url, params=params, timeout=10) as resp:
-                            if resp.status == 200:
-                                data = await resp.json()
-                                results = data.get("results", [])
-
-                    if not results:
-                        self.pool.report_success(api_key)
-                        return None
-
-                    # Pick the best match
-                    media_item = None
-                    for item in results:
-                        if item.get("media_type") in ["movie", "tv"]:
-                            media_item = item
-                            break
-
-                    if not media_item:
-                        self.pool.report_success(api_key)
-                        return None
-
-                    media_id = media_item.get("id")
-                    media_type = media_item.get("media_type")
-
-                    # 2. Full details
-                    detail_url = f"{TMDB_BASE_URL}/{media_type}/{media_id}"
-                    detail_params = {
-                        "api_key": api_key,
-                        "language": "ru-RU",
-                        "append_to_response": "videos,credits,external_ids"
-                    }
-
-                    async with session.get(detail_url, params=detail_params, timeout=10) as resp:
-                        if resp.status == 429:
-                            self.pool.report_rate_limit(api_key, cooldown_seconds=60)
-                            continue
-                        if resp.status != 200:
-                            continue
-                        detail = await resp.json()
-
-                    self.pool.report_success(api_key)
-
-                    # Extract fields
-                    title = detail.get("title") or detail.get("name") or query
-                    original_title = detail.get("original_title") or detail.get("original_name") or title
-                    overview = detail.get("overview") or media_item.get("overview", "")
-                    
-                    release_date = detail.get("release_date") or detail.get("first_air_date") or ""
-                    release_year = release_date.split("-")[0] if release_date else (year or "")
-                    status = detail.get("status", "")
-                    is_premiere = status in ["In Production", "Post Production", "Planned", "Upcoming"]
-
-                    poster_path = detail.get("poster_path") or media_item.get("poster_path")
-                    poster_url = f"{TMDB_IMAGE_BASE}{poster_path}" if poster_path else None
-                    backdrop_path = detail.get("backdrop_path")
-                    backdrop_url = f"{TMDB_IMAGE_BASE}{backdrop_path}" if backdrop_path else None
-
-                    vote_avg = detail.get("vote_average", 0)
-                    rating = round(vote_avg, 1) if vote_avg > 0 else None
-
-                    genres = [g.get("name") for g in detail.get("genres", []) if g.get("name")]
-
-                    credits = detail.get("credits", {})
-                    cast = [c.get("name") for c in credits.get("cast", [])[:5] if c.get("name")]
-
-                    videos = detail.get("videos", {}).get("results", [])
-                    trailer_url = None
-                    for vid in videos:
-                        if vid.get("site") == "YouTube" and vid.get("type") in ["Trailer", "Teaser"]:
-                            trailer_url = f"https://www.youtube.com/watch?v={vid.get('key')}"
-                            break
-
-                    imdb_id = detail.get("external_ids", {}).get("imdb_id") or detail.get("imdb_id")
-
-                    return {
-                        "tmdb_id": media_id,
-                        "imdb_id": imdb_id,
-                        "title": title,
-                        "original_title": original_title,
-                        "title_ru": title,
-                        "media_type": media_type,
-                        "release_date": release_date,
-                        "year": release_year,
-                        "is_premiere": is_premiere,
-                        "status": status,
-                        "rating": rating,
-                        "genres": genres,
-                        "cast": cast,
-                        "overview": overview,
-                        "poster_url": poster_url,
-                        "backdrop_url": backdrop_url,
-                        "trailer_url": trailer_url,
-                        "tmdb_url": f"https://www.themoviedb.org/{media_type}/{media_id}"
-                    }
-
+                        else:
+                            return None
             except Exception as e:
-                logger.error(f"[TMDb Error] Qidiruvda xatolik: {e}")
-                self.pool.report_rate_limit(api_key, cooldown_seconds=30)
+                logger.warning(f"[TMDb Request Warning] {e}")
+                self.pool.report_rate_limit(api_key, cooldown_seconds=15)
                 continue
 
         return None
+
+    async def search_media(self, title: str, year: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Searches TMDb for a movie or TV show."""
+        if not title:
+            return None
+
+        params = {"query": title, "include_adult": "false"}
+        if year and year.isdigit():
+            params["year"] = year
+
+        data = await self._make_request("/search/multi", params)
+        if not data or not data.get("results"):
+            if "year" in params:
+                del params["year"]
+                data = await self._make_request("/search/multi", params)
+
+        if not data or not data.get("results"):
+            return None
+
+        for item in data["results"]:
+            media_type = item.get("media_type")
+            if media_type in ("movie", "tv"):
+                return await self._extract_details(item, media_type)
+
+        return None
+
+    async def _extract_details(self, item: Dict[str, Any], media_type: str) -> Dict[str, Any]:
+        """Extracts and enriches media details including trailer and genres."""
+        item_id = item.get("id")
+        title = item.get("title") or item.get("name") or "Noma'lum"
+        original_title = item.get("original_title") or item.get("original_name") or title
+        release_date = item.get("release_date") or item.get("first_air_date") or ""
+        year = release_date[:4] if release_date else ""
+
+        poster_path = item.get("poster_path")
+        poster_url = f"{TMDB_IMAGE_BASE}{poster_path}" if poster_path else None
+
+        vote_average = item.get("vote_average", 0.0)
+        overview = item.get("overview", "")
+
+        trailer_url = None
+        imdb_id = None
+        runtime = None
+
+        if item_id:
+            details_endpoint = f"/{media_type}/{item_id}"
+            details_data = await self._make_request(details_endpoint, {"append_to_response": "videos,external_ids"})
+            if details_data:
+                runtime = details_data.get("runtime") or (details_data.get("episode_run_time", [None])[0] if details_data.get("episode_run_time") else None)
+                external_ids = details_data.get("external_ids", {})
+                imdb_id = external_ids.get("imdb_id")
+
+                videos = details_data.get("videos", {}).get("results", [])
+                for v in videos:
+                    if v.get("site") == "YouTube" and v.get("type") in ("Trailer", "Teaser"):
+                        trailer_url = f"https://www.youtube.com/watch?v={v.get('key')}"
+                        if v.get("type") == "Trailer":
+                            break
+
+        tmdb_url = f"https://www.themoviedb.org/{media_type}/{item_id}" if item_id else None
+
+        return {
+            "id": item_id,
+            "title": title,
+            "original_title": original_title,
+            "media_type": media_type,
+            "year": year,
+            "poster_url": poster_url,
+            "rating": round(float(vote_average), 1) if vote_average else None,
+            "overview": overview,
+            "trailer_url": trailer_url,
+            "imdb_id": imdb_id,
+            "runtime": runtime,
+            "tmdb_url": tmdb_url
+        }
+
+    async def search_person(self, name: str) -> Optional[Dict[str, Any]]:
+        """Searches TMDb for an actor or director to fetch profile image."""
+        if not name:
+            return None
+
+        data = await self._make_request("/search/person", {"query": name, "include_adult": "false"})
+        if not data or not data.get("results"):
+            return None
+
+        person = data["results"][0]
+        profile_path = person.get("profile_path")
+        profile_url = f"{TMDB_IMAGE_BASE}{profile_path}" if profile_path else None
+
+        return {
+            "id": person.get("id"),
+            "name": person.get("name"),
+            "known_for_department": person.get("known_for_department"),
+            "profile_url": profile_url,
+            "popularity": person.get("popularity")
+        }
 
 
 tmdb_service = TMDbService()

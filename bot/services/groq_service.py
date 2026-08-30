@@ -21,7 +21,7 @@ GROQ_MODELS = [
 
 
 class GroqService:
-    """Ultra-fast Groq LPU inference engine for AI Movie Curator and Quizzes."""
+    """Ultra-fast Groq LPU inference engine for AI Movie Curator, Quizzes, and Actor Explorer."""
 
     def __init__(self):
         self.pool = groq_key_pool
@@ -47,7 +47,7 @@ class GroqService:
                         kwargs = {
                             "model": model,
                             "messages": [
-                                {"role": "system", "content": "You are a professional cinema AI curator and movie trivia expert. Always return responses in valid clean JSON format only."},
+                                {"role": "system", "content": "You are a professional cinema AI curator, movie trivia expert, and filmography biographer. Always return responses in valid clean JSON format only."},
                                 {"role": "user", "content": prompt}
                             ],
                             "temperature": temperature,
@@ -180,6 +180,77 @@ Javobni FAQAT quyidagi toza JSON formatida qaytaring:
 
     async def generate_quiz(self, lang: str = "uz") -> Dict[str, Any]:
         return await asyncio.to_thread(self._sync_generate_quiz, lang)
+
+    # 3. Actor & Director Filmography Explorer
+    def _sync_get_actor_filmography(self, actor_name: str, lang: str = "uz") -> Dict[str, Any]:
+        lang_instruction = {
+            "uz": "Biografiya va tavsiflarni O'zbek tilida (lotin) yozing.",
+            "uz_kr": "Биография ва тавсифларни Ўзбек тилида (кирилл) ёзинг.",
+            "ru": "Биографию и описания пишите на РУССКОМ языке.",
+            "en": "Write biography and descriptions in ENGLISH."
+        }.get(lang, "Tavsiflarni O'zbek tilida yozing.")
+
+        prompt = f"""
+Siz jahon kinematografiyasi va aktyorlar/rejissyorlar bo'yicha eng nufuzli ekspert Sun'iy Intellektsiz.
+Foydalanuvchi quyidagi shaxs haqida so'radi: "{actor_name}"
+
+Vazifa:
+1. Ushbu shaxsning to'liq ismi (person_name), kasbi (role) va 2 ta gapdan iborat qiziqarli ma'lumot/biografiyasi (bio).
+2. Ushbu aktyor yoki rejissyorning butun faoliyatidagi ENG ENG SARA TOP-5 TA DURDONA FILMI (top_movies ro'yxati).
+3. Har bir film uchun: nomi (title), yili (year), IMDb reytingi (rating), roli (role_name) va qisqacha tavsifi (description).
+
+{lang_instruction}
+
+Javobni FAQAT quyidagi toza JSON formatida qaytaring:
+{{
+  "found": true,
+  "person_name": "Leonardo DiCaprio",
+  "role": "Aktyor / Produser",
+  "bio": "Gollivudning eng iste'dodli va nufuzli Oskar sohibi bo'lgan daho aktyorlaridan biri.",
+  "top_movies": [
+    {{
+      "title": "Inception",
+      "year": "2010",
+      "rating": "8.8",
+      "role_name": "Dom Cobb",
+      "description": "Tushlar ichidagi operatsiyalar haqidagi aqlbovar qilmas shoh asar."
+    }},
+    {{
+      "title": "The Wolf of Wall Street",
+      "year": "2013",
+      "rating": "8.2",
+      "role_name": "Jordan Belfort",
+      "description": "Uoll-Strit birjasidagi shov-shuvli hayot haqidagi kult film."
+    }},
+    {{
+      "title": "Titanic",
+      "year": "1997",
+      "rating": "7.9",
+      "role_name": "Jack Dawson",
+      "description": "Dunyodagi eng mashhur fojiaviy muhabbat qissasi."
+    }},
+    {{
+      "title": "The Revenant",
+      "year": "2015",
+      "rating": "8.0",
+      "role_name": "Hugh Glass",
+      "description": "Aktyorga orziqib kutilgan Oskarni keltirgan omon qolish dramasi."
+    }},
+    {{
+      "title": "Shutter Island",
+      "year": "2010",
+      "rating": "8.2",
+      "role_name": "Teddy Daniels",
+      "description": "Ruhiy shifoxonadagi jumboqlarga to'la psixologik durdona."
+    }}
+  ]
+}}
+"""
+        resp_text = self._execute_groq(prompt, json_mode=True, temperature=0.7)
+        return self._parse_json(resp_text)
+
+    async def get_actor_filmography(self, actor_name: str, lang: str = "uz") -> Dict[str, Any]:
+        return await asyncio.to_thread(self._sync_get_actor_filmography, actor_name, lang)
 
 
 groq_service = GroqService()
