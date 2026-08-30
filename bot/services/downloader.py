@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import asyncio
 import logging
@@ -24,24 +25,41 @@ from bot.config import DOWNLOAD_DIR, MAX_VIDEO_SIZE_MB, PROXY_URL
 logger = logging.getLogger(__name__)
 
 
+def clean_media_url(url: str) -> str:
+    """Removes tracking query parameters (igsh, igsi, si, etc.) that can break downloaders."""
+    if "instagram.com" in url.lower():
+        # Remove tracking parameters
+        url = re.sub(r'(\?|&)(igsh|igsi|utm_[a-z]+)=[^&]*', '', url)
+        url = url.rstrip('?&')
+    elif "youtu" in url.lower():
+        url = re.sub(r'(\?|&)si=[^&]*', '', url).rstrip('?&')
+    return url
+
+
 class DownloaderService:
-    """Fast and robust video downloader for YouTube, Instagram, TikTok, and more."""
+    """Fast, robust, and resilient video downloader for YouTube, Instagram, and more."""
 
     @staticmethod
     def _sync_download(url: str, output_path: Path) -> Dict[str, Any]:
-        """Synchronous download function using flexible format selection."""
+        """Synchronous download function using flexible format selection and retries."""
+        cleaned_url = clean_media_url(url)
+
         ydl_opts = {
             'outtmpl': str(output_path),
-            'format': 'bestvideo[height<=720]+bestaudio/best[height<=720]/bestvideo+bestaudio/best',
+            'format': 'bestvideo[height<=720]+bestaudio/best[height<=720]/worst[height>=360]/worst[ext=mp4]/best',
             'max_filesize': MAX_VIDEO_SIZE_MB * 1024 * 1024,
             'quiet': True,
             'no_warnings': True,
             'noplaylist': True,
             'extract_flat': False,
-            'socket_timeout': 20,
+            'socket_timeout': 45,
+            'retries': 3,
+            'fragment_retries': 3,
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
+                'Sec-Fetch-Mode': 'navigate',
             }
         }
 
@@ -53,7 +71,11 @@ class DownloaderService:
             ydl_opts['proxy'] = PROXY_URL
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+            try:
+                info = ydl.extract_info(cleaned_url, download=True)
+            except Exception:
+                # If cleaned URL fails, try original URL as fallback
+                info = ydl.extract_info(url, download=True)
             
             actual_filename = ydl.prepare_filename(info)
             if not os.path.exists(actual_filename):
@@ -77,7 +99,7 @@ class DownloaderService:
 
     @classmethod
     async def download_video_from_url(cls, url: str) -> Optional[Dict[str, Any]]:
-        """Asynchronously downloads video from URL."""
+        """Asynchronously downloads video from URL with resilient error handling."""
         unique_id = uuid.uuid4().hex[:12]
         output_template = DOWNLOAD_DIR / f"vid_{unique_id}.%(ext)s"
 
