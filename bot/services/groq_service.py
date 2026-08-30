@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 
 from bot.config import GROQ_API_KEYS
 from bot.services.key_manager import APIKeyPool
+from bot.services.characters import get_character_info
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ GROQ_MODELS = [
 
 
 class GroqService:
-    """Ultra-fast Groq LPU inference engine for AI Movie Curator, Quizzes, and Actor Explorer."""
+    """Ultra-fast Groq LPU inference engine for AI Movie Curator, Quizzes, Actor Explorer, and Character Roleplay."""
 
     def __init__(self):
         self.pool = groq_key_pool
@@ -251,6 +252,73 @@ Javobni FAQAT quyidagi toza JSON formatida qaytaring:
 
     async def get_actor_filmography(self, actor_name: str, lang: str = "uz") -> Dict[str, Any]:
         return await asyncio.to_thread(self._sync_get_actor_filmography, actor_name, lang)
+
+    # 4. Movie Character Live Roleplay Chat
+    def _sync_chat_with_character(self, character_id: str, user_message: str, chat_history: List[Dict[str, str]] = None, lang: str = "uz") -> str:
+        char_info = get_character_info(character_id)
+        system_prompt = char_info["system_prompt"]
+
+        lang_rule = {
+            "uz": "Javobni O'zbek tilida (lotin yozuvida), o'z xarakteringizga xos bo'yoqdor va hissiyotli qilib bering.",
+            "uz_kr": "Жавобни Ўзбек тилида (кирилл алифбосида) беринг.",
+            "ru": "Отвечайте на РУССКОМ языке, строго сохраняя образ и манеру речи персонажа.",
+            "en": "Respond in ENGLISH, strictly staying in character with full emotional depth."
+        }.get(lang, "Javobni O'zbek tilida bering.")
+
+        messages = [
+            {"role": "system", "content": f"{system_prompt}\n\nLanguage Instruction: {lang_rule}"}
+        ]
+
+        if chat_history:
+            for item in chat_history[-6:]:
+                messages.append({"role": item.get("role", "user"), "content": item.get("content", "")})
+
+        messages.append({"role": "user", "content": user_message})
+
+        if self.pool.is_empty():
+            return "..."
+
+        max_attempts = max(self.pool.total_count, 1)
+
+        for attempt in range(max_attempts):
+            api_key = self.pool.get_key()
+            if not api_key:
+                break
+
+            try:
+                from groq import Groq
+                client = Groq(api_key=api_key)
+
+                for model in GROQ_MODELS:
+                    try:
+                        completion = client.chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            temperature=0.9,
+                            max_tokens=500
+                        )
+                        if completion.choices and completion.choices[0].message.content:
+                            self.pool.report_success(api_key)
+                            return completion.choices[0].message.content.strip()
+                    except Exception as model_err:
+                        err_str = str(model_err).lower()
+                        if "429" in err_str or "rate limit" in err_str or "quota" in err_str:
+                            self.pool.report_rate_limit(api_key, cooldown_seconds=30)
+                            break
+                        elif "404" in err_str or "model" in err_str:
+                            continue
+                        else:
+                            raise model_err
+
+            except Exception as e:
+                logger.warning(f"[Groq Roleplay Warning] {e}")
+                self.pool.report_rate_limit(api_key, cooldown_seconds=20)
+                continue
+
+        return "..."
+
+    async def chat_with_character(self, character_id: str, user_message: str, chat_history: List[Dict[str, str]] = None, lang: str = "uz") -> str:
+        return await asyncio.to_thread(self._sync_chat_with_character, character_id, user_message, chat_history, lang)
 
 
 groq_service = GroqService()

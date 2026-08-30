@@ -17,7 +17,7 @@ if sys.platform == "win32":
         pass
 
 from bot.config import BOT_TOKEN, ADMIN_BOT_TOKEN, validate_config, GEMINI_API_KEYS, GROQ_API_KEYS
-from bot.handlers import start, analyze, watchlist, quiz, actor
+from bot.handlers import start, analyze, watchlist, quiz, actor, character_chat
 from admin_bot import handlers as admin_handlers
 
 # Setup logging
@@ -36,7 +36,8 @@ async def set_main_bot_commands(bot: Bot):
     commands = [
         BotCommand(command="start", description="🚀 Boshlash / Start"),
         BotCommand(command="random", description="🎲 AI Kino Tanlash / Mood Curator"),
-        BotCommand(command="actor", description="🎭 Aktyor / Rejissyor filmlari"),
+        BotCommand(command="character", description="🎭 Qahramonlar bilan suhbat"),
+        BotCommand(command="actor", description="⭐️ Aktyor / Rejissyor filmlari"),
         BotCommand(command="saved", description="❤️ Saqlanganlar / Watchlist"),
         BotCommand(command="quiz", description="🎮 AI Kino Viktorinasi / Quiz"),
         BotCommand(command="alerts", description="🔔 Premyera eslatmalari"),
@@ -108,6 +109,7 @@ async def main():
     )
     main_dp = Dispatcher()
     main_dp.include_router(start.router)
+    main_dp.include_router(character_chat.router)
     main_dp.include_router(actor.router)
     main_dp.include_router(watchlist.router)
     main_dp.include_router(quiz.router)

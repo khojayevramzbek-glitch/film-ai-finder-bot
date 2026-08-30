@@ -2,6 +2,7 @@ import urllib.parse
 from typing import Optional, Dict, Any, List
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from bot.locales import get_msg
+from bot.services.characters import CHARACTERS
 
 
 def safe_callback_data(prefix: str, data: str, max_bytes: int = 64) -> str:
@@ -219,3 +220,35 @@ def get_actor_filmography_keyboard(actor_name: str, top_movies: List[Dict[str, A
         InlineKeyboardButton(text="🌐 Barcha filmlari (Google)", url=google_actor_url)
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_characters_keyboard(lang: str = "uz") -> InlineKeyboardMarkup:
+    """Generates character selection menu."""
+    buttons = [
+        [
+            InlineKeyboardButton(text="🃏 Joker", callback_data="char_sel:joker"),
+            InlineKeyboardButton(text="🦇 Batman", callback_data="char_sel:batman"),
+        ],
+        [
+            InlineKeyboardButton(text="🦾 Tony Stark", callback_data="char_sel:tony_stark"),
+            InlineKeyboardButton(text="🐺 Po'lat Alemdar", callback_data="char_sel:polat_alemdar"),
+        ],
+        [
+            InlineKeyboardButton(text="🕵️‍♂️ Sherlock Holmes", callback_data="char_sel:sherlock"),
+            InlineKeyboardButton(text="⚡️ Harry Potter", callback_data="char_sel:harry_potter"),
+        ],
+        [
+            InlineKeyboardButton(text="🏎 Dominic Toretto", callback_data="char_sel:toretto"),
+        ]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_character_chat_keyboard(lang: str = "uz") -> InlineKeyboardMarkup:
+    """Keyboard during active character chat session."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🔄 Boshqa Qahramon", callback_data="char_change"),
+            InlineKeyboardButton(text="🛑 Suhbatni Yakunlash", callback_data="char_exit"),
+        ]
+    ])
