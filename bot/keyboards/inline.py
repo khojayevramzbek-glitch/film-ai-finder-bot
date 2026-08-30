@@ -21,52 +21,56 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
 
 def get_movie_keyboard(ai_data: Dict[str, Any], tmdb_data: Optional[Dict[str, Any]] = None, lang: str = "uz") -> InlineKeyboardMarkup:
     """
-    Creates an inline keyboard with localized trailer, search, and share buttons.
+    Creates rich movie action buttons: Trailer, Watch Uzbek, Similar Movies, IMDb, Share.
     """
     buttons = []
 
     title = ai_data.get("title_original") or (tmdb_data.get("title") if tmdb_data else "") or ""
     encoded_title = urllib.parse.quote(title)
 
-    # 1. Trailer Button
+    # 1. Trailer & Watch Online in Uzbek
+    row1 = []
     trailer_url = tmdb_data.get("trailer_url") if tmdb_data else None
     if trailer_url:
-        buttons.append([
-            InlineKeyboardButton(text=get_msg(lang, "btn_trailer"), url=trailer_url)
-        ])
+        row1.append(InlineKeyboardButton(text=get_msg(lang, "btn_trailer"), url=trailer_url))
     else:
         yt_search_url = f"https://www.youtube.com/results?search_query={encoded_title}+trailer"
-        buttons.append([
-            InlineKeyboardButton(text=get_msg(lang, "btn_trailer_search"), url=yt_search_url)
-        ])
+        row1.append(InlineKeyboardButton(text=get_msg(lang, "btn_trailer_search"), url=yt_search_url))
 
-    row2 = []
-    # 2. IMDb / Kinopoisk
+    watch_uz_url = f"https://www.google.com/search?q={encoded_title}+tarjima+kino+uzbek+tilida+skachat+korish"
+    row1.append(InlineKeyboardButton(text=get_msg(lang, "btn_watch_uz"), url=watch_uz_url))
+    buttons.append(row1)
+
+    # 2. Similar Movies (AI recommendation)
+    safe_cb_title = title[:30].replace(":", "").replace("|", "")
+    buttons.append([
+        InlineKeyboardButton(text=get_msg(lang, "btn_similar"), callback_data=f"similar:{safe_cb_title}")
+    ])
+
+    # 3. IMDb / Kinopoisk / TMDb
+    row3 = []
     imdb_id = tmdb_data.get("imdb_id") if tmdb_data else None
     if imdb_id:
-        row2.append(
+        row3.append(
             InlineKeyboardButton(text=get_msg(lang, "btn_imdb"), url=f"https://www.imdb.com/title/{imdb_id}/")
         )
     else:
         kinopoisk_url = f"https://www.kinopoisk.ru/index.php?kp_query={encoded_title}"
-        row2.append(
+        row3.append(
             InlineKeyboardButton(text=get_msg(lang, "btn_kinopoisk"), url=kinopoisk_url)
         )
 
-    # 3. TMDb / Google Search
     tmdb_url = tmdb_data.get("tmdb_url") if tmdb_data else None
     if tmdb_url:
-        row2.append(
+        row3.append(
             InlineKeyboardButton(text=get_msg(lang, "btn_tmdb"), url=tmdb_url)
         )
     else:
         google_url = f"https://www.google.com/search?q={encoded_title}+movie"
-        row2.append(
+        row3.append(
             InlineKeyboardButton(text=get_msg(lang, "btn_google"), url=google_url)
         )
-
-    if row2:
-        buttons.append(row2)
+    buttons.append(row3)
 
     # 4. Share button
     share_template = get_msg(lang, "share_text", title=title)
@@ -75,4 +79,45 @@ def get_movie_keyboard(ai_data: Dict[str, Any], tmdb_data: Optional[Dict[str, An
         InlineKeyboardButton(text=get_msg(lang, "btn_share"), url=share_url)
     ])
 
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_genres_keyboard(lang: str = "uz") -> InlineKeyboardMarkup:
+    """Returns interactive genre buttons for /random movie picker."""
+    buttons = [
+        [
+            InlineKeyboardButton(text=get_msg(lang, "genre_action"), callback_data="rand_genre:action"),
+            InlineKeyboardButton(text=get_msg(lang, "genre_comedy"), callback_data="rand_genre:comedy"),
+        ],
+        [
+            InlineKeyboardButton(text=get_msg(lang, "genre_scifi"), callback_data="rand_genre:scifi"),
+            InlineKeyboardButton(text=get_msg(lang, "genre_horror"), callback_data="rand_genre:horror"),
+        ],
+        [
+            InlineKeyboardButton(text=get_msg(lang, "genre_drama"), callback_data="rand_genre:drama"),
+            InlineKeyboardButton(text=get_msg(lang, "genre_cartoon"), callback_data="rand_genre:cartoon"),
+        ],
+        [
+            InlineKeyboardButton(text=get_msg(lang, "genre_anime"), callback_data="rand_genre:anime"),
+        ]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_random_movie_keyboard(title: str, genre_key: str, lang: str = "uz") -> InlineKeyboardMarkup:
+    """Buttons for recommended random movie."""
+    encoded_title = urllib.parse.quote(title)
+    yt_url = f"https://www.youtube.com/results?search_query={encoded_title}+trailer"
+    watch_url = f"https://www.google.com/search?q={encoded_title}+tarjima+kino+uzbek+tilida+skachat+korish"
+
+    buttons = [
+        [
+            InlineKeyboardButton(text=get_msg(lang, "btn_trailer_search"), url=yt_url),
+            InlineKeyboardButton(text=get_msg(lang, "btn_watch_uz"), url=watch_url),
+        ],
+        [
+            InlineKeyboardButton(text=get_msg(lang, "btn_random_more"), callback_data=f"rand_genre:{genre_key}"),
+            InlineKeyboardButton(text=get_msg(lang, "btn_back_genres"), callback_data="rand_menu"),
+        ]
+    ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)

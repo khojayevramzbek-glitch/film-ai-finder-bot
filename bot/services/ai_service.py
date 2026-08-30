@@ -46,8 +46,8 @@ def build_system_prompt(lang: str = "uz") -> str:
     return f"""
 Siz kino, serial, multfilm, anime va premyeralarni aniqlovchi professional sun'iy intellekt ekspertisiz.
 
-Sizga videodan olingan asosiy kadrlar (yoki video) va uning sarlavhasi/tavsifi beriladi.
-Vazifangiz: Kadrlardagi qahramonlar, aktyorlar, yuzlar, kiyimlar, sahna detallari va kontekstdan foydalanib, bu qaysi kino, serial, multfilm, dorama yoki animatsiya ekanligini ANIQ aniqlash.
+Sizga videodan olingan asosiy kadrlar (yoki bitta rasm/skrinshot yoki matnli syujet) beriladi.
+Vazifangiz: Berilgan ma'lumotdan foydalanib, bu qaysi kino, serial, multfilm, dorama yoki animatsiya ekanligini ANIQ aniqlash.
 
 JUDA MUHIM QOIDALAR:
 1. Agar bu kino/serial hali rasman chiqmagan bo'lsa (masalan yaqinda e'lon qilingan treyler, tizer yoki kelgusi premyera), "is_premiere": true deb belgilang va kutilayotgan premyera sanasini/yilini yozing.
@@ -68,24 +68,24 @@ Javobni FAQAT quyidagi toza JSON formatida qaytaring:
   "premiere_date": null,
   "confidence": "high",
   "characters_or_actors": ["Actor 1", "Character name"],
-  "scene_description": "Videoda qaysi sahna sodir bo'layotgani haqida",
+  "scene_description": "Videoda/suratda qaysi sahna tasvirlangani",
   "summary": "Filmning qisqacha mazmuni",
   "confidence_reason": "Nima belgilar orqali aniqlandi"
 }}
 ```
 
-Agar videoda hech qanday film, serial, anime yoki multfilm lavhasi bo'lmasa (oddiy vblog, shaxsiy video, oddiy mem):
+Agar berilgan ma'lumotda hech qanday kino, serial, anime yoki multfilm topilmasa:
 ```json
 {{
   "found": false,
-  "reason": "Videoda hech qanday film yoki serial lavhasi topilmadi."
+  "reason": "Film yoki serial aniqlanmadi."
 }}
 ```
 """
 
 
 class AIService:
-    """Service to interact with Gemini API with instant frame extraction, multi-key rotation, and auto-failover."""
+    """Service to interact with Gemini API with multi-key rotation and multi-modal search."""
 
     def __init__(self):
         self.pool = gemini_key_pool
@@ -103,7 +103,7 @@ class AIService:
             cmd = [
                 FFMPEG_EXE,
                 "-i", str(video_path),
-                "-vf", f"fps=1/2,scale=640:-1",
+                "-vf", "fps=1/2,scale=640:-1",
                 "-vframes", str(num_frames),
                 "-q:v", "4",
                 out_pattern,
@@ -116,34 +116,18 @@ class AIService:
             logger.warning(f"[Frame Extraction Warning] Kadrlar ajratib olinmadi: {e}")
             return []
 
-    def _sync_analyze_video(self, video_path: Path, metadata_text: str = "", lang: str = "uz") -> Dict[str, Any]:
-        """
-        Analyzes video in user's target language using keyframes for ultra-fast response.
-        """
+    def _execute_gemini_request(self, contents: List[Any], response_json: bool = True) -> Optional[str]:
+        """Executes request with auto-retry and multi-key rotation."""
         if self.pool.is_empty():
-            return {
-                "found": False,
-                "reason": "Gemini API kaliti sozlanmagan (.env fayliga GEMINI_API_KEYS kiriting)."
-            }
+            return None
 
-        frames = self._extract_keyframes(video_path, num_frames=5)
         max_attempts = max(self.pool.total_count, 1)
-        last_error = ""
-
-        models_to_try = []
-        for m in FALLBACK_MODELS:
-            if m and m not in models_to_try:
-                models_to_try.append(m)
-
-        system_prompt = build_system_prompt(lang=lang)
+        models_to_try = [m for m in FALLBACK_MODELS if m]
 
         for attempt in range(max_attempts):
             api_key = self.pool.get_key()
             if not api_key:
                 break
-
-            masked_key = f"{api_key[:6]}...{api_key[-4:]}" if len(api_key) > 10 else "***"
-            logger.info(f"[AI Service] Gemini so'rovi yuborilmoqda (Kalit: {masked_key}, Til: {lang}, Urinish: {attempt + 1}/{max_attempts})")
 
             try:
                 from google import genai
@@ -151,22 +135,9 @@ class AIService:
 
                 client = genai.Client(api_key=api_key)
 
-                contents = []
-                uploaded_file = None
-
-                if frames:
-                    for frame_path in frames:
-                        with open(frame_path, "rb") as f:
-                            contents.append(types.Part.from_bytes(data=f.read(), mime_type="image/jpeg"))
-                else:
-                    uploaded_file = client.files.upload(file=str(video_path))
-                    while uploaded_file.state == "PROCESSING":
-                        time.sleep(2)
-                        uploaded_file = client.files.get(name=uploaded_file.name)
-                    contents.append(uploaded_file)
-
-                prompt_content = f"{system_prompt}\n\nQo'shimcha metadata / Sarlavha: {metadata_text}"
-                contents.append(prompt_content)
+                config_kwargs = {"temperature": 0.3}
+                if response_json:
+                    config_kwargs["response_mime_type"] = "application/json"
 
                 response = None
                 for model_candidate in models_to_try:
@@ -174,67 +145,36 @@ class AIService:
                         response = client.models.generate_content(
                             model=model_candidate,
                             contents=contents,
-                            config=types.GenerateContentConfig(
-                                temperature=0.2,
-                                response_mime_type="application/json"
-                            )
+                            config=types.GenerateContentConfig(**config_kwargs)
                         )
                         self.model_name = model_candidate
                         break
                     except Exception as model_err:
                         if "404" in str(model_err) or "not found" in str(model_err).lower():
-                            logger.warning(f"Model {model_candidate} mavjud emas, keyingisiga o'tilmoqda...")
                             continue
                         raise model_err
 
-                if uploaded_file:
-                    try:
-                        client.files.delete(name=uploaded_file.name)
-                    except Exception:
-                        pass
-
-                for f_path in frames:
-                    try:
-                        if f_path.exists():
-                            f_path.unlink()
-                    except Exception:
-                        pass
-
                 if response and response.text:
                     self.pool.report_success(api_key)
-                    return self._parse_json_response(response.text)
+                    return response.text
 
             except Exception as e:
                 err_str = str(e)
-                last_error = err_str
                 is_rate_limit = any(term in err_str.lower() for term in [
                     "429", "quota", "resourceexhausted", "rate limit", "exceeded"
                 ])
-
                 if is_rate_limit:
-                    logger.warning(f"⚠️ Limit xatosi: {err_str[:120]}... Keyingi kalitga o'tilmoqda!")
                     self.pool.report_rate_limit(api_key, cooldown_seconds=60)
-                    continue
                 else:
-                    logger.error(f"[AI Service Error] Tahlilda xatolik: {e}")
-                    self.pool.report_rate_limit(api_key, cooldown_seconds=30)
-                    continue
+                    self.pool.report_rate_limit(api_key, cooldown_seconds=20)
+                continue
 
-        for f_path in frames:
-            try:
-                if f_path.exists():
-                    f_path.unlink()
-            except Exception:
-                pass
+        return None
 
-        return {
-            "found": False,
-            "reason": f"Barcha API kalitlari bilan sinab ko'rildi, lekin tahlil qilib bo'lmadi ({last_error[:100]})."
-        }
-
-    @staticmethod
-    def _parse_json_response(text: str) -> Dict[str, Any]:
+    def _parse_json_response(self, text: str) -> Dict[str, Any]:
         """Cleans and parses JSON output from Gemini."""
+        if not text:
+            return {"found": False, "reason": "Javob olinmadi."}
         try:
             cleaned = text.strip()
             if cleaned.startswith("```json"):
@@ -247,14 +187,149 @@ class AIService:
             return json.loads(cleaned)
         except Exception as e:
             logger.error(f"[JSON Parse Error] Javobni JSON ga o'girib bo'lmadi: {e}\nMatn: {text}")
-            return {
-                "found": False,
-                "reason": "AI javobini qayta ishlashda xatolik."
-            }
+            return {"found": False, "reason": "AI javobini qayta ishlashda xatolik."}
+
+    # 1. Video Analysis
+    def _sync_analyze_video(self, video_path: Path, metadata_text: str = "", lang: str = "uz") -> Dict[str, Any]:
+        frames = self._extract_keyframes(video_path, num_frames=5)
+        contents = []
+
+        from google.genai import types
+
+        if frames:
+            for frame_path in frames:
+                with open(frame_path, "rb") as f:
+                    contents.append(types.Part.from_bytes(data=f.read(), mime_type="image/jpeg"))
+
+        system_prompt = build_system_prompt(lang=lang)
+        prompt_content = f"{system_prompt}\n\nQo'shimcha metadata / Sarlavha: {metadata_text}"
+        contents.append(prompt_content)
+
+        resp_text = self._execute_gemini_request(contents, response_json=True)
+
+        for f_path in frames:
+            try:
+                if f_path.exists():
+                    f_path.unlink()
+            except Exception:
+                pass
+
+        return self._parse_json_response(resp_text)
 
     async def analyze_video(self, video_path: Path, metadata_text: str = "", lang: str = "uz") -> Dict[str, Any]:
-        """Asynchronously analyze video with Gemini in user's target language."""
         return await asyncio.to_thread(self._sync_analyze_video, video_path, metadata_text, lang)
+
+    # 2. Image / Screenshot Analysis
+    def _sync_analyze_image(self, image_path: Path, caption: str = "", lang: str = "uz") -> Dict[str, Any]:
+        from google.genai import types
+        contents = []
+        with open(image_path, "rb") as f:
+            contents.append(types.Part.from_bytes(data=f.read(), mime_type="image/jpeg"))
+
+        system_prompt = build_system_prompt(lang=lang)
+        prompt_content = f"{system_prompt}\n\nFoydalanuvchi yuborgan rasm/skrinshot. Qo'shimcha izoh: {caption}"
+        contents.append(prompt_content)
+
+        resp_text = self._execute_gemini_request(contents, response_json=True)
+        return self._parse_json_response(resp_text)
+
+    async def analyze_image(self, image_path: Path, caption: str = "", lang: str = "uz") -> Dict[str, Any]:
+        return await asyncio.to_thread(self._sync_analyze_image, image_path, caption, lang)
+
+    # 3. Plot Description Text Search ("Kino nomini unutdim")
+    def _sync_analyze_plot_text(self, plot_description: str, lang: str = "uz") -> Dict[str, Any]:
+        system_prompt = build_system_prompt(lang=lang)
+        prompt_content = (
+            f"{system_prompt}\n\n"
+            f"Foydalanuvchi film nomini eslay olmay, quyidagi syujet/voqea tavsifini yozdi:\n"
+            f"\"{plot_description}\"\n\n"
+            f"Ushbu tavsif qaysi film, serial, anime yoki multfilmga tegishli ekanligini eng yuqori ehtimollik bilan toping."
+        )
+        resp_text = self._execute_gemini_request([prompt_content], response_json=True)
+        return self._parse_json_response(resp_text)
+
+    async def analyze_plot_text(self, plot_description: str, lang: str = "uz") -> Dict[str, Any]:
+        return await asyncio.to_thread(self._sync_analyze_plot_text, plot_description, lang)
+
+    # 4. Similar Movies Recommendations
+    def _sync_get_similar_movies(self, title: str, lang: str = "uz") -> List[Dict[str, Any]]:
+        lang_instruction = {
+            "uz": "Tavsiflarni O'zbek tilida (lotin) yozing.",
+            "uz_kr": "Тавсифларни Ўзбек тилида (кирилл) ёзинг.",
+            "ru": "Описания пишите на русском языке.",
+            "en": "Write descriptions in English."
+        }.get(lang, "Tavsiflarni O'zbek tilida yozing.")
+
+        prompt = f"""
+Siz professional kino tavsiya etuvchi sun'iy intellektsiz.
+Foydalanuvchiga "{title}" filmiga mavzusi, janri, atmosferasi va uslubi bo'yicha eng yaqin va eng zo'r 3 TA O'XSHASH FILMNI tavsiya qiling.
+
+{lang_instruction}
+
+Javobni FAQAT quyidagi JSON ro'yxati formatida qaytaring:
+```json
+[
+  {{
+    "title": "Movie Title",
+    "year": "2023",
+    "genres": "Janri",
+    "reason": "Nima uchun ushbu filmga o'xshash va nima uchun ko'rish tavsiya etiladi"
+  }},
+  ...
+]
+```
+"""
+        resp_text = self._execute_gemini_request([prompt], response_json=True)
+        try:
+            cleaned = resp_text.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            if cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            data = json.loads(cleaned.strip())
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+    async def get_similar_movies(self, title: str, lang: str = "uz") -> List[Dict[str, Any]]:
+        return await asyncio.to_thread(self._sync_get_similar_movies, title, lang)
+
+    # 5. Random Movie Pick by Genre (/random)
+    def _sync_get_random_movie(self, genre: str, lang: str = "uz") -> Dict[str, Any]:
+        lang_instruction = {
+            "uz": "Mazmun va tavsiyani O'zbek tilida (lotin) yozing.",
+            "uz_kr": "Мазмун ва тавсияни Ўзбек тилида (кирилл) ёзинг.",
+            "ru": "Сюжет и рекомендацию пишите на русском языке.",
+            "en": "Write summary and recommendation in English."
+        }.get(lang, "Mazmunni O'zbek tilida yozing.")
+
+        prompt = f"""
+Siz professional kinoshunos sun'iy intellektsiz.
+Foydalanuvchi bugun kechqurun ko'rish uchun "{genre}" janridagi eng zo'r, yuqori reytingli va hayratlanarli 1 TA FILMNI tavsiya qilishni so'radi.
+
+{lang_instruction}
+
+Javobni FAQAT quyidagi JSON formatida qaytaring:
+```json
+{{
+  "title_original": "Inception",
+  "title_local": "Mahalliy nomi",
+  "release_year": "2010",
+  "rating": "8.8",
+  "genres": "{genre}",
+  "actors": ["Leonardo DiCaprio", "Joseph Gordon-Levitt"],
+  "summary": "Filmning qisqacha maftunkor syujeti",
+  "why_watch": "Nima uchun aynan shu filmni ko'rish shart (taassurot)"
+}}
+```
+"""
+        resp_text = self._execute_gemini_request([prompt], response_json=True)
+        return self._parse_json_response(resp_text)
+
+    async def get_random_movie(self, genre: str, lang: str = "uz") -> Dict[str, Any]:
+        return await asyncio.to_thread(self._sync_get_random_movie, genre, lang)
 
 
 ai_service = AIService()

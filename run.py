@@ -33,7 +33,8 @@ logger = logging.getLogger(__name__)
 async def set_bot_commands(bot: Bot):
     """Sets up the bot menu commands in Telegram."""
     commands = [
-        BotCommand(command="start", description="🚀 Botni ishga tushirish / Start"),
+        BotCommand(command="start", description="🚀 Boshlash / Start"),
+        BotCommand(command="random", description="🎲 Bugun nima ko'rsam ekan? / What to watch"),
         BotCommand(command="lang", description="🌐 Tilni tanlash / Change Language"),
         BotCommand(command="help", description="💡 Yordam / Help / Помощь"),
         BotCommand(command="about", description="ℹ️ Bot haqida / About"),
@@ -46,7 +47,7 @@ async def health_check_handler(request):
     return web.json_response({
         "status": "online",
         "service": "AI FilmFinder Bot",
-        "version": "2.0 Multi-Lang"
+        "version": "2.5 Super AI"
     })
 
 
@@ -65,7 +66,7 @@ async def start_web_server(port: int):
 
 async def main():
     """Main application entry point."""
-    logger.info("🚀 AI Movie Finder Bot ishga tushirilmoqda (Multi-Language 2.0)...")
+    logger.info("🚀 AI Movie Finder Bot ishga tushirilmoqda (Super AI 2.5)...")
 
     # Check configuration
     errors = validate_config()

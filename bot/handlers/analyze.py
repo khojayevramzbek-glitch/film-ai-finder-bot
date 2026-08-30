@@ -1,7 +1,9 @@
+import html
 import uuid
 from pathlib import Path
+from typing import Dict, Any, Optional
 from aiogram import Router, F, Bot
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
 from aiogram.enums import ChatAction
 
 from bot.config import DOWNLOAD_DIR, MAX_VIDEO_SIZE_MB
@@ -16,20 +18,17 @@ from bot.keyboards.inline import get_movie_keyboard
 router = Router()
 
 
-async def process_video_analysis(bot: Bot, message: Message, video_path: Path, metadata_text: str = "", status_msg: Message = None, lang: str = "uz"):
-    """Core function to process AI analysis and return localized formatted results."""
+async def process_and_send_result(
+    bot: Bot,
+    message: Message,
+    ai_data: Optional[Dict[str, Any]],
+    status_msg: Optional[Message] = None,
+    lang: str = "uz"
+):
+    """Formats AI and TMDb results and sends response with poster and buttons."""
     try:
-        if status_msg:
-            await status_msg.edit_text(get_msg(lang, "status_analyzing"), parse_mode="HTML")
-
-        # Send typing action
-        await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
-
-        # AI Recognition in user's language
-        ai_data = await ai_service.analyze_video(video_path, metadata_text=metadata_text, lang=lang)
-
         if not ai_data or not ai_data.get("found"):
-            reason = ai_data.get("reason", "Video lavhasi aniqlanmadi.") if ai_data else "Error"
+            reason = ai_data.get("reason", "Film aniqlanmadi.") if ai_data else "Error"
             fail_text = get_msg(lang, "error_not_found", reason=reason)
             if status_msg:
                 await status_msg.edit_text(fail_text, parse_mode="HTML")
@@ -65,14 +64,14 @@ async def process_video_analysis(bot: Bot, message: Message, video_path: Path, m
             except Exception as e:
                 print(f"[Photo Send Warning] Poster yuborishda xatolik: {e}")
 
-        # If no poster, send text message
+        # If no poster or send failed, send text message
         if status_msg:
             await status_msg.edit_text(formatted_caption, reply_markup=reply_markup, parse_mode="HTML")
         else:
             await message.answer(formatted_caption, reply_markup=reply_markup, parse_mode="HTML")
 
     except Exception as e:
-        print(f"[Process Error] Umumiy xatolik: {e}")
+        print(f"[Process Error] Xatolik: {e}")
         error_msg = get_msg(lang, "error_general")
         if status_msg:
             try:
@@ -82,41 +81,90 @@ async def process_video_analysis(bot: Bot, message: Message, video_path: Path, m
         else:
             await message.answer(error_msg, parse_mode="HTML")
 
-    finally:
-        safe_remove(video_path)
 
-
-@router.message(F.text)
-async def handle_text_url(message: Message, bot: Bot):
-    """Handles text messages containing video URLs in user's language."""
+@router.message(F.photo)
+async def handle_photo(message: Message, bot: Bot):
+    """Handles screenshots or photos from movies."""
     user_id = message.from_user.id if message.from_user else 0
     lang = get_user_lang(user_id) or "uz"
 
-    urls = extract_urls(message.text)
-    if not urls:
+    status_msg = await message.answer(get_msg(lang, "status_photo_search"), parse_mode="HTML")
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+
+    # Download highest resolution photo
+    photo = message.photo[-1]
+    unique_id = uuid.uuid4().hex[:12]
+    photo_path = DOWNLOAD_DIR / f"photo_{unique_id}.jpg"
+
+    try:
+        file_info = await bot.get_file(photo.file_id)
+        await bot.download_file(file_info.file_path, destination=photo_path)
+
+        caption_text = message.caption or ""
+        ai_data = await ai_service.analyze_image(photo_path, caption=caption_text, lang=lang)
+
+        await process_and_send_result(
+            bot=bot,
+            message=message,
+            ai_data=ai_data,
+            status_msg=status_msg,
+            lang=lang
+        )
+
+    except Exception as e:
+        print(f"[Photo Handler Error] {e}")
+        await status_msg.edit_text(get_msg(lang, "error_general"), parse_mode="HTML")
+    finally:
+        safe_remove(photo_path)
+
+
+@router.message(F.text)
+async def handle_text(message: Message, bot: Bot):
+    """Handles text: either video URLs (Reels/Shorts) or plot description queries."""
+    user_id = message.from_user.id if message.from_user else 0
+    lang = get_user_lang(user_id) or "uz"
+    text = message.text.strip()
+
+    # 1. Check if message contains URLs
+    urls = extract_urls(text)
+
+    if urls:
+        url = urls[0]
+        status_msg = await message.answer(get_msg(lang, "status_downloading"), parse_mode="HTML")
+        await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+
+        download_result = await downloader.download_video_from_url(url)
+
+        if not download_result or not download_result.get("file_path"):
+            fail_text = get_msg(lang, "error_download")
+            await status_msg.edit_text(fail_text, parse_mode="HTML")
+            return
+
+        video_path = download_result["file_path"]
+        meta_text = f"Title: {download_result.get('title', '')}\nDescription: {download_result.get('description', '')}"
+
+        try:
+            await status_msg.edit_text(get_msg(lang, "status_analyzing"), parse_mode="HTML")
+            ai_data = await ai_service.analyze_video(video_path, metadata_text=meta_text, lang=lang)
+            await process_and_send_result(bot=bot, message=message, ai_data=ai_data, status_msg=status_msg, lang=lang)
+        finally:
+            safe_remove(video_path)
+        return
+
+    # 2. If no URL and length is too short
+    if len(text) < 3:
         await message.answer(get_msg(lang, "send_prompt"), parse_mode="HTML")
         return
 
-    url = urls[0]
-    is_tiktok = "tiktok.com" in url.lower()
+    # 3. Text Plot Search ("Kino nomini unutdim")
+    status_msg = await message.answer(get_msg(lang, "status_plot_search"), parse_mode="HTML")
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
-    status_msg = await message.answer(get_msg(lang, "status_downloading"), parse_mode="HTML")
-
-    download_result = await downloader.download_video_from_url(url)
-
-    if not download_result or not download_result.get("file_path"):
-        fail_text = get_msg(lang, "error_tiktok") if is_tiktok else get_msg(lang, "error_download")
-        await status_msg.edit_text(fail_text, parse_mode="HTML")
-        return
-
-    video_path = download_result["file_path"]
-    meta_text = f"Title: {download_result.get('title', '')}\nDescription: {download_result.get('description', '')}"
-
-    await process_video_analysis(
+    ai_data = await ai_service.analyze_plot_text(text, lang=lang)
+    await process_and_send_result(
         bot=bot,
         message=message,
-        video_path=video_path,
-        metadata_text=meta_text,
+        ai_data=ai_data,
         status_msg=status_msg,
         lang=lang
     )
@@ -136,12 +184,13 @@ async def handle_direct_video(message: Message, bot: Bot):
         size_mb = video_obj.file_size / (1024 * 1024)
         if size_mb > MAX_VIDEO_SIZE_MB:
             await message.answer(
-                f"⚠️ Video hajmi juda katta ({size_mb:.1f} MB). Maksimal: {MAX_VIDEO_SIZE_MB} MB.",
+                f"⚠️ Video hajmi katta ({size_mb:.1f} MB). Maksimal: {MAX_VIDEO_SIZE_MB} MB.",
                 parse_mode="HTML"
             )
             return
 
     status_msg = await message.answer(get_msg(lang, "status_downloading"), parse_mode="HTML")
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
     unique_id = uuid.uuid4().hex[:12]
     ext = ".mp4"
@@ -152,16 +201,55 @@ async def handle_direct_video(message: Message, bot: Bot):
         await bot.download_file(file_info.file_path, destination=dest_path)
 
         caption_text = message.caption or ""
-        await process_video_analysis(
+        await status_msg.edit_text(get_msg(lang, "status_analyzing"), parse_mode="HTML")
+        ai_data = await ai_service.analyze_video(dest_path, metadata_text=caption_text, lang=lang)
+
+        await process_and_send_result(
             bot=bot,
             message=message,
-            video_path=dest_path,
-            metadata_text=caption_text,
+            ai_data=ai_data,
             status_msg=status_msg,
             lang=lang
         )
 
     except Exception as e:
-        print(f"[Direct Video Error] Yuklashda xatolik: {e}")
-        safe_remove(dest_path)
+        print(f"[Direct Video Error] {e}")
         await status_msg.edit_text(get_msg(lang, "error_general"), parse_mode="HTML")
+    finally:
+        safe_remove(dest_path)
+
+
+@router.callback_query(F.data.startswith("similar:"))
+async def cb_similar_movies(callback: CallbackQuery, bot: Bot):
+    """Generates and displays 3 similar movie recommendations."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    lang = get_user_lang(user_id) or "uz"
+    
+    title = callback.data.split(":", 1)[1]
+    await callback.answer(get_msg(lang, "status_similar_search"), show_alert=False)
+
+    status_msg = await callback.message.reply(get_msg(lang, "status_similar_search"), parse_mode="HTML")
+    await bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
+
+    recommendations = await ai_service.get_similar_movies(title, lang=lang)
+
+    if not recommendations:
+        await status_msg.edit_text(get_msg(lang, "error_not_found", reason="O'xshash filmlar topilmadi."), parse_mode="HTML")
+        return
+
+    lines = [f"🎭 <b>'{html.escape(title)}'</b> filmiga o'xshash eng yaxshi filmlar:\n"]
+    for idx, rec in enumerate(recommendations[:3], 1):
+        m_title = html.escape(str(rec.get("title", "")))
+        m_year = html.escape(str(rec.get("year", "")))
+        m_genre = html.escape(str(rec.get("genres", "")))
+        m_reason = html.escape(str(rec.get("reason", "")))
+
+        lines.append(f"<b>{idx}. {m_title} ({m_year})</b>")
+        if m_genre:
+            lines.append(f"🎭 <i>Janr: {m_genre}</i>")
+        if m_reason:
+            lines.append(f"💡 <i>{m_reason}</i>")
+        lines.append("")
+
+    lines.append("🍿 <i>Yoqimli tomosha tilaymiz!</i>")
+    await status_msg.edit_text("\n".join(lines), parse_mode="HTML")
