@@ -26,6 +26,7 @@ from bot.services.db import (
     remove_sponsor_channel
 )
 from bot.services.ai_service import gemini_key_pool
+from bot.services.groq_service import groq_key_pool
 from bot.services.tmdb_service import tmdb_key_pool
 from admin_bot.keyboards import (
     get_admin_main_keyboard,
@@ -153,27 +154,22 @@ async def cb_stats(callback: CallbackQuery):
 # 2. API KEYS MONITOR
 @router.callback_query(F.data == "adm:keys")
 async def cb_api_keys(callback: CallbackQuery):
-    """Renders real-time status of all 15 Gemini API keys and TMDb keys."""
+    """Renders real-time status of Gemini 15 keys, Groq 10 keys, and TMDb keys."""
     gemini_status = gemini_key_pool.get_pool_status()
+    groq_status = groq_key_pool.get_pool_status()
     tmdb_status = tmdb_key_pool.get_pool_status()
 
     lines = [
         "🔑 <b>API KALITLARI JONLI MONITORI</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n",
-        f"🤖 <b>Google Gemini Kalitlari:</b>",
-        f"• Jami: <b>{gemini_status['total']} ta</b>",
-        f"• 🟢 Faol (Tayyor): <b>{gemini_status['active']} ta</b>",
-        f"• 🟡 Kutishda (Cooldown): <b>{gemini_status['cooldown']} ta</b>\n"
+        f"⚡️ <b>Groq AI (Llama 3.3 70B - Random & Quiz):</b>",
+        f"• Jami: <b>{groq_status['total']} ta</b> | 🟢 Faol: <b>{groq_status['active']} ta</b> | 🟡 Kutishda: <b>{groq_status['cooldown']} ta</b>\n",
+        f"🤖 <b>Google Gemini AI (Video & Vision Qidiruv):</b>",
+        f"• Jami: <b>{gemini_status['total']} ta</b> | 🟢 Faol: <b>{gemini_status['active']} ta</b> | 🟡 Kutishda: <b>{gemini_status['cooldown']} ta</b>\n",
+        f"🎬 <b>TMDb Metadata Kalitlari:</b>",
+        f"• Jami: <b>{tmdb_status['total']} ta</b> | 🟢 Faol: <b>{tmdb_status['active']} ta</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━"
     ]
-
-    for k in gemini_status.get("keys", []):
-        badge = "🟢" if k["is_active"] else "🟡"
-        cd_info = f" ({k['remaining_cooldown']}s)" if not k["is_active"] else ""
-        lines.append(f"{badge} Kalit #{k['index']}: <code>{k['masked']}</code>{cd_info}")
-
-    lines.append("\n🎬 <b>TMDb Metadata Kalitlari:</b>")
-    lines.append(f"• Jami: <b>{tmdb_status['total']} ta</b> | 🟢 Faol: <b>{tmdb_status['active']} ta</b>")
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
 
     key_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔄 Barcha Kalitlarni Tiklash", callback_data="adm:reset_keys")],
@@ -189,10 +185,11 @@ async def cb_api_keys(callback: CallbackQuery):
 
 @router.callback_query(F.data == "adm:reset_keys")
 async def cb_reset_keys(callback: CallbackQuery):
-    """Instantly clears all cooldown timers on API keys."""
+    """Instantly clears all cooldown timers on all API keys."""
     g_cnt = gemini_key_pool.reset_all_cooldowns()
+    gr_cnt = groq_key_pool.reset_all_cooldowns()
     t_cnt = tmdb_key_pool.reset_all_cooldowns()
-    await callback.answer(f"✅ Barcha {g_cnt + t_cnt} ta kalitlar zudlik bilan faollashtirildi!", show_alert=True)
+    await callback.answer(f"✅ Barcha {g_cnt + gr_cnt + t_cnt} ta kalitlar zudlik bilan faollashtirildi!", show_alert=True)
     await cb_api_keys(callback)
 
 

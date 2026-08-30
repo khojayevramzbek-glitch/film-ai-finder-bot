@@ -18,6 +18,7 @@ except Exception:
 
 from bot.config import GEMINI_API_KEYS, GEMINI_MODEL, DOWNLOAD_DIR
 from bot.services.key_manager import APIKeyPool
+from bot.services.groq_service import groq_service
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ Agar berilgan ma'lumotda hech qanday kino, serial, anime yoki multfilm topilmasa
 
 
 class AIService:
-    """Service to interact with Gemini API with multi-key rotation and multi-modal search."""
+    """Service to interact with Gemini & Groq APIs with multi-key rotation and multi-modal search."""
 
     def __init__(self):
         self.pool = gemini_key_pool
@@ -296,8 +297,20 @@ Javobni FAQAT quyidagi JSON ro'yxati formatida qaytaring:
     async def get_similar_movies(self, title: str, lang: str = "uz") -> List[Dict[str, Any]]:
         return await asyncio.to_thread(self._sync_get_similar_movies, title, lang)
 
-    # 5. /random AI Movie Curator (Genres, Moods, and Surprise Me!)
-    def _sync_get_random_movie(self, genre_or_mood: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
+    # 5. Dual-Engine /random Movie Curator (Groq primary 0.2s -> Gemini fallback)
+    async def get_random_movie(self, genre_or_mood: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
+        # Try Groq (Llama 3.3 70B) first for instant 0.2s response
+        try:
+            groq_res = await groq_service.get_random_movie(genre_or_mood, exclude_title, lang)
+            if groq_res and groq_res.get("title_original"):
+                return groq_res
+        except Exception as e:
+            logger.warning(f"[Groq Fallback Warning] {e}")
+
+        # Fallback to Gemini
+        return await asyncio.to_thread(self._sync_get_random_movie_gemini, genre_or_mood, exclude_title, lang)
+
+    def _sync_get_random_movie_gemini(self, genre_or_mood: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
         lang_instruction = {
             "uz": "Mazmun va tavsiyani O'zbek tilida (lotin) yozing.",
             "uz_kr": "Мазмун ва тавсияни Ўзбек тилида (кирилл) ёзинг.",
@@ -306,51 +319,41 @@ Javobni FAQAT quyidagi JSON ro'yxati formatida qaytaring:
         }.get(lang, "Mazmunni O'zbek tilida yozing.")
 
         random_seed = random.randint(1000, 99999)
-        exclude_clause = ""
-        if exclude_title:
-            exclude_clause = f"JUDA MUHIM: Quyidagi filmlarni TAVSIYA QILMANG (foydalanuvchi buni ko'rgan): \"{exclude_title}\". Mutlaqo boshqa, yangi film tanlang!"
-
-        is_surprise = "surprise" in genre_or_mood.lower() or "hayrat" in genre_or_mood.lower()
-
-        if is_surprise:
-            genres_pool = ["Aqlbovar qilmas Fantastika", "Kutilmagan burilishlarga boy Triller", "Chuqur Psixologik Drama", "Hayotbaxsh va Ilhomlantiruvchi Sarguzasht", "Kult klassika"]
-            picked_style = random.choice(genres_pool)
-            task_description = f"Butun dunyo kinematografiyasidagi eng sara, yuqori reytingli (IMDb 8+) va tomoshabinni lol qoldiradigan 1 TA AQLBOVAR QILMAS DURDONA FILMNI ({picked_style}) tanlang."
-        else:
-            task_description = f"\"{genre_or_mood}\" janri yoki kayfiyatiga mos, eng sara, qiziqarli va yuqori reytingli 1 TA FILMNI tanlang."
-
+        exclude_clause = f"JUDA MUHIM: \"{exclude_title}\" filmini TAVSIYA QILMANG!" if exclude_title else ""
         prompt = f"""
-Siz butun dunyo kinematografiyasini mukammal biluvchi Sun'iy Intellekt Kino Kuratorisiz.
-Foydalanuvchi bugun kechqurun maroq bilan ko'rish uchun quyidagi so'rovni yubordi:
-{task_description}
-
-Tasodifiy seed: #{random_seed}
-{exclude_clause}
-
+Siz Sun'iy Intellekt Kino Kuratorisiz.
+"{genre_or_mood}" bo'yicha eng zo'r 1 TA FILMNI tanlang. Seed: #{random_seed}. {exclude_clause}
 {lang_instruction}
 
-Javobni FAQAT quyidagi JSON formatida qaytaring:
-```json
+Javobni FAQAT JSON formatida qaytaring:
 {{
   "title_original": "Movie Title",
   "title_local": "Mahalliy nomi",
   "release_year": "2022",
   "rating": "8.5",
-  "genres": "{genre_or_mood if not is_surprise else 'Top Masterpiece'}",
+  "genres": "{genre_or_mood}",
   "actors": ["Actor 1", "Actor 2"],
   "summary": "Filmning qisqacha maftunkor syujeti",
-  "why_watch": "Nima uchun aynan shu filmni ko'rish shart (taassurot va kayfiyat)"
+  "why_watch": "Nima uchun aynan shu filmni ko'rish shart"
 }}
-```
 """
         resp_text = self._execute_gemini_request([prompt], response_json=True, temperature=0.95)
         return self._parse_json_response(resp_text)
 
-    async def get_random_movie(self, genre_or_mood: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
-        return await asyncio.to_thread(self._sync_get_random_movie, genre_or_mood, exclude_title, lang)
+    # 6. Dual-Engine Interactive Movie Quiz (Groq primary -> Gemini fallback)
+    async def generate_quiz(self, lang: str = "uz") -> Dict[str, Any]:
+        # Try Groq first for instant 0.2s quiz generation
+        try:
+            groq_quiz = await groq_service.generate_quiz(lang)
+            if groq_quiz and "question" in groq_quiz and "options" in groq_quiz:
+                return groq_quiz
+        except Exception as e:
+            logger.warning(f"[Groq Quiz Fallback Warning] {e}")
 
-    # 6. Interactive Movie Quiz Generator (🎮 Viktorina)
-    def _sync_generate_quiz(self, lang: str = "uz") -> Dict[str, Any]:
+        # Fallback to Gemini
+        return await asyncio.to_thread(self._sync_generate_quiz_gemini, lang)
+
+    def _sync_generate_quiz_gemini(self, lang: str = "uz") -> Dict[str, Any]:
         lang_instruction = {
             "uz": "Savol, variantlar va tushuntirishni O'ZBEK tilida (lotin) yozing.",
             "uz_kr": "Савол, вариантлар ва тушунтиришни ЎЗБЕК тилида (кирилл) ёзинг.",
@@ -358,38 +361,22 @@ Javobni FAQAT quyidagi JSON formatida qaytaring:
             "en": "Write the question, options, and explanation in ENGLISH."
         }.get(lang, "Savolni O'zbek tilida yozing.")
 
-        random_topics = [
-            "mashhur kult filmning kutilmagan syujeti (plot twist)",
-            "afsonaviy qahramonning mashhur iqtibosi (quote)",
-            "mashhur Gollivud aktyorining o'ynagan roli",
-            "Oskar olgan eng buyuk durdona film siri",
-            "Marvel, Garri Potter, Avatar yoki Titanik filmlari bo'yicha qiziqarli fakt"
-        ]
-        topic = random.choice(random_topics)
         random_seed = random.randint(1000, 99999)
-
         prompt = f"""
-Siz kino viktorina va qiziqarli savol-javoblar bo'yicha ekspert Sun'iy Intellektsiz.
-Foydalanuvchilar uchun "{topic}" mavzusida juda qiziqarli, o'ylantiradigan 1 TA KINO TEST SAVOLINI tuzing.
-
-Tasodifiy seed: #{random_seed}
+Siz kino viktorina bo'yicha ekspert Sun'iy Intellektsiz.
+Qiziqarli 1 TA KINO TEST SAVOLINI tuzing. Seed: #{random_seed}.
 {lang_instruction}
 
-Javobni FAQAT quyidagi JSON formatida qaytaring:
-```json
+Javobni FAQAT JSON formatida qaytaring:
 {{
-  "question": "Savol matni (masalan: Qaysi filmda bosh qahramon tush ichidagi tushga kiradi?)",
+  "question": "Savol matni",
   "options": ["A javob", "B javob", "C javob", "D javob"],
   "correct_index": 0,
-  "explanation": "Nima uchun ushbu javob to'g'riligi va film haqida qiziqarli fakt"
+  "explanation": "Nima uchun ushbu javob to'g'riligi va qiziqarli fakt"
 }}
-```
 """
         resp_text = self._execute_gemini_request([prompt], response_json=True, temperature=0.9)
         return self._parse_json_response(resp_text)
-
-    async def generate_quiz(self, lang: str = "uz") -> Dict[str, Any]:
-        return await asyncio.to_thread(self._sync_generate_quiz, lang)
 
 
 ai_service = AIService()
