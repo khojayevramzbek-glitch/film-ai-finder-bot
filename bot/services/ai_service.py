@@ -35,7 +35,7 @@ FALLBACK_MODELS = [
 
 
 def build_system_prompt(lang: str = "uz") -> str:
-    """Builds prompt instructing Gemini in user's target language."""
+    """Builds prompt instructing Gemini in user's target language with strict Vision-First rules."""
     lang_rules = {
         "uz": "Javobdagi qisqacha mazmun (summary), sahna tavsifi (scene_description) va sabablarni O'ZBEK tilida (lotin) yozing.",
         "uz_kr": "Жавобдаги қисқача мазмун (summary), саҳна тавсифи (scene_description) ва сабабларни ЎЗБЕК тилида (кирилл алифбосида) ёзинг.",
@@ -47,35 +47,37 @@ def build_system_prompt(lang: str = "uz") -> str:
     return f"""
 Siz kino, serial, multfilm, anime va premyeralarni aniqlovchi professional sun'iy intellekt ekspertisiz.
 
-Sizga videodan olingan asosiy kadrlar (yoki bitta rasm/skrinshot yoki matnli syujet/sarlavha/kayfiyat) beriladi.
-Vazifangiz: Berilgan ma'lumotdan foydalanib, bu qaysi kino, serial, multfilm, dorama yoki animatsiya ekanligini ANIQ aniqlash yoki tavsiya etish.
+Sizga videodan olingan kadrlar (yoki rasm/skrinshot yoki matn) beriladi.
+Vazifangiz: Berilgan kadrlardan foydalanib, bu qaysi haqiqiy kino, serial, multfilm yoki jangari film ekanligini ANIQ aniqlash.
 
-JUDA MUHIM QOIDALAR:
-1. Agar bu kino/serial hali rasman chiqmagan bo'lsa (masalan yaqinda e'lon qilingan treyler, tizer yoki kelgusi premyera), "is_premiere": true deb belgilang va kutilayotgan premyera sanasini/yilini yozing.
-2. Agar bu mavjud film yoki serial bo'lsa, asl nomini (original title), o'zbekcha va ruscha tarjimalarini bering.
-3. Media turini aniq belgilang: "movie", "series", "cartoon", "anime", "trailer".
-4. {target_rule}
+O'TA MUHIM QOIDALAR:
+1. ⚠️ DIQQAT: Instagram Reels, TikTok va YouTube Shorts mualliflari ko'pincha videoga mutlaqo aloqasi bo'lmagan soxta xeshteglar (masalan: #anime, #onepiece, #fyp, trend musiqalar nomini) yozib qo'yishadi.
+2. 👁 FAQAT VIZUAL KADRLARGA ISHONING! Agar kadrlarda haqiqiy aktyorlar jangi (masalan: ringdagi jang, Yuri Boyka / Undisputed, Marvel, Jon Uik yoki Gollivud filmlari) ko'rinib tursa, muallif tagiga har qancha anime yoki boshqa so'z yozgan bo'lsa ham, MATNGA ALDANMANG! Kadrdagi haqiqiy film/aktyorni aniqlang!
+3. Agar bu kino/serial hali chiqmagan bo'lsa, "is_premiere": true deb belgilang.
+4. Haqiqiy filmning asl nomini (title_original) bering.
+5. Media turini to'g'ri belgilang: "movie", "series", "cartoon", "anime", "trailer".
+6. {target_rule}
 
 Javobni FAQAT quyidagi toza JSON formatida qaytaring:
 ```json
 {{
   "found": true,
-  "title_original": "Original Title (e.g. Inception, Avatar, Spider-Man)",
-  "title_uz": "O'zbekcha nomi",
-  "title_ru": "Русское название",
+  "title_original": "Original Title (e.g. Undisputed II: Last Man Standing, Inception, Avatar)",
+  "title_uz": "O'zbekcha nomi (masalan: Bo'yko: Yengilmas)",
+  "title_ru": "Русское название (masalan: Неоспоримый)",
   "media_type": "movie | series | cartoon | anime | trailer",
-  "release_year": "2025",
+  "release_year": "2006",
   "is_premiere": false,
   "premiere_date": null,
   "confidence": "high",
-  "characters_or_actors": ["Actor 1", "Character name"],
-  "scene_description": "Videoda/suratda qaysi sahna tasvirlangani",
+  "characters_or_actors": ["Scott Adkins", "Yuri Boyka"],
+  "scene_description": "Videoda/suratda qaysi jang yoki sahna aks etgani",
   "summary": "Filmning qisqacha mazmuni",
-  "confidence_reason": "Nima belgilar orqali aniqlandi"
+  "confidence_reason": "Kadrdagi aktyor (Scott Adkins) va qamoqxona ringidagi jang orqali aniqlandi"
 }}
 ```
 
-Agar berilgan ma'lumotda hech qanday kino, serial, anime yoki multfilm topilmasa:
+Agar berilgan ma'lumotda hech qanday kino topilmasa:
 ```json
 {{
   "found": false,
@@ -92,7 +94,7 @@ class AIService:
         self.pool = gemini_key_pool
         self.model_name = GEMINI_MODEL
 
-    def _extract_keyframes(self, video_path: Path, num_frames: int = 5) -> List[Path]:
+    def _extract_keyframes(self, video_path: Path, num_frames: int = 6) -> List[Path]:
         """Extracts keyframes from video in milliseconds using FFmpeg."""
         if not FFMPEG_EXE or not os.path.exists(FFMPEG_EXE):
             return []
@@ -104,20 +106,20 @@ class AIService:
             cmd = [
                 FFMPEG_EXE,
                 "-i", str(video_path),
-                "-vf", "fps=1/2,scale=640:-1",
+                "-vf", "fps=1,scale=720:-1",
                 "-vframes", str(num_frames),
-                "-q:v", "4",
+                "-q:v", "3",
                 out_pattern,
                 "-y"
             ]
-            subprocess.run(cmd, capture_output=True, timeout=5)
+            subprocess.run(cmd, capture_output=True, timeout=6)
             created_frames = sorted(Path(p) for p in glob.glob(f"{frame_prefix}_*.jpg"))
             return created_frames
         except Exception as e:
             logger.warning(f"[Frame Extraction Warning] Kadrlar ajratib olinmadi: {e}")
             return []
 
-    def _execute_gemini_request(self, contents: List[Any], response_json: bool = True, temperature: float = 0.3) -> Optional[str]:
+    def _execute_gemini_request(self, contents: List[Any], response_json: bool = True, temperature: float = 0.2) -> Optional[str]:
         """Executes request with auto-retry, custom temperature, and multi-key rotation."""
         if self.pool.is_empty():
             return None
@@ -193,7 +195,7 @@ class AIService:
 
     # 1. Video Analysis
     def _sync_analyze_video(self, video_path: Path, metadata_text: str = "", lang: str = "uz") -> Dict[str, Any]:
-        frames = self._extract_keyframes(video_path, num_frames=5)
+        frames = self._extract_keyframes(video_path, num_frames=6)
         contents = []
 
         from google.genai import types
@@ -204,10 +206,10 @@ class AIService:
                     contents.append(types.Part.from_bytes(data=f.read(), mime_type="image/jpeg"))
 
         system_prompt = build_system_prompt(lang=lang)
-        prompt_content = f"{system_prompt}\n\nQo'shimcha metadata / Sarlavha: {metadata_text}"
+        prompt_content = f"{system_prompt}\n\n[ESLATMA: Faqat vizual videodagi kadrlar va aktyorlarga tayanib aniqlang!]"
         contents.append(prompt_content)
 
-        resp_text = self._execute_gemini_request(contents, response_json=True, temperature=0.3)
+        resp_text = self._execute_gemini_request(contents, response_json=True, temperature=0.2)
 
         for f_path in frames:
             try:
@@ -229,10 +231,10 @@ class AIService:
             contents.append(types.Part.from_bytes(data=f.read(), mime_type="image/jpeg"))
 
         system_prompt = build_system_prompt(lang=lang)
-        prompt_content = f"{system_prompt}\n\nFoydalanuvchi yuborgan rasm/skrinshot. Qo'shimcha izoh: {caption}"
+        prompt_content = f"{system_prompt}\n\n[Foydalanuvchi yuborgan rasm. Faqat vizual kadrga qarab kinoni aniqlang!]"
         contents.append(prompt_content)
 
-        resp_text = self._execute_gemini_request(contents, response_json=True, temperature=0.3)
+        resp_text = self._execute_gemini_request(contents, response_json=True, temperature=0.2)
         return self._parse_json_response(resp_text)
 
     async def analyze_image(self, image_path: Path, caption: str = "", lang: str = "uz") -> Dict[str, Any]:
@@ -243,11 +245,11 @@ class AIService:
         system_prompt = build_system_prompt(lang=lang)
         prompt_content = (
             f"{system_prompt}\n\n"
-            f"Foydalanuvchi quyidagi matnni yozdi (bu unutilgan film syujeti, kino qahramonlari yoki ko'rishni xohlayotgan kayfiyati bo'lishi mumkin):\n"
+            f"Foydalanuvchi quyidagi matnni yozdi:\n"
             f"\"{text_input}\"\n\n"
-            f"Ushbu tavsifga yoki kayfiyatga eng mukammal mos keluvchi haqiqiy film, serial, anime yoki multfilmni toping va ma'lumotlarini bering."
+            f"Ushbu tavsifga eng mukammal mos keluvchi haqiqiy film yoki serialni toping."
         )
-        resp_text = self._execute_gemini_request([prompt_content], response_json=True, temperature=0.4)
+        resp_text = self._execute_gemini_request([prompt_content], response_json=True, temperature=0.3)
         return self._parse_json_response(resp_text)
 
     async def analyze_plot_text(self, text_input: str, lang: str = "uz") -> Dict[str, Any]:
@@ -297,9 +299,8 @@ Javobni FAQAT quyidagi JSON ro'yxati formatida qaytaring:
     async def get_similar_movies(self, title: str, lang: str = "uz") -> List[Dict[str, Any]]:
         return await asyncio.to_thread(self._sync_get_similar_movies, title, lang)
 
-    # 5. Dual-Engine /random Movie Curator (Groq primary 0.2s -> Gemini fallback)
+    # 5. Dual-Engine /random Movie Curator
     async def get_random_movie(self, genre_or_mood: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
-        # Try Groq (Llama 3.3 70B) first for instant 0.2s response
         try:
             groq_res = await groq_service.get_random_movie(genre_or_mood, exclude_title, lang)
             if groq_res and groq_res.get("title_original"):
@@ -307,7 +308,6 @@ Javobni FAQAT quyidagi JSON ro'yxati formatida qaytaring:
         except Exception as e:
             logger.warning(f"[Groq Fallback Warning] {e}")
 
-        # Fallback to Gemini
         return await asyncio.to_thread(self._sync_get_random_movie_gemini, genre_or_mood, exclude_title, lang)
 
     def _sync_get_random_movie_gemini(self, genre_or_mood: str, exclude_title: str = "", lang: str = "uz") -> Dict[str, Any]:
@@ -340,9 +340,8 @@ Javobni FAQAT JSON formatida qaytaring:
         resp_text = self._execute_gemini_request([prompt], response_json=True, temperature=0.95)
         return self._parse_json_response(resp_text)
 
-    # 6. Dual-Engine Interactive Movie Quiz (Groq primary -> Gemini fallback)
+    # 6. Dual-Engine Interactive Movie Quiz
     async def generate_quiz(self, lang: str = "uz") -> Dict[str, Any]:
-        # Try Groq first for instant 0.2s quiz generation
         try:
             groq_quiz = await groq_service.generate_quiz(lang)
             if groq_quiz and "question" in groq_quiz and "options" in groq_quiz:
@@ -350,7 +349,6 @@ Javobni FAQAT JSON formatida qaytaring:
         except Exception as e:
             logger.warning(f"[Groq Quiz Fallback Warning] {e}")
 
-        # Fallback to Gemini
         return await asyncio.to_thread(self._sync_generate_quiz_gemini, lang)
 
     def _sync_generate_quiz_gemini(self, lang: str = "uz") -> Dict[str, Any]:
