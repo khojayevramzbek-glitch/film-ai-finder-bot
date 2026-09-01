@@ -9,11 +9,11 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-# Telegram Main Bot Token
+# Telegram Main Bot Token (Loaded strictly from .env / Render Environment)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 
-# Telegram Admin Bot Token
-ADMIN_BOT_TOKEN = os.getenv("ADMIN_BOT_TOKEN", "8898606125:AAHi2BMQdes6LhHXgvykQP4XTAzTp5Idov4").strip()
+# Telegram Admin Bot Token (Loaded strictly from .env / Render Environment)
+ADMIN_BOT_TOKEN = os.getenv("ADMIN_BOT_TOKEN", "").strip()
 
 # Admin usernames
 ADMIN_USERNAMES = ["khojayev_ramz"]
