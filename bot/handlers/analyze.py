@@ -233,7 +233,8 @@ async def handle_text(message: Message, bot: Bot):
                 await safe_edit_text(status_msg, get_msg(lang, "status_analyzing"))
                 ai_data = await ai_service.analyze_video(file_path, metadata_text=meta_text, lang=lang)
 
-            if ai_data and ai_data.get("found"):
+            # Only cache full video analysis results, NEVER cache single thumbnail guesses
+            if ai_data and ai_data.get("found") and not is_fallback_img:
                 set_cached_result(cache_key, ai_data)
 
             await process_and_send_result(bot=bot, message=message, ai_data=ai_data, status_msg=status_msg, lang=lang)
