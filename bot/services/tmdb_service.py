@@ -63,9 +63,9 @@ class TMDbService:
         try:
             url = f"https://itunes.apple.com/search?term={urllib.parse.quote(title)}&limit=1"
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=3)) as resp:
+                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=4)) as resp:
                     if resp.status == 200:
-                        data = await resp.json()
+                        data = await resp.json(content_type=None)
                         if data.get("resultCount", 0) > 0:
                             artwork = data["results"][0].get("artworkUrl100", "")
                             if artwork:
@@ -78,9 +78,9 @@ class TMDbService:
             clean_title = title.replace(" ", "_")
             wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(clean_title)}"
             async with aiohttp.ClientSession() as session:
-                async with session.get(wiki_url, headers=headers, timeout=aiohttp.ClientTimeout(total=3)) as resp:
+                async with session.get(wiki_url, headers=headers, timeout=aiohttp.ClientTimeout(total=4)) as resp:
                     if resp.status == 200:
-                        data = await resp.json()
+                        data = await resp.json(content_type=None)
                         img = data.get("originalimage", {}).get("source") or data.get("thumbnail", {}).get("source")
                         if img:
                             return img
