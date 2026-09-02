@@ -28,10 +28,18 @@ async def safe_answer_cb(callback: CallbackQuery, text: str = "", show_alert: bo
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
-    """Handles /start command with language prompt for new users."""
+    """Handles /start command with language prompt for new users and referral processing."""
     user_id = message.from_user.id if message.from_user else 0
     user_name = message.from_user.first_name if message.from_user else "Foydalanuvchi"
     current_lang = get_user_lang(user_id)
+
+    # Process referral invitation
+    parts = message.text.split()
+    if len(parts) > 1 and parts[1].startswith("ref_"):
+        ref_id_str = parts[1].replace("ref_", "").strip()
+        if ref_id_str.isdigit():
+            from bot.services.db import add_referral
+            add_referral(new_user_id=user_id, referrer_id=int(ref_id_str))
 
     if not current_lang:
         # First time user -> Show language selection keyboard
@@ -44,6 +52,13 @@ async def cmd_start(message: Message):
     menu_btns = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text=get_msg(current_lang, "btn_random_more"), callback_data="rand_menu"),
+            InlineKeyboardButton(text="❤️ Saqlanganlar", callback_data="btn_saved")
+        ],
+        [
+            InlineKeyboardButton(text="📂 Tarix (/history)", callback_data="btn_history"),
+            InlineKeyboardButton(text="👥 Taklif Qilish (/invite)", callback_data="btn_invite")
+        ],
+        [
             InlineKeyboardButton(text=get_msg(current_lang, "btn_change_lang"), callback_data="change_lang")
         ]
     ])

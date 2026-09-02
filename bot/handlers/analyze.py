@@ -60,8 +60,8 @@ async def process_and_send_result(
         release_year = str(ai_data.get("release_year") or "")
         tmdb_data = await tmdb_service.search_media(query_title, year=release_year)
 
-        # Log search
-        log_search(user_id, search_type=ai_data.get("media_type", "movie"), query=query_title, found=True)
+        # Log search with movie title for user /history
+        log_search(user_id, search_type=ai_data.get("media_type", "movie"), query=query_title, found=True, found_title=query_title)
 
         # Check if already saved
         saved = is_in_watchlist(user_id, query_title)
@@ -191,6 +191,17 @@ async def handle_text(message: Message, bot: Bot):
 
     if urls:
         url = urls[0]
+        from bot.services.downloader import clean_media_url
+        from bot.services.db import get_cached_result, set_cached_result
+        clean_url = clean_media_url(url)
+        cache_key = f"url:{clean_url}"
+
+        # ⚡️ Semantic Cache Check (~0.05s response)
+        cached_data = get_cached_result(cache_key)
+        if cached_data:
+            await process_and_send_result(bot=bot, message=message, ai_data=cached_data, status_msg=None, lang=lang)
+            return
+
         status_msg = await message.answer(get_msg(lang, "status_downloading"), parse_mode="HTML")
         await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
@@ -202,6 +213,7 @@ async def handle_text(message: Message, bot: Bot):
                 await safe_edit_text(status_msg, get_msg(lang, "status_plot_search"))
                 ai_data = await ai_service.analyze_plot_text(cleaned_prompt, lang=lang)
                 if ai_data and ai_data.get("found"):
+                    set_cached_result(cache_key, ai_data)
                     await process_and_send_result(bot=bot, message=message, ai_data=ai_data, status_msg=status_msg, lang=lang)
                     return
 
@@ -221,6 +233,9 @@ async def handle_text(message: Message, bot: Bot):
                 await safe_edit_text(status_msg, get_msg(lang, "status_analyzing"))
                 ai_data = await ai_service.analyze_video(file_path, metadata_text=meta_text, lang=lang)
 
+            if ai_data and ai_data.get("found"):
+                set_cached_result(cache_key, ai_data)
+
             await process_and_send_result(bot=bot, message=message, ai_data=ai_data, status_msg=status_msg, lang=lang)
         finally:
             safe_remove(file_path)
@@ -232,10 +247,20 @@ async def handle_text(message: Message, bot: Bot):
         return
 
     # 3. Text Plot / Mood Search ("Kino nomini unutdim" or Mood Query)
+    from bot.services.db import get_cached_result, set_cached_result
+    text_cache_key = f"text:{text.strip().lower()}"
+    cached_text = get_cached_result(text_cache_key)
+    if cached_text:
+        await process_and_send_result(bot=bot, message=message, ai_data=cached_text, status_msg=None, lang=lang)
+        return
+
     status_msg = await message.answer(get_msg(lang, "status_plot_search"), parse_mode="HTML")
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
     ai_data = await ai_service.analyze_plot_text(text, lang=lang)
+    if ai_data and ai_data.get("found"):
+        set_cached_result(text_cache_key, ai_data)
+
     await process_and_send_result(
         bot=bot,
         message=message,

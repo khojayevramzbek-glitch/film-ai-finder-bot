@@ -320,5 +320,38 @@ Javobni FAQAT quyidagi toza JSON formatida qaytaring:
     async def chat_with_character(self, character_id: str, user_message: str, chat_history: List[Dict[str, str]] = None, lang: str = "uz") -> str:
         return await asyncio.to_thread(self._sync_chat_with_character, character_id, user_message, chat_history, lang)
 
+    # 5. Ultra-Fast Groq Whisper Turbo Speech Recognition (~0.2s)
+    def _sync_transcribe_audio(self, audio_path: Path) -> str:
+        """Transcribes speech/audio in milliseconds using Groq Whisper Turbo."""
+        if not audio_path.exists() or self.pool.is_empty():
+            return ""
+
+        max_attempts = max(self.pool.total_count, 1)
+        for _ in range(max_attempts):
+            api_key = self.pool.get_key()
+            if not api_key:
+                break
+            try:
+                from groq import Groq
+                client = Groq(api_key=api_key)
+                with open(audio_path, "rb") as file:
+                    transcription = client.audio.transcriptions.create(
+                        file=(audio_path.name, file.read()),
+                        model="whisper-large-v3-turbo",
+                        response_format="text",
+                        temperature=0.0
+                    )
+                if transcription:
+                    self.pool.report_success(api_key)
+                    return str(transcription).strip()
+            except Exception as e:
+                logger.warning(f"[Groq Whisper Warning] {e}")
+                self.pool.report_rate_limit(api_key, cooldown_seconds=20)
+                continue
+        return ""
+
+    async def transcribe_audio(self, audio_path: Path) -> str:
+        return await asyncio.to_thread(self._sync_transcribe_audio, audio_path)
+
 
 groq_service = GroqService()

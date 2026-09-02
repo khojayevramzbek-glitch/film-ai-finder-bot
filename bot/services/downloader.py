@@ -184,5 +184,37 @@ class DownloaderService:
             logger.error(f"[Downloader Error] {url} yuklashda xatolik: {e}")
             return None
 
+    @staticmethod
+    def extract_audio_snippet(video_path: Path, max_duration_sec: int = 30) -> Optional[Path]:
+        """Extracts short audio snippet (MP3) from video for Whisper dialogue transcription."""
+        if not video_path.exists():
+            return None
+
+        ffmpeg_cmd = "ffmpeg"
+        if FFMPEG_DIR and os.path.exists(os.path.join(FFMPEG_DIR, "ffmpeg.exe")):
+            ffmpeg_cmd = os.path.join(FFMPEG_DIR, "ffmpeg.exe")
+
+        out_audio = DOWNLOAD_DIR / f"audio_{uuid.uuid4().hex[:8]}.mp3"
+        try:
+            import subprocess
+            cmd = [
+                ffmpeg_cmd,
+                "-i", str(video_path),
+                "-t", str(max_duration_sec),
+                "-vn",
+                "-acodec", "libmp3lame",
+                "-ar", "16000",
+                "-ac", "1",
+                "-b:a", "64k",
+                str(out_audio),
+                "-y"
+            ]
+            res = subprocess.run(cmd, capture_output=True, timeout=10)
+            if out_audio.exists() and out_audio.stat().st_size > 1000:
+                return out_audio
+        except Exception as e:
+            logger.warning(f"[Audio Snippet Extraction Warning] {e}")
+        return None
+
 
 downloader = DownloaderService()

@@ -208,14 +208,34 @@ class AIService:
         contents = []
 
         from google.genai import types
+        from bot.services.downloader import DownloaderService
+        from bot.services.groq_service import groq_service
 
         if frames:
             for frame_path in frames:
                 with open(frame_path, "rb") as f:
                     contents.append(types.Part.from_bytes(data=f.read(), mime_type="image/jpeg"))
 
+        # Audio dialogue extraction (Whisper Turbo)
+        audio_path = DownloaderService.extract_audio_snippet(video_path, max_duration_sec=30)
+        dialogue_text = ""
+        if audio_path:
+            try:
+                dialogue_text = groq_service._sync_transcribe_audio(audio_path)
+            except Exception as e:
+                logger.warning(f"[Audio Dialogue Error] {e}")
+            finally:
+                if audio_path.exists():
+                    try:
+                        audio_path.unlink()
+                    except Exception:
+                        pass
+
         system_prompt = build_system_prompt(lang=lang)
-        prompt_content = f"{system_prompt}\n\n[ESLATMA: Faqat vizual videodagi kadrlar va aktyorlarga tayanib aniqlang!]"
+        prompt_content = f"{system_prompt}\n\n[ESLATMA: Asosiy e'tiborni videodagi kadrlar va aktyorlarga qarating!]"
+        if dialogue_text:
+            prompt_content += f"\n\n[VIDEODAGI NUTQ / DIALOGLAR (Transkripsiya)]: \"{dialogue_text}\""
+
         contents.append(prompt_content)
 
         resp_text = self._execute_gemini_request(contents, response_json=True, temperature=0.2)

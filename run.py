@@ -17,7 +17,9 @@ if sys.platform == "win32":
         pass
 
 from bot.config import BOT_TOKEN, ADMIN_BOT_TOKEN, validate_config, GEMINI_API_KEYS, GROQ_API_KEYS
-from bot.handlers import start, analyze, watchlist, quiz, actor, character_chat
+from bot.handlers import start, analyze, watchlist, quiz, actor, character_chat, inline_mode, history
+from bot.middlewares.antiflood import AntiFloodMiddleware
+from bot.services.backup import start_cloud_backup_scheduler
 from admin_bot import handlers as admin_handlers
 
 # Setup logging
@@ -39,6 +41,8 @@ async def set_main_bot_commands(bot: Bot):
         BotCommand(command="character", description="🎭 Qahramonlar bilan suhbat"),
         BotCommand(command="actor", description="⭐️ Aktyor / Rejissyor filmlari"),
         BotCommand(command="saved", description="❤️ Saqlanganlar / Watchlist"),
+        BotCommand(command="history", description="📂 Qidiruv tarixi / Search history"),
+        BotCommand(command="invite", description="👥 Do'stlarni taklif qilish / Referral"),
         BotCommand(command="quiz", description="🎮 AI Kino Viktorinasi / Quiz"),
         BotCommand(command="alerts", description="🔔 Premyera eslatmalari"),
         BotCommand(command="lang", description="🌐 Tilni tanlash / Language"),
@@ -108,11 +112,18 @@ async def main():
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
     main_dp = Dispatcher()
+
+    # Rate limiting & Anti-flood protection shield
+    main_dp.message.middleware(AntiFloodMiddleware(max_requests_per_window=5, window_seconds=6.0))
+    main_dp.callback_query.middleware(AntiFloodMiddleware(max_requests_per_window=6, window_seconds=6.0))
+
     main_dp.include_router(start.router)
     main_dp.include_router(character_chat.router)
     main_dp.include_router(actor.router)
     main_dp.include_router(watchlist.router)
     main_dp.include_router(quiz.router)
+    main_dp.include_router(history.router)
+    main_dp.include_router(inline_mode.router)
     main_dp.include_router(analyze.router)
     await set_main_bot_commands(main_bot)
     await main_bot.delete_webhook(drop_pending_updates=True)
@@ -120,7 +131,10 @@ async def main():
     main_me = await main_bot.get_me()
     logger.info(f"✅ Asosiy qidiruv boti ulandi: @{main_me.username} ({main_me.first_name})")
 
-    polling_tasks = [main_dp.start_polling(main_bot)]
+    polling_tasks = [
+        main_dp.start_polling(main_bot),
+        start_cloud_backup_scheduler()
+    ]
 
     # 2. Initialize Dedicated Admin Bot
     admin_bot = None

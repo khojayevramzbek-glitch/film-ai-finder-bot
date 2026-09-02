@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import logging
 from pathlib import Path
@@ -56,8 +57,8 @@ def init_db():
                 cursor.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER NOT NULL DEFAULT 0;")
             if "username" not in columns:
                 cursor.execute("ALTER TABLE users ADD COLUMN username TEXT;")
-            if "first_name" not in columns:
-                cursor.execute("ALTER TABLE users ADD COLUMN first_name TEXT;")
+            if "referrer_id" not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN referrer_id INTEGER;")
 
             # 2. Sponsor channels table
             cursor.execute("""
@@ -105,16 +106,32 @@ def init_db():
                     user_id INTEGER NOT NULL,
                     search_type TEXT NOT NULL,
                     query TEXT,
+                    found_title TEXT,
                     found INTEGER NOT NULL DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
 
-            # 6. Admin settings table (Active AI model, Temperature, Live Alerts, etc.)
+            cursor.execute("PRAGMA table_info(searches);")
+            search_cols = [row["name"] for row in cursor.fetchall()]
+            if "found_title" not in search_cols:
+                cursor.execute("ALTER TABLE searches ADD COLUMN found_title TEXT;")
+
+            # 6. Admin settings table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS admin_settings (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
+                );
+            """)
+
+            # 7. AI Semantic Cache table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS cache_results (
+                    cache_key TEXT PRIMARY KEY,
+                    result_json TEXT NOT NULL,
+                    hits INTEGER NOT NULL DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
 
@@ -429,15 +446,15 @@ def get_user_premiere_alerts(user_id: int) -> List[Dict[str, Any]]:
 
 
 # --- LOGS & STATS ---
-def log_search(user_id: int, search_type: str, query: str = "", found: bool = True):
-    """Logs search request for analytics."""
+def log_search(user_id: int, search_type: str, query: str = "", found: bool = True, found_title: str = ""):
+    """Logs search request for analytics and personal history."""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO searches (user_id, search_type, query, found)
-                VALUES (?, ?, ?, ?);
-            """, (user_id, search_type, str(query)[:200], 1 if found else 0))
+                INSERT INTO searches (user_id, search_type, query, found_title, found)
+                VALUES (?, ?, ?, ?, ?);
+            """, (user_id, search_type, str(query)[:200], str(found_title)[:100], 1 if found else 0))
             conn.commit()
     except Exception as e:
         logger.warning(f"[DB Warning] log_search failed: {e}")
@@ -522,6 +539,118 @@ def get_recent_users(limit: int = 10) -> List[Dict[str, Any]]:
             return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
         logger.error(f"[DB Error] get_recent_users failed: {e}")
+        return []
+
+
+# --- USER SEARCH HISTORY ---
+def get_user_search_history(user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+    """Returns user's successful past movie searches."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT search_type, found_title, query, created_at
+                FROM searches
+                WHERE user_id = ? AND found = 1 AND found_title IS NOT NULL AND found_title != ''
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (user_id, limit))
+            return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"[DB Error] get_user_search_history failed: {e}")
+        return []
+
+
+# --- SEMANTIC CACHE (0.05s ULTRA-FAST REPEAT SEARCHES) ---
+def get_cached_result(cache_key: str) -> Optional[Dict[str, Any]]:
+    """Fetches cached AI analysis result to respond in 0.05s without burning API quota."""
+    if not cache_key:
+        return None
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT result_json, hits FROM cache_results WHERE cache_key = ?", (cache_key,))
+            row = cursor.fetchone()
+            if row:
+                cursor.execute("UPDATE cache_results SET hits = hits + 1 WHERE cache_key = ?", (cache_key,))
+                conn.commit()
+                return json.loads(row["result_json"])
+    except Exception as e:
+        logger.warning(f"[Cache Warning] get_cached_result error: {e}")
+    return None
+
+
+def set_cached_result(cache_key: str, data: Dict[str, Any]):
+    """Stores AI analysis result in semantic cache."""
+    if not cache_key or not data or not data.get("found"):
+        return
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO cache_results (cache_key, result_json)
+                VALUES (?, ?)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    result_json = excluded.result_json,
+                    hits = hits + 1;
+            """, (cache_key, json.dumps(data)))
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"[Cache Warning] set_cached_result error: {e}")
+
+
+# --- REFERRAL & VIRAL GROWTH SYSTEM ---
+def add_referral(new_user_id: int, referrer_id: int) -> bool:
+    """Registers a referral invitation and awards +50 points to the referrer."""
+    if new_user_id == referrer_id:
+        return False
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT referrer_id FROM users WHERE user_id = ?", (new_user_id,))
+            row = cursor.fetchone()
+            if row and row["referrer_id"]:
+                return False  # Already referred
+
+            cursor.execute("UPDATE users SET referrer_id = ? WHERE user_id = ?", (referrer_id, new_user_id))
+            cursor.execute("UPDATE users SET points = points + 50 WHERE user_id = ?", (referrer_id,))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error(f"[DB Error] add_referral failed: {e}")
+        return False
+
+
+def get_user_referral_stats(user_id: int) -> Dict[str, Any]:
+    """Returns total referred count and earned points."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE referrer_id = ?", (user_id,))
+            ref_count = cursor.fetchone()["cnt"]
+            cursor.execute("SELECT points FROM users WHERE user_id = ?", (user_id,))
+            user_row = cursor.fetchone()
+            points = user_row["points"] if user_row else 0
+            return {"referral_count": ref_count, "points": points}
+    except Exception:
+        return {"referral_count": 0, "points": 0}
+
+
+def get_top_referrers(limit: int = 10) -> List[Dict[str, Any]]:
+    """Returns top referral users leaderboard."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT u.user_id, u.username, u.first_name, u.points, COUNT(r.user_id) as invite_count
+                FROM users u
+                JOIN users r ON r.referrer_id = u.user_id
+                GROUP BY u.user_id
+                ORDER BY invite_count DESC, u.points DESC
+                LIMIT ?
+            """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+    except Exception:
         return []
 
 

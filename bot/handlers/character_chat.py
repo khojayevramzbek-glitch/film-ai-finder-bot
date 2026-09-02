@@ -116,6 +116,71 @@ async def handle_character_message(message: Message, state: FSMContext, bot: Bot
     )
 
 
+@router.message(StateFilter(CharacterSessionState.chatting), F.voice)
+async def handle_character_voice(message: Message, state: FSMContext, bot: Bot):
+    """Handles voice note roleplay dialogue using Whisper Turbo transcription."""
+    user_id = message.from_user.id if message.from_user else 0
+    if is_user_banned(user_id):
+        return
+
+    lang = get_user_lang(user_id) or "uz"
+    data = await state.get_data()
+    char_id = data.get("character_id", "joker")
+    history = data.get("history", [])
+    char_info = get_character_info(char_id)
+
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+
+    from bot.config import DOWNLOAD_DIR
+    import uuid
+    voice_path = DOWNLOAD_DIR / f"voice_{uuid.uuid4().hex[:8]}.ogg"
+
+    try:
+        await bot.download(message.voice, destination=voice_path)
+        transcribed_text = await groq_service.transcribe_audio(voice_path)
+    except Exception as e:
+        logger.warning(f"[Voice Download Error] {e}")
+        transcribed_text = ""
+    finally:
+        if voice_path.exists():
+            try:
+                voice_path.unlink()
+            except Exception:
+                pass
+
+    if not transcribed_text:
+        await message.answer(
+            f"🎙 <b>{char_info['name']}:</b> <i>Ovozingizni yaxshi tushuna olmadim, iltimos, qayta yuboring yoki yozing.</i>",
+            reply_markup=get_character_chat_keyboard(lang),
+            parse_mode="HTML"
+        )
+        return
+
+    # Generate reply
+    reply_text = await groq_service.chat_with_character(
+        character_id=char_id,
+        user_message=transcribed_text,
+        chat_history=history,
+        lang=lang
+    )
+
+    history.append({"role": "user", "content": transcribed_text})
+    history.append({"role": "assistant", "content": reply_text})
+    await state.update_data(history=history[-8:])
+
+    formatted_reply = (
+        f"🎙 <i>(Ovozingiz eshitildi: \"{html.escape(transcribed_text)}\")</i>\n\n"
+        f"<b>{char_info['emoji']} {char_info['name']}:</b>\n\n"
+        f"{html.escape(reply_text)}"
+    )
+
+    await message.answer(
+        formatted_reply,
+        reply_markup=get_character_chat_keyboard(lang),
+        parse_mode="HTML"
+    )
+
+
 @router.callback_query(F.data == "char_change")
 async def cb_change_character(callback: CallbackQuery, state: FSMContext):
     """Reopens character selection grid."""
