@@ -57,6 +57,10 @@ def init_db():
                 cursor.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER NOT NULL DEFAULT 0;")
             if "username" not in columns:
                 cursor.execute("ALTER TABLE users ADD COLUMN username TEXT;")
+            if "first_name" not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN first_name TEXT;")
+            if "updated_at" not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN updated_at TIMESTAMP;")
             if "referrer_id" not in columns:
                 cursor.execute("ALTER TABLE users ADD COLUMN referrer_id INTEGER;")
 
@@ -142,16 +146,18 @@ def init_db():
 
 # --- USER FUNCTIONS ---
 def get_user_lang(user_id: int) -> Optional[str]:
-    """Fetches user preferred language code."""
+    """Fetches user preferred language code (returns None if user not registered yet)."""
     if not user_id:
-        return "uz"
+        return None
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT language_code FROM users WHERE user_id = ?", (user_id,))
+            cursor.execute("SELECT language_code, language FROM users WHERE user_id = ?", (user_id,))
             row = cursor.fetchone()
-            if row and row["language_code"]:
-                return row["language_code"]
+            if row:
+                lang = row["language_code"] or row["language"]
+                if lang:
+                    return str(lang)
     except Exception as e:
         logger.error(f"[DB Error] get_user_lang failed: {e}")
     return None
@@ -165,14 +171,15 @@ def set_user_lang(user_id: int, lang_code: str, username: str = "", first_name: 
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO users (user_id, language_code, username, first_name, updated_at)
-                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO users (user_id, language, language_code, username, first_name, updated_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(user_id) DO UPDATE SET
+                    language = excluded.language,
                     language_code = excluded.language_code,
                     username = COALESCE(NULLIF(excluded.username, ''), users.username),
                     first_name = COALESCE(NULLIF(excluded.first_name, ''), users.first_name),
                     updated_at = CURRENT_TIMESTAMP;
-            """, (user_id, lang_code, (username or "").lstrip("@"), first_name or ""))
+            """, (user_id, lang_code, lang_code, (username or "").lstrip("@"), first_name or ""))
             conn.commit()
     except Exception as e:
         logger.error(f"[DB Error] set_user_lang failed: {e}")
