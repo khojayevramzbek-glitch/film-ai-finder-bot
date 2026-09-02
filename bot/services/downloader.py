@@ -126,6 +126,13 @@ class DownloaderService:
         if PROXY_URL:
             ydl_opts['proxy'] = PROXY_URL
 
+        # Enable Chrome TLS impersonation to bypass datacenter IP restrictions (e.g. Render, AWS)
+        try:
+            from yt_dlp.networking.impersonate import ImpersonateTarget
+            ydl_opts['impersonate'] = ImpersonateTarget.from_str('chrome')
+        except Exception:
+            pass
+
         # 1. Try yt-dlp direct download
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:

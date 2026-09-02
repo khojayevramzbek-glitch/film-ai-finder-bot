@@ -45,18 +45,27 @@ def build_system_prompt(lang: str = "uz") -> str:
     target_rule = lang_rules.get(lang, lang_rules["uz"])
 
     return f"""
-Siz kino, serial, multfilm, anime va premyeralarni aniqlovchi professional sun'iy intellekt ekspertisiz.
+Siz dunyodagi eng tajribali va o'tkir ko'zli kino-ekspert sun'iy intellektisiz (Netflix, IMDb, Kinopoisk darajasida).
 
-Sizga videodan olingan kadrlar (yoki rasm/skrinshot yoki matn) beriladi.
-Vazifangiz: Berilgan kadrlardan foydalanib, bu qaysi haqiqiy kino, serial, multfilm yoki jangari film ekanligini ANIQ aniqlash.
+Sizga videodan olingan kadrlar (yoki rasm/skrinshot yoki matn) hamda videodagi ovoz transkripsiyasi beriladi.
+Vazifangiz: Berilgan kadrlardan foydalanib, bu qaysi haqiqiy kino, serial, multfilm yoki jangari film ekanligini 100% ANIQ aniqlash.
 
-O'TA MUHIM QOIDALAR:
-1. ⚠️ DIQQAT: Instagram Reels, TikTok va YouTube Shorts mualliflari ko'pincha videoga mutlaqo aloqasi bo'lmagan soxta xeshteglar (masalan: #anime, #onepiece, #fyp, trend musiqalar nomini) yozib qo'yishadi.
-2. 👁 FAQAT VIZUAL KADRLARGA ISHONING! Agar kadrlarda haqiqiy aktyorlar jangi (masalan: ringdagi jang, Yuri Boyka / Undisputed, Marvel, Jon Uik yoki Gollivud filmlari) ko'rinib tursa, muallif tagiga har qancha anime yoki boshqa so'z yozgan bo'lsa ham, MATNGA ALDANMANG! Kadrdagi haqiqiy film/aktyorni aniqlang!
-3. Agar bu kino/serial hali chiqmagan bo'lsa, "is_premiere": true deb belgilang.
-4. Haqiqiy filmning asl nomini (title_original) bering.
-5. Media turini to'g'ri belgilang: "movie", "series", "cartoon", "anime", "trailer".
-6. {target_rule}
+CHUQQUR KINEMATOGRAFIK TAHLIL VA TEKSHIRUV PROTOKOLI (Chain of Thought):
+1. 🔍 AKTYORLAR YUZINI SKANER QILISH:
+   - Kadrlarda ko'ringan aktyorlarni darhol yuzidan tanib oling: masalan Mark Ruffalo (Bruce Banner / Hulk), Robert Downey Jr. (Iron Man), Chris Evans (Captain America), Scarlett Johansson, Ben Affleck, Henry Cavill, Keanu Reeves, Scott Adkins va boshqalar.
+2. ⚡️ KINOKOINOTLARNI ASLO ADASHTIRMANG (Marvel vs DC Comics):
+   - Marvel (Qasoskorlar, Xalk, Temir Odam, Tor) bilan DC Comics (Adolat Ligasi, Betmen, Supermen, Zek Snayder) olamini aslo aralashtirmang!
+   - Masalan: Agar kadrda Mark Ruffalo (Bruce Banner), vayron bo'lgan Nyu-York, Xalk va Chitauri bo'lsa — bu 100% "The Avengers" (2012 / Qasoskorlar)! Hech qachon "Zack Snyder's Justice League" deb adashmang!
+3. 🎙 OVOZ VA DIALOG ISBOTI:
+   - Videodagi audio dialog transkripsiyasidagi mashhur iboralar ("That's my secret, Captain", "I am Iron Man", "I'm always angry") filmni 100% isbotlash uchun eng kuchli dalildir.
+4. 👁 VIZUAL KADRLAR USTUVORLIGI:
+   - Instagram/TikTok mualliflari yozgan soxta sarlavha yoki xeshteglarga (#anime, #onepiece, trend nomlar) aslo aldanmang! Faqat ko'z bilan ko'rib turgan kadrlarga ishoning.
+5. ⚠️ AGAR BIR DONA NOANIQ KADR BO'LSA:
+   - Agar video yuklanmay faqat 1 ta noaniq kadr (chang-tozon, qorong'ulik) bo'lsa, aslo o'zingizdan to'qimang.
+6. Agar bu kino/serial hali chiqmagan bo'lsa, "is_premiere": true deb belgilang.
+7. Haqiqiy filmning asl nomini (title_original) bering.
+8. Media turini to'g'ri belgilang: "movie", "series", "cartoon", "anime", "trailer".
+9. {target_rule}
 
 Javobni FAQAT quyidagi toza JSON formatida qaytaring:
 ```json
@@ -98,8 +107,8 @@ class AIService:
         self.pool = gemini_key_pool
         self.model_name = GEMINI_MODEL
 
-    def _extract_keyframes(self, video_path: Path, num_frames: int = 6) -> List[Path]:
-        """Extracts keyframes from video in milliseconds using FFmpeg."""
+    def _extract_keyframes(self, video_path: Path, num_frames: int = 8) -> List[Path]:
+        """Extracts keyframes distributed across the video in milliseconds using FFmpeg."""
         if not FFMPEG_EXE or not os.path.exists(FFMPEG_EXE):
             return []
 
@@ -107,17 +116,31 @@ class AIService:
         out_pattern = f"{frame_prefix}_%02d.jpg"
 
         try:
+            # 1 frame every 2 seconds (covers up to 20-30s reel)
             cmd = [
                 FFMPEG_EXE,
                 "-i", str(video_path),
-                "-vf", "fps=1,scale=720:-1",
+                "-vf", "fps=0.5,scale=720:-1",
                 "-vframes", str(num_frames),
-                "-q:v", "3",
+                "-q:v", "2",
                 out_pattern,
                 "-y"
             ]
-            subprocess.run(cmd, capture_output=True, timeout=6)
+            subprocess.run(cmd, capture_output=True, timeout=8)
             created_frames = sorted(Path(p) for p in glob.glob(f"{frame_prefix}_*.jpg"))
+            if not created_frames:
+                # Fallback to fast 1-fps
+                cmd_fb = [
+                    FFMPEG_EXE,
+                    "-i", str(video_path),
+                    "-vf", "fps=1,scale=720:-1",
+                    "-vframes", str(num_frames),
+                    "-q:v", "3",
+                    out_pattern,
+                    "-y"
+                ]
+                subprocess.run(cmd_fb, capture_output=True, timeout=6)
+                created_frames = sorted(Path(p) for p in glob.glob(f"{frame_prefix}_*.jpg"))
             return created_frames
         except Exception as e:
             logger.warning(f"[Frame Extraction Warning] Kadrlar ajratib olinmadi: {e}")
