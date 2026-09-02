@@ -141,19 +141,27 @@ def format_movie_response(ai_data: Dict[str, Any], tmdb_data: Optional[Dict[str,
     if director:
         lines.append(f"🎬 <b>Rejissyor:</b> {esc(director)}")
 
+    def clean_truncate(text: str, limit: int) -> str:
+        text = text.strip()
+        if len(text) <= limit:
+            return text
+        cut = text[:limit]
+        last_space = cut.rfind(" ")
+        if last_space > limit // 2:
+            return cut[:last_space].rstrip(".,:;") + "..."
+        return cut + "..."
+
     # 2. Identified Scene Highlight
     if scene_desc:
         lines.append("")
         lines.append("🔍 <b>ANIQLANGAN SAHNA (Aynan siz yuborgan kadr):</b>")
-        lines.append(f"<i>«{esc(scene_desc[:220])}»</i>")
+        lines.append(f"<i>«{esc(clean_truncate(scene_desc, 280))}»</i>")
 
     # 3. Engaging Plot Summary
     if summary:
         lines.append("")
         lines.append("📖 <b>QISQACHA MAZMUNI:</b>")
-        max_summary = 280
-        short_summary = summary[:max_summary] + "..." if len(summary) > max_summary else summary
-        lines.append(esc(short_summary))
+        lines.append(esc(clean_truncate(summary, 320)))
 
     # 4. Authority Footer
     lines.append("")
