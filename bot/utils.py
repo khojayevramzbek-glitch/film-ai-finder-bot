@@ -151,24 +151,22 @@ def format_movie_response(ai_data: Dict[str, Any], tmdb_data: Optional[Dict[str,
             return cut[:last_space].rstrip(".,:;") + "..."
         return cut + "..."
 
-    # 2. Identified Scene Highlight
+    # 2. Identified Scene Highlight (safe 160 char limit)
     if scene_desc:
         lines.append("")
         lines.append("🔍 <b>ANIQLANGAN SAHNA (Aynan siz yuborgan kadr):</b>")
-        lines.append(f"<i>«{esc(clean_truncate(scene_desc, 280))}»</i>")
+        lines.append(f"<i>«{esc(clean_truncate(scene_desc, 180))}»</i>")
 
-    # 3. Engaging Plot Summary
+    # 3. Engaging Plot Summary (safe 200 char limit)
     if summary:
         lines.append("")
         lines.append("📖 <b>QISQACHA MAZMUNI:</b>")
-        lines.append(esc(clean_truncate(summary, 320)))
+        lines.append(esc(clean_truncate(summary, 200)))
 
     # 4. Authority Footer
     lines.append("")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append("🤖 <i>@FilmAiFinderbot orqali 99.9% aniqlikda topildi</i>")
 
-    full_text = "\n".join(lines)
-    if len(full_text) > max_len:
-        return full_text[:max_len - 15] + "..."
-    return full_text
+    # Safe guaranteed HTML without breaking tags
+    return "\n".join(lines)

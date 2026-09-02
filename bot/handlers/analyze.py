@@ -72,25 +72,35 @@ async def process_and_send_result(
 
         poster_url = tmdb_data.get("poster_url") if tmdb_data else None
 
+        photo_sent = False
         if poster_url:
             try:
-                if status_msg:
-                    await status_msg.delete()
                 await message.answer_photo(
                     photo=poster_url,
                     caption=formatted_caption,
                     reply_markup=reply_markup,
                     parse_mode="HTML"
                 )
+                photo_sent = True
+                if status_msg:
+                    try:
+                        await status_msg.delete()
+                    except Exception:
+                        pass
                 return
             except Exception as e:
                 logger.warning(f"[Photo Send Warning] Poster yuborishda xatolik: {e}")
 
-        # If no poster or send failed, send text message
-        if status_msg:
-            await safe_edit_text(status_msg, formatted_caption, reply_markup=reply_markup)
-        else:
-            await message.answer(formatted_caption, reply_markup=reply_markup, parse_mode="HTML")
+        # If photo wasn't sent or failed, reliably edit status message or answer directly
+        if not photo_sent:
+            try:
+                if status_msg:
+                    await status_msg.edit_text(formatted_caption, reply_markup=reply_markup, parse_mode="HTML")
+                else:
+                    await message.answer(formatted_caption, reply_markup=reply_markup, parse_mode="HTML")
+            except Exception as edit_err:
+                logger.warning(f"[Edit Fallback Error] {edit_err}")
+                await message.answer(formatted_caption, reply_markup=reply_markup, parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"[Process Error] Xatolik: {e}")
