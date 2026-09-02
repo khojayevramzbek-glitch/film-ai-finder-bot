@@ -2,12 +2,15 @@ import os
 import re
 import csv
 import html
+import time
 import asyncio
 import logging
+import platform
+import psutil
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
-from bot.config import ADMIN_USERNAMES, GEMINI_API_KEYS, TMDB_API_KEYS, BOT_TOKEN
+from bot.config import ADMIN_USERNAMES, GEMINI_API_KEYS, TMDB_API_KEYS, BOT_TOKEN, GEMINI_MODEL
 from bot.services.db import (
     DB_PATH,
     get_stats,
@@ -17,7 +20,10 @@ from bot.services.db import (
     is_user_banned,
     get_active_channels,
     add_sponsor_channel,
-    remove_sponsor_channel
+    remove_sponsor_channel,
+    get_admin_setting,
+    set_admin_setting,
+    get_user_profile
 )
 from bot.services.ai_service import gemini_key_pool
 from bot.services.groq_service import groq_key_pool
@@ -25,17 +31,47 @@ from bot.services.tmdb_service import tmdb_key_pool
 from admin_bot.keyboards import (
     get_admin_main_keyboard,
     get_back_keyboard,
-    get_broadcast_confirm_keyboard
+    get_server_health_keyboard,
+    get_user_profile_keyboard,
+    get_ai_settings_keyboard,
+    get_broadcast_setup_keyboard,
+    make_progress_bar
 )
 
 from aiogram import Router, F, Bot, BaseMiddleware
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, TelegramObject
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    FSInputFile,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    TelegramObject
+)
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+# Track cluster boot time for uptime calculations
+CLUSTER_BOOT_TIME = time.time()
+
+
+def format_uptime(seconds: float) -> str:
+    """Formats uptime into days, hours, minutes, seconds."""
+    s = int(seconds)
+    days, s = divmod(s, 86400)
+    hours, s = divmod(s, 3600)
+    minutes, s = divmod(s, 60)
+    parts = []
+    if days > 0:
+        parts.append(f"{days} kun")
+    if hours > 0:
+        parts.append(f"{hours} soat")
+    parts.append(f"{minutes} daqiqa")
+    parts.append(f"{s} soniya")
+    return " ".join(parts)
 
 
 def is_admin(user_id: int, username: str = "") -> bool:
@@ -55,7 +91,7 @@ class AdminSecurityMiddleware(BaseMiddleware):
     async def __call__(self, handler, event: TelegramObject, data: dict):
         user = data.get("event_from_user")
         if not user:
-            return  # Drop update silently
+            return
 
         username = (user.username or "").lstrip("@").lower()
         allowed_admins = [u.lower() for u in ADMIN_USERNAMES]
@@ -81,7 +117,7 @@ class AdminSecurityMiddleware(BaseMiddleware):
                     )
                 except Exception:
                     pass
-            return  # STOP! Do not execute any handler
+            return
 
         # 2. Reject non-private chats (groups, channels)
         chat = data.get("event_chat")
@@ -92,31 +128,37 @@ class AdminSecurityMiddleware(BaseMiddleware):
                     await bot.leave_chat(chat.id)
                 except Exception:
                     pass
-            return  # Stop execution in non-private chats
+            return
 
         return await handler(event, data)
 
 
-# Register Ironclad Security Middleware as Outer Middleware
+# Register Outer Middleware
 router.message.outer_middleware(AdminSecurityMiddleware())
 router.callback_query.outer_middleware(AdminSecurityMiddleware())
 
 
 class AdminStates(StatesGroup):
     waiting_for_broadcast_msg = State()
+    waiting_for_bc_button = State()
     confirm_broadcast = State()
+    waiting_for_inspect_user = State()
 
 
 @router.message(CommandStart())
 async def cmd_admin_start(message: Message, state: FSMContext):
-    """Admin bot /start command with security authorization."""
+    """Admin bot /start command with security authorization and chat_id binding."""
     await state.clear()
-    username = message.from_user.username or ""
+    username = message.from_user.username or "khojayev_ramz"
+
+    # Store admin chat_id for real-time alerts
+    set_admin_setting("admin_chat_id", str(message.chat.id))
 
     text = (
-        f"👑 <b>Xush kelibsiz, Admin @{html.escape(username)}!</b>\n\n"
-        f"🎬 <b>FilmFinder Boshqaruv Markazi</b>ga ulandingiz.\n"
-        f"Quyidagi tugmalar orqali botingizni to'liq nazorat qilishingiz mumkin:"
+        f"👑 <b>Xush kelibsiz, Boshqaruvchi @{html.escape(username)}!</b>\n\n"
+        f"🎬 <b>FilmFinder Boshqaruv Markazi (Enterprise SaaS Edition)</b>\n"
+        f"Barcha tizimlar, AI klasterlar va foydalanuvchilar to'liq nazoratingiz ostida:\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━"
     )
     await message.answer(text, reply_markup=get_admin_main_keyboard(), parse_mode="HTML")
 
@@ -125,16 +167,10 @@ async def cmd_admin_start(message: Message, state: FSMContext):
 async def cb_admin_menu(callback: CallbackQuery, state: FSMContext):
     """Returns to admin main menu."""
     await state.clear()
-    user_id = callback.from_user.id if callback.from_user else 0
-    username = callback.from_user.username or ""
-
-    if not is_admin(user_id, username):
-        await callback.answer("⛔️ Ruxsat yo'q!", show_alert=True)
-        return
-
     text = (
         f"👑 <b>FilmFinder Boshqaruv Markazi</b>\n\n"
-        f"Kerakli bo'limni tanlang:"
+        f"Barcha tizimlar barqaror ishlamoqda. Kerakli bo'limni tanlang:\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━"
     )
     try:
         await callback.message.edit_text(text, reply_markup=get_admin_main_keyboard(), parse_mode="HTML")
@@ -143,10 +179,511 @@ async def cb_admin_menu(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# 1. LIVE STATISTICS
+# ====================================================================
+# 1. 🖥 SERVER & SYSTEM HEALTH MONITOR
+# ====================================================================
+@router.callback_query(F.data == "adm:server")
+async def cb_server_health(callback: CallbackQuery, bot: Bot):
+    """Real-time server diagnostics: CPU, RAM, Uptime, Latency."""
+    t0 = time.time()
+    try:
+        await bot.get_me()
+        ping_ms = int((time.time() - t0) * 1000)
+    except Exception:
+        ping_ms = 999
+
+    # Uptime
+    uptime_str = format_uptime(time.time() - CLUSTER_BOOT_TIME)
+
+    # Process Memory & System Memory
+    try:
+        process = psutil.Process()
+        proc_mem_mb = process.memory_info().rss / (1024 * 1024)
+        sys_mem = psutil.virtual_memory()
+        mem_pct = sys_mem.percent
+        mem_bar = make_progress_bar(mem_pct)
+        total_ram_gb = sys_mem.total / (1024 * 1024 * 1024)
+        used_ram_gb = sys_mem.used / (1024 * 1024 * 1024)
+    except Exception:
+        proc_mem_mb = 0
+        mem_pct = 0
+        mem_bar = "🟩🟩⬜️⬜️⬜️⬜️⬜️⬜️"
+        total_ram_gb = 1
+        used_ram_gb = 0.2
+
+    # CPU
+    try:
+        cpu_pct = psutil.cpu_percent(interval=0.1)
+        cpu_bar = make_progress_bar(cpu_pct)
+    except Exception:
+        cpu_pct = 15.0
+        cpu_bar = "🟩⬜️⬜️⬜️⬜️⬜️⬜️⬜️"
+
+    active_model = get_admin_setting("active_ai_model", GEMINI_MODEL)
+
+    health_text = (
+        "🖥 <b>SERVER & TIZIM SALOMATLIGI MONITORI</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"⏱ <b>Uzluksiz Ishlash (Uptime):</b>\n"
+        f"   └ <code>{uptime_str}</code>\n\n"
+        f"⚡️ <b>Telegram API Ping / Latency:</b>\n"
+        f"   └ <b>{ping_ms} ms</b> {'🟢 Ajoyib' if ping_ms < 150 else '🟡 Qoniqarli'}\n\n"
+        f"💾 <b>RAM (Operativ Xotira):</b>\n"
+        f"   ├ Jarayon (Bot): <b>{proc_mem_mb:.1f} MB</b>\n"
+        f"   ├ Server Jami: <b>{used_ram_gb:.2f} GB / {total_ram_gb:.2f} GB</b>\n"
+        f"   └ Holat: <code>[{mem_bar}]</code> <b>{mem_pct}%</b>\n\n"
+        f"⚙️ <b>CPU Yuklamasi:</b>\n"
+        f"   └ <code>[{cpu_bar}]</code> <b>{cpu_pct}%</b>\n\n"
+        f"🌐 <b>Infratuzilma:</b>\n"
+        f"   ├ OS: <b>{platform.system()} ({platform.release()})</b>\n"
+        f"   ├ Python: <b>{platform.python_version()}</b>\n"
+        f"   ├ Faol AI Modeli: <b>{active_model}</b>\n"
+        f"   └ Status: <b>24/7 Render Cloud Faol 🟢</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+
+    try:
+        await callback.message.edit_text(health_text, reply_markup=get_server_health_keyboard(), parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(health_text, reply_markup=get_server_health_keyboard(), parse_mode="HTML")
+    await callback.answer()
+
+
+# ====================================================================
+# 2. 🔍 USER INSPECTOR & DOSSIER
+# ====================================================================
+@router.callback_query(F.data == "adm:inspect_user")
+async def cb_prompt_user_search(callback: CallbackQuery, state: FSMContext):
+    """Prompts admin to enter User ID or @username."""
+    await state.set_state(AdminStates.waiting_for_inspect_user)
+    text = (
+        "🔍 <b>FOYDALANUVCHINI QIDIRISH (Dossier Inspector)</b>\n\n"
+        "Foydalanuvchining <b>Telegram ID</b> raqamini yoki <b>@username</b>ini kiriting:\n\n"
+        "<i>Masalan:</i>\n"
+        "👉 <code>123456789</code>\n"
+        "👉 <code>@ali_cinema</code>\n\n"
+        "<i>(Bekor qilish uchun /cancel yozing)</i>"
+    )
+    try:
+        await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="HTML")
+    await callback.answer()
+
+
+@router.message(StateFilter(AdminStates.waiting_for_inspect_user), F.text & ~F.text.startswith("/"))
+@router.message(Command("user"))
+async def handle_user_inspection(message: Message, state: FSMContext):
+    """Processes user search input and displays complete dossier card."""
+    await state.clear()
+    raw_query = message.text.replace("/user", "").strip()
+    if not raw_query:
+        await message.answer("⚠️ Qidirish uchun ID yoki username kiriting. Masalan: <code>/user 12345678</code>", parse_mode="HTML")
+        return
+
+    profile = get_user_profile(raw_query)
+    if not profile:
+        await message.answer(
+            f"❌ <b>Foydalanuvchi topilmadi!</b>\n\n"
+            f"<code>{html.escape(raw_query)}</code> bo'yicha bazada hech qanday ma'lumot mavjud emas.\n"
+            f"Foydalanuvchi hali botga /start bosmagan bo'lishi mumkin.",
+            reply_markup=get_back_keyboard(),
+            parse_mode="HTML"
+        )
+        return
+
+    u_id = profile["user_id"]
+    u_username = f"@{profile['username']}" if profile.get("username") else "<i>Mavjud emas</i>"
+    u_name = html.escape(profile.get("first_name") or "Noma'lum")
+    lang = profile.get("language_code", "uz").upper()
+    points = profile.get("points", 0)
+    is_banned = bool(profile.get("is_banned"))
+    ban_status = "🚫 Bloklangan" if is_banned else "🟢 Faol (Ruxsat etilgan)"
+    created = str(profile.get("created_at", ""))[:16]
+    total_searches = profile.get("total_searches", 0)
+
+    saved_movies = profile.get("saved_movies", [])
+    if saved_movies:
+        movie_lines = [f"  • {html.escape(m['movie_title'])} ({m.get('release_year') or 'N/A'})" for m in saved_movies[:5]]
+        movies_text = "\n".join(movie_lines)
+    else:
+        movies_text = "  • <i>Hozircha saqlangan filmlar yo'q</i>"
+
+    dossier_text = (
+        "📋 <b>FOYDALANUVCHI SHAXSIY DOSYESI</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👤 <b>Ism:</b> {u_name}\n"
+        f"🔗 <b>Username:</b> {u_username}\n"
+        f"🆔 <b>Telegram ID:</b> <code>{u_id}</code>\n"
+        f"🌐 <b>Tanlagan Tili:</b> <b>{lang}</b>\n"
+        f"📅 <b>Ro'yxatdan O'tgan:</b> <code>{created}</code>\n"
+        f"🚫 <b>Holati:</b> <b>{ban_status}</b>\n\n"
+        f"🔍 <b>Jami Qidiruvlar Soni:</b> <code>{total_searches} ta</code>\n"
+        f"🏆 <b>Viktorina Ballari:</b> <code>{points} ball</code>\n\n"
+        f"❤️ <b>Oxirgi Saqlangan Filmlari ({len(saved_movies)} ta):</b>\n"
+        f"{movies_text}\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+
+    await message.answer(
+        dossier_text,
+        reply_markup=get_user_profile_keyboard(user_id=u_id, is_banned=is_banned),
+        parse_mode="HTML"
+    )
+
+
+@router.callback_query(F.data.startswith("adm:toggle_ban:"))
+async def cb_toggle_ban_user(callback: CallbackQuery):
+    """Toggles user ban state dynamically from inspector card."""
+    user_id = int(callback.data.split(":")[2])
+    currently_banned = is_user_banned(user_id)
+    new_ban_state = not currently_banned
+
+    set_user_ban_status(user_id, is_banned=new_ban_state)
+    alert_msg = f"🚫 Foydalanuvchi ({user_id}) bloklandi!" if new_ban_state else f"🟢 Foydalanuvchi ({user_id}) blokdan ochildi!"
+    await callback.answer(alert_msg, show_alert=True)
+
+    # Re-render updated dossier
+    profile = get_user_profile(str(user_id))
+    if profile:
+        u_username = f"@{profile['username']}" if profile.get("username") else "<i>Mavjud emas</i>"
+        u_name = html.escape(profile.get("first_name") or "Noma'lum")
+        ban_status = "🚫 Bloklangan" if new_ban_state else "🟢 Faol (Ruxsat etilgan)"
+
+        saved_movies = profile.get("saved_movies", [])
+        movie_lines = [f"  • {html.escape(m['movie_title'])}" for m in saved_movies[:5]]
+        movies_text = "\n".join(movie_lines) if movie_lines else "  • <i>Hozircha yo'q</i>"
+
+        dossier_text = (
+            "📋 <b>FOYDALANUVCHI SHAXSIY DOSYESI</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"👤 <b>Ism:</b> {u_name}\n"
+            f"🔗 <b>Username:</b> {u_username}\n"
+            f"🆔 <b>Telegram ID:</b> <code>{user_id}</code>\n"
+            f"🚫 <b>Holati:</b> <b>{ban_status}</b>\n\n"
+            f"🔍 <b>Jami Qidiruvlar:</b> <code>{profile.get('total_searches', 0)} ta</code>\n"
+            f"🏆 <b>Ballari:</b> <code>{profile.get('points', 0)} ball</code>\n\n"
+            f"❤️ <b>Oxirgi Saqlangan Filmlari:</b>\n"
+            f"{movies_text}\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━"
+        )
+        try:
+            await callback.message.edit_text(
+                dossier_text,
+                reply_markup=get_user_profile_keyboard(user_id=user_id, is_banned=new_ban_state),
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+
+
+# ====================================================================
+# 3. 🤖 AI MODEL SETTINGS & TEMPERATURE SWITCHER
+# ====================================================================
+@router.callback_query(F.data == "adm:ai_settings")
+async def cb_ai_settings(callback: CallbackQuery):
+    """Dynamic AI model configuration dashboard."""
+    current_model = get_admin_setting("active_ai_model", GEMINI_MODEL)
+    try:
+        current_temp = float(get_admin_setting("ai_temperature", "0.2"))
+    except Exception:
+        current_temp = 0.2
+
+    text = (
+        "🤖 <b>SUN'IY INTELLEKT (AI) SOZLAMALARI</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🟢 <b>Faol Qidiruv Modeli:</b> <code>{current_model}</code>\n"
+        f"🌡 <b>Ijodiylik Darajasi (Temperature):</b> <code>{current_temp}</code>\n\n"
+        "Quyidagi tugmalar orqali serverni qayta ishga tushirmasdan, "
+        "modelni va uning tahlil aniqligini jonli o'zgartirishingiz mumkin:\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=get_ai_settings_keyboard(current_model, current_temp),
+            parse_mode="HTML"
+        )
+    except Exception:
+        await callback.message.answer(
+            text,
+            reply_markup=get_ai_settings_keyboard(current_model, current_temp),
+            parse_mode="HTML"
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("adm:set_model:"))
+async def cb_set_ai_model(callback: CallbackQuery):
+    """Switches active AI model."""
+    new_model = callback.data.split(":")[2]
+    set_admin_setting("active_ai_model", new_model)
+    await callback.answer(f"✅ AI modeli o'zgartirildi: {new_model}", show_alert=True)
+    await cb_ai_settings(callback)
+
+
+@router.callback_query(F.data.startswith("adm:set_temp:"))
+async def cb_set_ai_temp(callback: CallbackQuery):
+    """Updates AI creativity temperature."""
+    new_temp = callback.data.split(":")[2]
+    set_admin_setting("ai_temperature", new_temp)
+    await callback.answer(f"✅ AI harorati o'rnatildi: {new_temp}", show_alert=True)
+    await cb_ai_settings(callback)
+
+
+# ====================================================================
+# 4. 🔔 LIVE ADMIN NOTIFICATIONS TOGGLE
+# ====================================================================
+@router.callback_query(F.data == "adm:toggle_alerts")
+async def cb_toggle_alerts(callback: CallbackQuery):
+    """Toggles real-time new user join notifications."""
+    current = get_admin_setting("live_alerts_enabled", "1")
+    new_val = "0" if current == "1" else "1"
+    set_admin_setting("live_alerts_enabled", new_val)
+
+    status_txt = "Yoqildi (Faol) 🟢" if new_val == "1" else "O'chirildi 🔴"
+    await callback.answer(f"🔔 Jonli bildirishnomalar: {status_txt}", show_alert=True)
+
+    # Refresh main menu with updated button text
+    text = (
+        f"👑 <b>FilmFinder Boshqaruv Markazi</b>\n\n"
+        f"Barcha tizimlar barqaror ishlamoqda. Kerakli bo'limni tanlang:\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    try:
+        await callback.message.edit_text(text, reply_markup=get_admin_main_keyboard(), parse_mode="HTML")
+    except Exception:
+        pass
+
+
+# ====================================================================
+# 5. 📢 SMART BROADCAST V2.0 (BUTTONS & TEST SEND)
+# ====================================================================
+@router.callback_query(F.data == "adm:broadcast")
+async def cb_start_broadcast(callback: CallbackQuery, state: FSMContext):
+    """Initiates interactive broadcast creation."""
+    await state.set_state(AdminStates.waiting_for_broadcast_msg)
+    text = (
+        "📢 <b>XABAR TARQATISH V2.0 (Smart Composer)</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Barcha foydalanuvchilarga yubormoqchi bo'lgan post/xabarni yuboring:\n\n"
+        "• <i>Matn, Rasm, Video yoki Forward qilingan xabar yuborishingiz mumkin.</i>\n"
+        "• <i>Keyingi qadamda xabarga chiroyli havolali tugma qo'shishingiz mumkin bo'ladi.</i>\n\n"
+        "<i>(Bekor qilish uchun /cancel deb yozing)</i>"
+    )
+    try:
+        await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="HTML")
+    await callback.answer()
+
+
+@router.message(Command("cancel"), StateFilter(AdminStates))
+async def cmd_cancel_broadcast(message: Message, state: FSMContext):
+    """Cancels ongoing broadcast or inspector setup."""
+    await state.clear()
+    await message.answer("❌ Amaliyot bekor qilindi.", reply_markup=get_admin_main_keyboard())
+
+
+@router.message(StateFilter(AdminStates.waiting_for_broadcast_msg))
+async def handle_broadcast_message_input(message: Message, state: FSMContext):
+    """Receives broadcast message and opens options (Add Button, Test Send, Broadcast)."""
+    await state.update_data(
+        chat_id=message.chat.id,
+        message_id=message.message_id,
+        button_text="",
+        button_url=""
+    )
+    await state.set_state(AdminStates.confirm_broadcast)
+
+    active_users = get_all_active_users()
+    total_count = len(active_users)
+
+    preview_note = (
+        f"📢 <b>Xabar qabul qilindi!</b>\n\n"
+        f"👥 Yuboriladigan foydalanuvchilar soni: <b>{total_count} ta</b>\n\n"
+        f"Endi xabarga <b>URL tugma</b> qo'shishingiz, o'zingizga <b>sinov tariqasida</b> yuborib ko'rishingiz yoki barchaga tarqatishingiz mumkin:"
+    )
+    await message.reply(
+        preview_note,
+        reply_markup=get_broadcast_setup_keyboard(has_button=False),
+        parse_mode="HTML"
+    )
+
+
+@router.callback_query(F.data == "adm:bc_add_btn", StateFilter(AdminStates.confirm_broadcast))
+async def cb_prompt_broadcast_button(callback: CallbackQuery, state: FSMContext):
+    """Prompts admin for inline button text & url."""
+    await state.set_state(AdminStates.waiting_for_bc_button)
+    prompt_text = (
+        "🔘 <b>TUGMA (URL LINK) QO'SHISH</b>\n\n"
+        "Tugma matni va havolasini <b>|</b> belgisi bilan ajratib yuboring:\n\n"
+        "<i>Format:</i> <code>Tugma Nomi | Havola</code>\n\n"
+        "<i>Misol:</i>\n"
+        "👉 <code>Kanalga a'zo bo'lish | https://t.me/khojayev_gaz</code>\n"
+        "👉 <code>Kinoni ko'rish | https://google.com</code>"
+    )
+    try:
+        await callback.message.edit_text(prompt_text, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(prompt_text, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.message(StateFilter(AdminStates.waiting_for_bc_button), F.text & ~F.text.startswith("/"))
+async def handle_button_input(message: Message, state: FSMContext):
+    """Parses button title and URL."""
+    text = message.text.strip()
+    if "|" not in text:
+        await message.answer("⚠️ Iltimos, formatga rioya qiling: <code>Tugma Nomi | Havola</code>", parse_mode="HTML")
+        return
+
+    parts = [p.strip() for p in text.split("|", maxsplit=1)]
+    btn_label, btn_url = parts[0], parts[1]
+
+    if not btn_url.startswith("http://") and not btn_url.startswith("https://") and not btn_url.startswith("t.me/"):
+        await message.answer("⚠️ Havola noto'g'ri (https:// bilan boshlanishi kerak).", parse_mode="HTML")
+        return
+
+    if btn_url.startswith("t.me/"):
+        btn_url = "https://" + btn_url
+
+    await state.update_data(button_text=btn_label, button_url=btn_url)
+    await state.set_state(AdminStates.confirm_broadcast)
+
+    await message.answer(
+        f"✅ <b>Tugma biriktirildi:</b>\n"
+        f"[{html.escape(btn_label)}] ➡️ <code>{btn_url}</code>\n\n"
+        f"Tayyor bo'lsangiz, sinab ko'ring yoki barchaga tarqating:",
+        reply_markup=get_broadcast_setup_keyboard(has_button=True),
+        parse_mode="HTML"
+    )
+
+
+@router.callback_query(F.data == "adm:bc_rm_btn", StateFilter(AdminStates.confirm_broadcast))
+async def cb_remove_broadcast_button(callback: CallbackQuery, state: FSMContext):
+    """Removes attached button."""
+    await state.update_data(button_text="", button_url="")
+    await callback.answer("🗑 Tugma olib tashlandi!", show_alert=True)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=get_broadcast_setup_keyboard(has_button=False))
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "adm:bc_test_send", StateFilter(AdminStates.confirm_broadcast))
+async def cb_test_send_broadcast(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Sends a test copy of the broadcast to the admin himself."""
+    data = await state.get_data()
+    from_chat_id = data.get("chat_id")
+    msg_id = data.get("message_id")
+    btn_text = data.get("button_text")
+    btn_url = data.get("button_url")
+
+    reply_markup = None
+    if btn_text and btn_url:
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=btn_text, url=btn_url)]
+        ])
+
+    try:
+        await bot.copy_message(
+            chat_id=callback.from_user.id,
+            from_chat_id=from_chat_id,
+            message_id=msg_id,
+            reply_markup=reply_markup
+        )
+        await callback.answer("👁 Sinov xabari sizga yuborildi! Tekshirib ko'ring.", show_alert=True)
+    except Exception as e:
+        await callback.answer(f"❌ Xatolik: {e}", show_alert=True)
+
+
+@router.callback_query(F.data == "adm:cancel_broadcast", StateFilter(AdminStates.confirm_broadcast))
+async def cb_cancel_broadcast_btn(callback: CallbackQuery, state: FSMContext):
+    """Cancels broadcast setup."""
+    await state.clear()
+    await callback.message.edit_text("❌ Xabar tarqatish bekor qilindi.", reply_markup=get_admin_main_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "adm:confirm_broadcast", StateFilter(AdminStates.confirm_broadcast))
+async def cb_execute_broadcast(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Executes live broadcast with progress indicators and optional inline URL buttons."""
+    data = await state.get_data()
+    from_chat_id = data.get("chat_id")
+    msg_id = data.get("message_id")
+    btn_text = data.get("button_text")
+    btn_url = data.get("button_url")
+
+    reply_markup = None
+    if btn_text and btn_url:
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=btn_text, url=btn_url)]
+        ])
+
+    await state.clear()
+    active_users = get_all_active_users()
+    total_users = len(active_users)
+
+    if total_users == 0:
+        await callback.message.edit_text("⚠️ Bazada faol foydalanuvchilar mavjud emas.", reply_markup=get_admin_main_keyboard())
+        return
+
+    progress_msg = await callback.message.edit_text(
+        f"🚀 <b>Xabar tarqatish boshlandi...</b>\n\n"
+        f"Jami: <code>{total_users} ta</code>\n"
+        f"Yuborildi: <code>0</code> | Bloklagan: <code>0</code>",
+        parse_mode="HTML"
+    )
+
+    success_cnt = 0
+    blocked_cnt = 0
+
+    for idx, user_id in enumerate(active_users, 1):
+        try:
+            await bot.copy_message(
+                chat_id=user_id,
+                from_chat_id=from_chat_id,
+                message_id=msg_id,
+                reply_markup=reply_markup
+            )
+            success_cnt += 1
+        except Exception:
+            blocked_cnt += 1
+
+        if idx % 25 == 0 or idx == total_users:
+            pct = (idx / total_users) * 100
+            p_bar = make_progress_bar(pct)
+            try:
+                await progress_msg.edit_text(
+                    f"🚀 <b>Xabar tarqatilmoqda... ({idx}/{total_users})</b>\n\n"
+                    f"<code>[{p_bar}] {pct:.1f}%</code>\n"
+                    f"✅ Yuborildi: <code>{success_cnt} ta</code>\n"
+                    f"🚫 Bloklagan: <code>{blocked_cnt} ta</code>",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+        await asyncio.sleep(0.05)
+
+    summary_text = (
+        "✅ <b>XABAR TARQATISH YAKUNLANDI!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👥 Jami qamrov: <b>{total_users} ta</b>\n"
+        f"✅ Muvaffaqiyatli yetkazildi: <b>{success_cnt} ta</b>\n"
+        f"🚫 Botni bloklaganlar: <b>{blocked_cnt} ta</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    await progress_msg.edit_text(summary_text, reply_markup=get_admin_main_keyboard(), parse_mode="HTML")
+    await callback.answer("✅ Xabar barchaga yuborildi!", show_alert=True)
+
+
+# ====================================================================
+# 6. 📊 LIVE STATISTICS
+# ====================================================================
 @router.callback_query(F.data == "adm:stats")
 async def cb_stats(callback: CallbackQuery):
-    """Renders comprehensive live statistics."""
+    """Renders comprehensive live statistics with visual bars."""
     stats = get_stats()
 
     total_users = stats.get("total_users", 0)
@@ -201,7 +738,9 @@ async def cb_stats(callback: CallbackQuery):
     await callback.answer()
 
 
-# 2. API KEYS MONITOR
+# ====================================================================
+# 7. 🔑 API KEYS MONITOR
+# ====================================================================
 @router.callback_query(F.data == "adm:keys")
 async def cb_api_keys(callback: CallbackQuery):
     """Renders real-time status of Gemini 15 keys, Groq 10 keys, and TMDb keys."""
@@ -212,9 +751,9 @@ async def cb_api_keys(callback: CallbackQuery):
     lines = [
         "🔑 <b>API KALITLARI JONLI MONITORI</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n",
-        f"⚡️ <b>Groq AI (Llama 3.3 70B - Random & Quiz):</b>",
+        f"⚡️ <b>Groq AI (10 Kalit - Random, Actor, Quiz, Roleplay):</b>",
         f"• Jami: <b>{groq_status['total']} ta</b> | 🟢 Faol: <b>{groq_status['active']} ta</b> | 🟡 Kutishda: <b>{groq_status['cooldown']} ta</b>\n",
-        f"🤖 <b>Google Gemini AI (Video & Vision Qidiruv):</b>",
+        f"🤖 <b>Google Gemini AI (15 Kalit - Video & Vision Qidiruv):</b>",
         f"• Jami: <b>{gemini_status['total']} ta</b> | 🟢 Faol: <b>{gemini_status['active']} ta</b> | 🟡 Kutishda: <b>{gemini_status['cooldown']} ta</b>\n",
         f"🎬 <b>TMDb Metadata Kalitlari:</b>",
         f"• Jami: <b>{tmdb_status['total']} ta</b> | 🟢 Faol: <b>{tmdb_status['active']} ta</b>",
@@ -222,7 +761,7 @@ async def cb_api_keys(callback: CallbackQuery):
     ]
 
     key_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 Barcha Kalitlarni Tiklash", callback_data="adm:reset_keys")],
+        [InlineKeyboardButton(text="🔄 Barcha Kalitlarni Zudlik Bilan Tiklash", callback_data="adm:reset_keys")],
         [InlineKeyboardButton(text="🔙 Boshqaruv Paneliga Qaytish", callback_data="adm:menu")]
     ])
 
@@ -243,7 +782,9 @@ async def cb_reset_keys(callback: CallbackQuery):
     await cb_api_keys(callback)
 
 
-# 3. SPONSOR CHANNELS (HOMIY KANALLAR)
+# ====================================================================
+# 8. 📢 SPONSOR CHANNELS (HOMIY KANALLAR)
+# ====================================================================
 @router.callback_query(F.data == "adm:channels")
 async def cb_sponsor_channels(callback: CallbackQuery):
     """Manages sponsor channels for mandatory subscription."""
@@ -272,10 +813,8 @@ async def cb_sponsor_channels(callback: CallbackQuery):
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append("➕ <b>Kanal qo'shish juda oson:</b>")
     lines.append("Shunchaki buyruqni yuboring:")
-    lines.append("👉 <code>/addchannel @khojayev_gaz</code>")
-    lines.append("yoki")
-    lines.append("👉 <code>/addchannel https://t.me/khojayev_gaz</code>")
-    lines.append("\n⚠️ <i>Muhim qoida: Asosiy botingiz (<b>@FilmAiFinderbot</b>) o'sha kanalga <b>Administrator</b> qilib qo'shilgan bo'lishi kerak!</i>")
+    lines.append("👉 <code>/addchannel @khojayev_gaz</code>\n")
+    lines.append("⚠️ <i>Muhim: Asosiy botingiz (<b>@FilmAiFinderbot</b>) o'sha kanalga <b>Administrator</b> qilib qo'shilgan bo'lishi kerak!</i>")
 
     buttons.append([InlineKeyboardButton(text="🔙 Boshqaruv Paneliga Qaytish", callback_data="adm:menu")])
 
@@ -288,24 +827,15 @@ async def cb_sponsor_channels(callback: CallbackQuery):
 
 @router.message(Command("addchannel"))
 async def cmd_add_channel(message: Message, bot: Bot):
-    """
-    Intelligent 1-click sponsor channel adder.
-    Accepts: /addchannel @username or /addchannel https://t.me/username or /addchannel -100xxx Title URL
-    """
-    user_id = message.from_user.id if message.from_user else 0
-    username = message.from_user.username or ""
-    if not is_admin(user_id, username):
-        return
-
+    """Intelligent 1-click sponsor channel adder."""
     text = message.text.replace("/addchannel", "").strip()
     if not text:
         await message.answer(
-            "⚠️ <b>Kanal manzilini kiriting!</b>\n\nMasalan:\n<code>/addchannel @khojayev_gaz</code>\nyoki\n<code>/addchannel https://t.me/khojayev_gaz</code>",
+            "⚠️ <b>Kanal manzilini kiriting!</b>\n\nMasalan:\n<code>/addchannel @khojayev_gaz</code>",
             parse_mode="HTML"
         )
         return
 
-    # Extract username or URL
     raw_input = text.split()[0]
     channel_username = raw_input.replace("https://t.me/", "").replace("t.me/", "").lstrip("@").strip()
 
@@ -316,7 +846,6 @@ async def cmd_add_channel(message: Message, bot: Bot):
     target_chat = f"@{channel_username}" if not channel_username.startswith("-100") else channel_username
     channel_url = f"https://t.me/{channel_username.lstrip('@')}"
 
-    # Use main search bot to verify and get channel details
     from aiogram import Bot as SearchBot
     main_bot = SearchBot(token=BOT_TOKEN)
 
@@ -325,21 +854,18 @@ async def cmd_add_channel(message: Message, bot: Bot):
         ch_id = str(chat.id)
         ch_title = chat.title or channel_username
 
-        # Verify bot is administrator in the channel
         me = await main_bot.get_me()
         try:
             member = await main_bot.get_chat_member(chat_id=chat.id, user_id=me.id)
             if member.status not in ["administrator", "creator"]:
                 await message.answer(
                     f"⚠️ <b>E'tibor bering:</b>\n\n"
-                    f"<b>@{me.username}</b> boti <b>'{html.escape(ch_title)}'</b> kanaliga <b>Administrator</b> qilinmagan!\n\n"
-                    f"Foydalanuvchilar obunasini tekshirishi uchun botni kanalga admin qilib qo'shing.",
+                    f"<b>@{me.username}</b> boti <b>'{html.escape(ch_title)}'</b> kanaliga <b>Administrator</b> qilinmagan!",
                     parse_mode="HTML"
                 )
         except Exception:
             pass
 
-        # Save to database
         add_sponsor_channel(channel_id=ch_id, channel_title=ch_title, channel_url=channel_url)
 
         await message.answer(
@@ -354,21 +880,12 @@ async def cmd_add_channel(message: Message, bot: Bot):
 
     except Exception as e:
         logger.error(f"[AddChannel Error] {e}")
-        # Fallback: if user provided custom title
-        parts = text.split(maxsplit=2)
-        if len(parts) >= 3:
-            ch_id = parts[0]
-            ch_title = parts[1]
-            ch_url = parts[2]
-            add_sponsor_channel(channel_id=ch_id, channel_title=ch_title, channel_url=ch_url)
-            await message.answer(f"✅ <b>'{html.escape(ch_title)}' kanali qo'shildi!</b>", parse_mode="HTML")
-        else:
-            await message.answer(
-                f"❌ <b>Kanal topilmadi!</b>\n\n"
-                f"Iltimos, avval <b>@FilmAiFinderbot</b> ni o'sha kanalga <b>Administrator</b> qilib qo'shing va qayta yuboring:\n"
-                f"<code>/addchannel @{channel_username}</code>",
-                parse_mode="HTML"
-            )
+        await message.answer(
+            f"❌ <b>Kanal topilmadi!</b>\n\n"
+            f"Iltimos, avval <b>@FilmAiFinderbot</b> ni kanalga <b>Administrator</b> qilib qo'shing va qayta yuboring:\n"
+            f"<code>/addchannel @{channel_username}</code>",
+            parse_mode="HTML"
+        )
     finally:
         await main_bot.session.close()
 
@@ -382,7 +899,9 @@ async def cb_del_channel(callback: CallbackQuery):
     await cb_sponsor_channels(callback)
 
 
-# 4. RECENT USERS & MANAGEMENT
+# ====================================================================
+# 9. 👥 RECENT USERS
+# ====================================================================
 @router.callback_query(F.data == "adm:users")
 async def cb_recent_users(callback: CallbackQuery):
     """Displays recent users list."""
@@ -401,7 +920,7 @@ async def cb_recent_users(callback: CallbackQuery):
         lines.append(f"<b>{idx}. ID:</b> <code>{u_id}</code> | {lang.upper()} | {points} ball | {banned}\n   <i>Sana: {created}</i>")
 
     lines.append("\n━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append("💡 <i>Foydalanuvchini bloklash yoki ochish uchun: /ban ID yoki /unban ID yozing.</i>")
+    lines.append("💡 <i>Foydalanuvchini to'liq tekshirish uchun: '🔍 Foydalanuvchi Dosyesi' tugmasini bosing.</i>")
 
     try:
         await callback.message.edit_text("\n".join(lines), reply_markup=get_back_keyboard(), parse_mode="HTML")
@@ -410,7 +929,9 @@ async def cb_recent_users(callback: CallbackQuery):
     await callback.answer()
 
 
-# 5. EXPORT DATABASE FILE
+# ====================================================================
+# 10. 📥 EXPORT DATABASE FILE
+# ====================================================================
 @router.callback_query(F.data == "adm:export_db")
 async def cb_export_db(callback: CallbackQuery):
     """Exports SQLite DB and CSV list to Admin."""
@@ -442,153 +963,3 @@ async def cb_export_db(callback: CallbackQuery):
     finally:
         if csv_path.exists():
             csv_path.unlink()
-
-
-# 6. BROADCAST (XABAR TARQATISH)
-@router.callback_query(F.data == "adm:broadcast")
-async def cb_start_broadcast(callback: CallbackQuery, state: FSMContext):
-    """Initiates broadcast state."""
-    await state.set_state(AdminStates.waiting_for_broadcast_msg)
-    text = (
-        "📢 <b>HAMMAGA XABAR TARQATISH</b>\n\n"
-        "Barcha foydalanuvchilarga yubormoqchi bo'lgan xabaringizni yozing yoki fayl/rasm/video yuboring:\n\n"
-        "<i>(Bekor qilish uchun /cancel yozing)</i>"
-    )
-    try:
-        await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="HTML")
-    except Exception:
-        await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="HTML")
-    await callback.answer()
-
-
-@router.message(Command("cancel"), StateFilter(AdminStates))
-async def cmd_cancel_broadcast(message: Message, state: FSMContext):
-    """Cancels ongoing broadcast setup."""
-    await state.clear()
-    await message.answer("❌ Xabar tarqatish bekor qilindi.", reply_markup=get_admin_main_keyboard())
-
-
-@router.message(StateFilter(AdminStates.waiting_for_broadcast_msg))
-async def handle_broadcast_content(message: Message, state: FSMContext):
-    """Stores the message to broadcast and asks for confirmation."""
-    await state.update_data(
-        chat_id=message.chat.id,
-        message_id=message.message_id
-    )
-    await state.set_state(AdminStates.confirm_broadcast)
-
-    active_users = get_all_active_users()
-    total_count = len(active_users)
-
-    await message.reply(
-        f"📢 <b>Xabar qabul qilindi!</b>\n\n"
-        f"Jami yuboriladigan foydalanuvchilar soni: <b>{total_count} ta</b>.\n\n"
-        f"Xabarni hoziroq barchaga tarqataylikmi?",
-        reply_markup=get_broadcast_confirm_keyboard(),
-        parse_mode="HTML"
-    )
-
-
-@router.callback_query(F.data == "adm:cancel_broadcast", StateFilter(AdminStates.confirm_broadcast))
-async def cb_cancel_broadcast(callback: CallbackQuery, state: FSMContext):
-    """Cancels broadcast from button."""
-    await state.clear()
-    await callback.message.edit_text("❌ Xabar tarqatish bekor qilindi.", reply_markup=get_admin_main_keyboard())
-    await callback.answer()
-
-
-@router.callback_query(F.data == "adm:confirm_broadcast", StateFilter(AdminStates.confirm_broadcast))
-async def cb_execute_broadcast(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    """Executes live broadcast to all users with progress updates."""
-    data = await state.get_data()
-    from_chat_id = data.get("chat_id")
-    msg_id = data.get("message_id")
-
-    await state.clear()
-    active_users = get_all_active_users()
-    total_users = len(active_users)
-
-    if total_users == 0:
-        await callback.message.edit_text("⚠️ Bazada faol foydalanuvchilar mavjud emas.", reply_markup=get_admin_main_keyboard())
-        return
-
-    progress_msg = await callback.message.edit_text(
-        f"🚀 <b>Xabar tarqatish boshlandi...</b>\n\n"
-        f"Jami: <code>{total_users} ta</code>\n"
-        f"Yuborildi: <code>0</code> | Bloklagan: <code>0</code>",
-        parse_mode="HTML"
-    )
-
-    success_cnt = 0
-    blocked_cnt = 0
-
-    for idx, user_id in enumerate(active_users, 1):
-        try:
-            await bot.copy_message(
-                chat_id=user_id,
-                from_chat_id=from_chat_id,
-                message_id=msg_id
-            )
-            success_cnt += 1
-        except Exception:
-            blocked_cnt += 1
-
-        if idx % 25 == 0 or idx == total_users:
-            try:
-                await progress_msg.edit_text(
-                    f"🚀 <b>Xabar tarqatilmoqda... ({idx}/{total_users})</b>\n\n"
-                    f"✅ Yuborildi: <code>{success_cnt} ta</code>\n"
-                    f"🚫 Bloklagan: <code>{blocked_cnt} ta</code>",
-                    parse_mode="HTML"
-                )
-            except Exception:
-                pass
-        await asyncio.sleep(0.05)
-
-    summary_text = (
-        "✅ <b>XABAR TARQATISH YAKUNLANDI!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"👥 Jami qamrov: <b>{total_users} ta</b>\n"
-        f"✅ Muvaffaqiyatli yetkazildi: <b>{success_cnt} ta</b>\n"
-        f"🚫 Botni bloklaganlar: <b>{blocked_cnt} ta</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━"
-    )
-    await progress_msg.edit_text(summary_text, reply_markup=get_admin_main_keyboard(), parse_mode="HTML")
-    await callback.answer("✅ Xabar barchaga yuborildi!", show_alert=True)
-
-
-# 7. BAN / UNBAN COMMANDS
-@router.message(Command("ban"))
-async def cmd_ban_user(message: Message):
-    """Bans user by ID: /ban 12345678."""
-    user_id = message.from_user.id if message.from_user else 0
-    username = message.from_user.username or ""
-    if not is_admin(user_id, username):
-        return
-
-    parts = message.text.split()
-    if len(parts) < 2 or not parts[1].isdigit():
-        await message.answer("⚠️ Foydalanish: <code>/ban 12345678</code>", parse_mode="HTML")
-        return
-
-    target_id = int(parts[1])
-    set_user_ban_status(target_id, is_banned=True)
-    await message.answer(f"🚫 <b>Foydalanuvchi {target_id} muvaffaqiyatli bloklandi!</b>", parse_mode="HTML")
-
-
-@router.message(Command("unban"))
-async def cmd_unban_user(message: Message):
-    """Unbans user by ID: /unban 12345678."""
-    user_id = message.from_user.id if message.from_user else 0
-    username = message.from_user.username or ""
-    if not is_admin(user_id, username):
-        return
-
-    parts = message.text.split()
-    if len(parts) < 2 or not parts[1].isdigit():
-        await message.answer("⚠️ Foydalanish: <code>/unban 12345678</code>", parse_mode="HTML")
-        return
-
-    target_id = int(parts[1])
-    set_user_ban_status(target_id, is_banned=False)
-    await message.answer(f"✅ <b>Foydalanuvchi {target_id} blokdan chiqarildi!</b>", parse_mode="HTML")

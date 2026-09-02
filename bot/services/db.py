@@ -39,13 +39,25 @@ def init_db():
                 );
             """)
 
-            # Migration: add points column if missing
+            # Migration: add columns to users if missing
             cursor.execute("PRAGMA table_info(users);")
             columns = [row["name"] for row in cursor.fetchall()]
+            if "language_code" not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN language_code TEXT DEFAULT 'uz';")
+                if "language" in columns:
+                    cursor.execute("UPDATE users SET language_code = language;")
+            if "language" not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'uz';")
+                if "language_code" in columns:
+                    cursor.execute("UPDATE users SET language = language_code;")
             if "points" not in columns:
                 cursor.execute("ALTER TABLE users ADD COLUMN points INTEGER NOT NULL DEFAULT 0;")
             if "is_banned" not in columns:
                 cursor.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER NOT NULL DEFAULT 0;")
+            if "username" not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN username TEXT;")
+            if "first_name" not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN first_name TEXT;")
 
             # 2. Sponsor channels table
             cursor.execute("""
@@ -98,6 +110,14 @@ def init_db():
                 );
             """)
 
+            # 6. Admin settings table (Active AI model, Temperature, Live Alerts, etc.)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS admin_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+            """)
+
             conn.commit()
     except Exception as e:
         logger.error(f"[DB Init Error] Ma'lumotlar bazasini yaratishda xatolik: {e}")
@@ -120,23 +140,90 @@ def get_user_lang(user_id: int) -> Optional[str]:
     return None
 
 
-def set_user_lang(user_id: int, lang_code: str):
-    """Saves or updates user preferred language code."""
+def set_user_lang(user_id: int, lang_code: str, username: str = "", first_name: str = ""):
+    """Saves or updates user preferred language code, username, and first_name."""
     if not user_id:
         return
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO users (user_id, language_code, updated_at)
-                VALUES (?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO users (user_id, language_code, username, first_name, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(user_id) DO UPDATE SET
                     language_code = excluded.language_code,
+                    username = COALESCE(NULLIF(excluded.username, ''), users.username),
+                    first_name = COALESCE(NULLIF(excluded.first_name, ''), users.first_name),
                     updated_at = CURRENT_TIMESTAMP;
-            """, (user_id, lang_code))
+            """, (user_id, lang_code, (username or "").lstrip("@"), first_name or ""))
             conn.commit()
     except Exception as e:
         logger.error(f"[DB Error] set_user_lang failed: {e}")
+
+
+def get_admin_setting(key: str, default: str = "") -> str:
+    """Retrieves dynamic admin setting value."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM admin_settings WHERE key = ?", (key,))
+            row = cursor.fetchone()
+            if row and row["value"] is not None:
+                return str(row["value"])
+    except Exception as e:
+        logger.error(f"[DB Error] get_admin_setting failed: {e}")
+    return default
+
+
+def set_admin_setting(key: str, value: str):
+    """Sets or updates dynamic admin setting value."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO admin_settings (key, value)
+                VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+            """, (key, str(value)))
+            conn.commit()
+    except Exception as e:
+        logger.error(f"[DB Error] set_admin_setting failed: {e}")
+
+
+def get_user_profile(identifier: str) -> Optional[Dict[str, Any]]:
+    """Fetches complete dossier for a user by ID or @username."""
+    clean_id = identifier.strip().lstrip("@")
+    if not clean_id:
+        return None
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            if clean_id.isdigit():
+                cursor.execute("SELECT * FROM users WHERE user_id = ?", (int(clean_id),))
+            else:
+                cursor.execute("SELECT * FROM users WHERE LOWER(username) = LOWER(?)", (clean_id,))
+            user_row = cursor.fetchone()
+            if not user_row:
+                return None
+            user_data = dict(user_row)
+            uid = user_data["user_id"]
+
+            # Count searches
+            cursor.execute("SELECT COUNT(*) as cnt FROM searches WHERE user_id = ?", (uid,))
+            user_data["total_searches"] = cursor.fetchone()["cnt"]
+
+            # Fetch saved movies (watchlist)
+            cursor.execute("SELECT movie_title, release_year, rating FROM watchlist WHERE user_id = ? ORDER BY created_at DESC LIMIT 10", (uid,))
+            user_data["saved_movies"] = [dict(r) for r in cursor.fetchall()]
+
+            # Fetch alerts
+            cursor.execute("SELECT movie_title, premiere_date FROM premiere_alerts WHERE user_id = ? ORDER BY created_at DESC LIMIT 5", (uid,))
+            user_data["alerts"] = [dict(r) for r in cursor.fetchall()]
+
+            return user_data
+    except Exception as e:
+        logger.error(f"[DB Error] get_user_profile failed: {e}")
+        return None
 
 
 def is_user_banned(user_id: int) -> bool:

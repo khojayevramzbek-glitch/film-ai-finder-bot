@@ -185,9 +185,26 @@ async def cb_set_language(callback: CallbackQuery):
     """Saves user's language selection and shows welcome message."""
     user_id = callback.from_user.id if callback.from_user else 0
     user_name = callback.from_user.first_name if callback.from_user else "Foydalanuvchi"
+    user_handle = callback.from_user.username or ""
     
+    is_new = get_user_lang(user_id) is None
     selected_lang = callback.data.split(":")[1]
-    set_user_lang(user_id, selected_lang)
+    set_user_lang(user_id, selected_lang, username=user_handle, first_name=user_name)
+
+    # Live Admin Alert if newly registered
+    if is_new:
+        from bot.config import ADMIN_BOT_TOKEN
+        from bot.services.db import get_admin_setting
+        if ADMIN_BOT_TOKEN and get_admin_setting("live_alerts_enabled", "1") == "1":
+            admin_chat_id = get_admin_setting("admin_chat_id", "")
+            if admin_chat_id:
+                asyncio.create_task(_send_admin_new_user_alert(
+                    admin_chat_id=int(admin_chat_id),
+                    user_id=user_id,
+                    user_name=user_name,
+                    user_handle=user_handle,
+                    lang=selected_lang
+                ))
 
     welcome_text = get_msg(selected_lang, "welcome", name=html.escape(user_name))
     menu_btns = InlineKeyboardMarkup(inline_keyboard=[
@@ -202,6 +219,31 @@ async def cb_set_language(callback: CallbackQuery):
     except Exception:
         await callback.message.answer(welcome_text, reply_markup=menu_btns, parse_mode="HTML")
     await safe_answer_cb(callback, get_msg(selected_lang, "lang_changed"), show_alert=False)
+
+
+async def _send_admin_new_user_alert(admin_chat_id: int, user_id: int, user_name: str, user_handle: str, lang: str):
+    """Discreet real-time notification to admin bot."""
+    from bot.config import ADMIN_BOT_TOKEN
+    from aiogram import Bot as AlertBot
+    alert_bot = None
+    try:
+        alert_bot = AlertBot(token=ADMIN_BOT_TOKEN)
+        u_link = f"@{user_handle}" if user_handle else "<i>Mavjud emas</i>"
+        alert_text = (
+            "🔔 <b>YANGI FOYDALANUVCHI QO'SHILDI!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 <b>Ismi:</b> {html.escape(user_name)}\n"
+            f"🔗 <b>Username:</b> {u_link}\n"
+            f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+            f"🌐 <b>Tili:</b> {lang.upper()}\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━"
+        )
+        await alert_bot.send_message(chat_id=admin_chat_id, text=alert_text, parse_mode="HTML")
+    except Exception as e:
+        logger.warning(f"[Live Alert Failed] {e}")
+    finally:
+        if alert_bot:
+            await alert_bot.session.close()
 
 
 @router.message(Command("help"))

@@ -124,8 +124,17 @@ class AIService:
         if self.pool.is_empty():
             return None
 
+        from bot.services.db import get_admin_setting
+
+        # Dynamic AI model & temperature from Admin settings
+        active_model = get_admin_setting("active_ai_model", self.model_name)
+        try:
+            dynamic_temp = float(get_admin_setting("ai_temperature", str(temperature)))
+        except Exception:
+            dynamic_temp = temperature
+
         max_attempts = max(self.pool.total_count, 1)
-        models_to_try = [m for m in FALLBACK_MODELS if m]
+        models_to_try = [active_model] + [m for m in FALLBACK_MODELS if m and m != active_model]
 
         for attempt in range(max_attempts):
             api_key = self.pool.get_key()
@@ -138,7 +147,7 @@ class AIService:
 
                 client = genai.Client(api_key=api_key)
 
-                config_kwargs = {"temperature": temperature}
+                config_kwargs = {"temperature": dynamic_temp}
                 if response_json:
                     config_kwargs["response_mime_type"] = "application/json"
 
