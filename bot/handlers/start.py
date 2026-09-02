@@ -1,4 +1,5 @@
 import html
+import asyncio
 import logging
 from aiogram import Router, F, Bot
 from aiogram.filters import CommandStart, Command

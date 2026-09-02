@@ -126,7 +126,7 @@ async def main():
     main_dp.include_router(inline_mode.router)
     main_dp.include_router(analyze.router)
     await set_main_bot_commands(main_bot)
-    await main_bot.delete_webhook(drop_pending_updates=True)
+    await main_bot.delete_webhook(drop_pending_updates=False)
 
     main_me = await main_bot.get_me()
     logger.info(f"✅ Asosiy qidiruv boti ulandi: @{main_me.username} ({main_me.first_name})")
@@ -147,7 +147,7 @@ async def main():
             admin_dp = Dispatcher()
             admin_dp.include_router(admin_handlers.router)
             await set_admin_bot_commands(admin_bot)
-            await admin_bot.delete_webhook(drop_pending_updates=True)
+            await admin_bot.delete_webhook(drop_pending_updates=False)
 
             admin_me = await admin_bot.get_me()
             logger.info(f"👑 Maxsus Admin Boti ulandi: @{admin_me.username} ({admin_me.first_name})")

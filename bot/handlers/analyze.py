@@ -281,6 +281,62 @@ async def handle_text(message: Message, bot: Bot):
     )
 
 
+@router.message(F.voice | F.audio)
+async def handle_voice_or_audio(message: Message, bot: Bot):
+    """Handles voice notes and audio clips: transcribes speech in 0.2s with Whisper and finds movie."""
+    user_id = message.from_user.id if message.from_user else 0
+    if is_user_banned(user_id):
+        return
+
+    lang = get_user_lang(user_id) or "uz"
+
+    is_sub, missing = await check_user_subscription(bot, user_id)
+    if not is_sub:
+        await message.answer(get_msg(lang, "sub_required"), reply_markup=get_subscription_keyboard(missing, lang), parse_mode="HTML")
+        return
+
+    audio_obj = message.voice or message.audio
+    if not audio_obj:
+        return
+
+    status_msg = await message.answer("🎙 <i>Ovozli xabar tinglanmoqda va matnga o'girilmoqda...</i>", parse_mode="HTML")
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+
+    unique_id = uuid.uuid4().hex[:12]
+    audio_path = DOWNLOAD_DIR / f"voice_{unique_id}.ogg"
+
+    try:
+        file_info = await bot.get_file(audio_obj.file_id)
+        await bot.download_file(file_info.file_path, destination=audio_path)
+
+        from bot.services.groq_service import groq_service
+        transcription = await groq_service.transcribe_audio(audio_path)
+
+        if not transcription or len(transcription.strip()) < 3:
+            await safe_edit_text(status_msg, "⚠️ <i>Ovozingizni aniq eshitib bo'lmadi. Iltimos, qaytadan yozing yoki matn shaklida yuboring.</i>")
+            return
+
+        await safe_edit_text(
+            status_msg,
+            f"🎙 <b>Siz aytgan so'zlar:</b>\n<i>«{html.escape(transcription)}»</i>\n\n🧠 <i>Film qidirilmoqda...</i>"
+        )
+        await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+
+        ai_data = await ai_service.analyze_plot_text(transcription, lang=lang)
+        await process_and_send_result(
+            bot=bot,
+            message=message,
+            ai_data=ai_data,
+            status_msg=status_msg,
+            lang=lang
+        )
+    except Exception as e:
+        logger.error(f"[Voice Search Error] {e}")
+        await safe_edit_text(status_msg, get_msg(lang, "error_general"))
+    finally:
+        safe_remove(audio_path)
+
+
 @router.message(F.video | F.video_note | F.animation | F.document)
 async def handle_direct_video(message: Message, bot: Bot):
     """Handles directly uploaded video files or video notes."""
