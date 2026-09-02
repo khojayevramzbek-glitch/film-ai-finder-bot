@@ -7,12 +7,6 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, List
 
-from aiogram import Router, F, Bot
-from aiogram.filters import CommandStart, Command, StateFilter
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
-
 from bot.config import ADMIN_USERNAMES, GEMINI_API_KEYS, TMDB_API_KEYS, BOT_TOKEN
 from bot.services.db import (
     DB_PATH,
@@ -34,8 +28,78 @@ from admin_bot.keyboards import (
     get_broadcast_confirm_keyboard
 )
 
+from aiogram import Router, F, Bot, BaseMiddleware
+from aiogram.filters import CommandStart, Command, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, TelegramObject
+
 logger = logging.getLogger(__name__)
 router = Router()
+
+
+def is_admin(user_id: int, username: str = "") -> bool:
+    """Checks if the sender is the authorized admin (@khojayev_ramz)."""
+    clean_username = (username or "").lstrip("@").lower()
+    return clean_username in [u.lower() for u in ADMIN_USERNAMES]
+
+
+class AdminSecurityMiddleware(BaseMiddleware):
+    """
+    Ironclad security middleware for FilmFinder Admin Bot.
+    Enforces strict access control:
+    - ONLY @khojayev_ramz can interact with this bot.
+    - All unauthorized access attempts from ANY other user are completely rejected and logged.
+    - Automatically leaves any unauthorized groups/channels.
+    """
+    async def __call__(self, handler, event: TelegramObject, data: dict):
+        user = data.get("event_from_user")
+        if not user:
+            return  # Drop update silently
+
+        username = (user.username or "").lstrip("@").lower()
+        allowed_admins = [u.lower() for u in ADMIN_USERNAMES]
+
+        # 1. Reject anyone who is not in ADMIN_USERNAMES (@khojayev_ramz)
+        if username not in allowed_admins:
+            logger.warning(
+                f"🚨 [BLOCKED UNAUTHORIZED ACCESS] User ID: {user.id} | "
+                f"Username: @{user.username} | Name: {user.full_name}"
+            )
+            if isinstance(event, Message):
+                await event.answer(
+                    "⛔️ <b>KIRISH TAQIQLANGAN!</b>\n\n"
+                    "Ushbu bot shaxsiy yopiq tizim hisoblanadi va faqat <b>@khojayev_ramz</b> uchun ishlaydi.\n\n"
+                    "<i>Begona foydalanuvchilarning barcha so'rovlari avtomatik tarzda bloklanadi.</i>",
+                    parse_mode="HTML"
+                )
+            elif isinstance(event, CallbackQuery):
+                try:
+                    await event.answer(
+                        "⛔️ Kirish taqiqlangan! Bu bot faqat @khojayev_ramz uchun.",
+                        show_alert=True
+                    )
+                except Exception:
+                    pass
+            return  # STOP! Do not execute any handler
+
+        # 2. Reject non-private chats (groups, channels)
+        chat = data.get("event_chat")
+        if chat and chat.type != "private":
+            bot = data.get("bot")
+            if bot:
+                try:
+                    await bot.leave_chat(chat.id)
+                except Exception:
+                    pass
+            return  # Stop execution in non-private chats
+
+        return await handler(event, data)
+
+
+# Register Ironclad Security Middleware as Outer Middleware
+router.message.outer_middleware(AdminSecurityMiddleware())
+router.callback_query.outer_middleware(AdminSecurityMiddleware())
 
 
 class AdminStates(StatesGroup):
@@ -43,25 +107,11 @@ class AdminStates(StatesGroup):
     confirm_broadcast = State()
 
 
-def is_admin(user_id: int, username: str = "") -> bool:
-    """Checks if the sender is the authorized admin."""
-    clean_username = (username or "").lstrip("@").lower()
-    return clean_username in [u.lower() for u in ADMIN_USERNAMES]
-
-
 @router.message(CommandStart())
 async def cmd_admin_start(message: Message, state: FSMContext):
     """Admin bot /start command with security authorization."""
     await state.clear()
-    user_id = message.from_user.id if message.from_user else 0
     username = message.from_user.username or ""
-
-    if not is_admin(user_id, username):
-        await message.answer(
-            "⛔️ <b>Ruxsat berilmadi!</b>\n\nBu bot faqat <b>@khojayev_ramz</b> boshqaruv kabineti hisoblanadi.",
-            parse_mode="HTML"
-        )
-        return
 
     text = (
         f"👑 <b>Xush kelibsiz, Admin @{html.escape(username)}!</b>\n\n"
