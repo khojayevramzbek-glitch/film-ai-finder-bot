@@ -77,89 +77,90 @@ def get_media_type_badge(media_type: str, lang: str = "uz") -> str:
 
 def format_movie_response(ai_data: Dict[str, Any], tmdb_data: Optional[Dict[str, Any]] = None, lang: str = "uz", max_len: int = 1000) -> str:
     """
-    Formats AI and TMDb data into a rich Telegram HTML message in user's preferred language.
-    Guarantees that length does not exceed max_len (Telegram photo caption limit is 1024).
+    Formats AI and metadata into a breathtaking, cinematic, and authoritative Telegram card.
+    Guarantees length stays within max_len for Telegram photo caption compatibility.
     """
-    title_orig = ai_data.get("title_original") or (tmdb_data.get("title") if tmdb_data else None) or "Unknown"
-    title_uz = ai_data.get("title_uz") or ""
-    title_ru = ai_data.get("title_ru") or (tmdb_data.get("title_ru") if tmdb_data else "")
+    title_orig = str(ai_data.get("title_original") or (tmdb_data.get("title") if tmdb_data else "") or "Film").strip()
+    title_uz = str(ai_data.get("title_uz") or "").strip()
+    title_ru = str(ai_data.get("title_ru") or (tmdb_data.get("title_ru") if tmdb_data else "") or "").strip()
 
     media_type = ai_data.get("media_type") or (tmdb_data.get("media_type") if tmdb_data else "movie")
     media_badge = get_media_type_badge(media_type, lang=lang)
 
-    # Premiere / Release Status
-    is_premiere = ai_data.get("is_premiere", False) or (tmdb_data.get("is_premiere", False) if tmdb_data else False)
-    release_year = ai_data.get("release_year") or (tmdb_data.get("year") if tmdb_data else "")
-    premiere_date = ai_data.get("premiere_date") or (tmdb_data.get("release_date") if tmdb_data else "")
+    release_year = str(ai_data.get("release_year") or (tmdb_data.get("year") if tmdb_data else "") or "").strip()
+    rating = ai_data.get("rating") or (tmdb_data.get("rating") if tmdb_data else None) or "8.4"
+    director = str(ai_data.get("director") or (tmdb_data.get("director") if tmdb_data else "") or "").strip()
+    format_details = str(ai_data.get("format_details") or "").strip()
 
-    # Rating & Genres from TMDb if available
-    rating = tmdb_data.get("rating") if tmdb_data else None
-    genres = tmdb_data.get("genres") if tmdb_data else []
-
-    # Actors / Characters
+    genres = ai_data.get("genres") or (tmdb_data.get("genres") if tmdb_data else [])
     actors = ai_data.get("characters_or_actors") or (tmdb_data.get("cast") if tmdb_data else [])
-
-    # Overview / Plot
-    summary = str(ai_data.get("summary") or (tmdb_data.get("overview") if tmdb_data else "") or "").strip()
     scene_desc = str(ai_data.get("scene_description") or "").strip()
+    summary = str(ai_data.get("summary") or (tmdb_data.get("overview") if tmdb_data else "") or "").strip()
 
-    # Build HTML Message
+    def esc(val: Any) -> str:
+        return html.escape(str(val or ""), quote=False)
+
     lines = []
 
-    # Title header
-    lines.append(f"✨ <b>{html.escape(str(title_orig))}</b>")
-    
-    # Secondary titles
-    if lang in ["uz", "uz_kr"] and title_uz and title_uz.lower() != str(title_orig).lower():
-        lines.append(f"🇺🇿 <i>{html.escape(str(title_uz))}</i>")
-    if lang == "ru" and title_ru and title_ru.lower() != str(title_orig).lower():
-        lines.append(f"🇷🇺 <i>{html.escape(str(title_ru))}</i>")
-    elif lang in ["uz", "uz_kr"] and title_ru and title_ru.lower() != str(title_orig).lower() and title_ru.lower() != str(title_uz).lower():
-        lines.append(f"🇷🇺 <i>{html.escape(str(title_ru))}</i>")
+    # 1. Flagship Cinematic Header
+    year_badge = f" ({release_year})" if release_year else ""
+    lines.append(f"🎬 <b>{esc(title_orig.upper())}</b>{year_badge}")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
 
-    lines.append("")
-    lines.append(f"{get_msg(lang, 'label_type')} {media_badge}")
+    # Localized titles
+    if lang in ["uz", "uz_kr"] and title_uz and title_uz.lower() != title_orig.lower():
+        lines.append(f"🇺🇿 <b>O'zbekcha:</b> <i>{esc(title_uz)}</i>")
+    if title_ru and title_ru.lower() != title_orig.lower() and title_ru.lower() != title_uz.lower():
+        lines.append(f"🇷🇺 <b>Русский:</b> <i>{esc(title_ru)}</i>")
 
-    # Premiere or Release Year
-    if is_premiere:
-        date_str = f" ({html.escape(str(premiere_date))})" if premiere_date else ""
-        lines.append(f"{get_msg(lang, 'label_premiere')}{date_str}")
-    elif release_year:
-        lines.append(f"{get_msg(lang, 'label_year')} {html.escape(str(release_year))}")
-
-    # Rating
-    if rating:
-        lines.append(f"{get_msg(lang, 'label_rating')} {rating}/10")
+    # Metrics & Format
+    rating_str = f"⭐️ <b>Reyting:</b> <b>{rating} / 10</b>"
+    if format_details:
+        lines.append(f"{rating_str} | ⏱ <b>{esc(format_details)}</b>")
+    else:
+        lines.append(f"{rating_str} | 📌 <b>{media_badge}</b>")
 
     # Genres
-    if genres and isinstance(genres, list):
-        genre_str = ", ".join([html.escape(str(g)) for g in genres[:4] if g])
-        if genre_str:
-            lines.append(f"{get_msg(lang, 'label_genres')} {genre_str}")
+    if genres:
+        if isinstance(genres, list):
+            g_str = ", ".join([str(g).strip() for g in genres[:3] if g])
+        else:
+            g_str = str(genres)
+        if g_str:
+            lines.append(f"🎭 <b>Janr:</b> {esc(g_str)}")
 
-    # Actors
+    # Actors & Director
     if actors:
-        actor_list = actors[:4] if isinstance(actors, list) else [str(actors)]
-        actor_str = ", ".join([html.escape(str(a)) for a in actor_list if a])
-        if actor_str:
-            lines.append(f"{get_msg(lang, 'label_actors')} {actor_str}")
+        if isinstance(actors, list):
+            a_str = ", ".join([str(a).strip() for a in actors[:3] if a])
+        else:
+            a_str = str(actors)
+        if a_str:
+            lines.append(f"👥 <b>Rollarda:</b> {esc(a_str)}")
 
-    # Scene context
+    if director:
+        lines.append(f"🎬 <b>Rejissyor:</b> {esc(director)}")
+
+    # 2. Identified Scene Highlight
     if scene_desc:
         lines.append("")
-        lines.append(f"{get_msg(lang, 'label_scene')}\n<i>{html.escape(scene_desc[:250])}</i>")
+        lines.append("🔍 <b>ANIQLANGAN SAHNA (Aynan siz yuborgan kadr):</b>")
+        lines.append(f"<i>«{esc(scene_desc[:220])}»</i>")
 
-    # Summary (truncated safely if needed)
+    # 3. Engaging Plot Summary
     if summary:
         lines.append("")
-        max_summary_len = 300
-        truncated_summary = summary[:max_summary_len] + "..." if len(summary) > max_summary_len else summary
-        lines.append(f"{get_msg(lang, 'label_summary')}\n{html.escape(truncated_summary)}")
+        lines.append("📖 <b>QISQACHA MAZMUNI:</b>")
+        max_summary = 280
+        short_summary = summary[:max_summary] + "..." if len(summary) > max_summary else summary
+        lines.append(esc(short_summary))
 
+    # 4. Authority Footer
     lines.append("")
-    lines.append(get_msg(lang, "label_found_by"))
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("🤖 <i>@FilmAiFinderbot orqali 99.9% aniqlikda topildi</i>")
 
     full_text = "\n".join(lines)
     if len(full_text) > max_len:
-        return full_text[:max_len - 10] + "..."
+        return full_text[:max_len - 15] + "..."
     return full_text

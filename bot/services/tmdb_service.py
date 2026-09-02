@@ -53,11 +53,48 @@ class TMDbService:
 
         return None
 
+    @staticmethod
+    async def fetch_fallback_poster(title: str) -> Optional[str]:
+        """Fetches HD movie poster from iTunes or Wikipedia without requiring any API keys."""
+        import urllib.parse
+        headers = {"User-Agent": "FilmFinderBot/3.5 (admin@filmfinder.uz)"}
+
+        # 1. Try iTunes Movie / TV
+        try:
+            url = f"https://itunes.apple.com/search?term={urllib.parse.quote(title)}&limit=1"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=3)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get("resultCount", 0) > 0:
+                            artwork = data["results"][0].get("artworkUrl100", "")
+                            if artwork:
+                                return artwork.replace("100x100bb", "600x600bb")
+        except Exception:
+            pass
+
+        # 2. Try Wikipedia
+        try:
+            clean_title = title.replace(" ", "_")
+            wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(clean_title)}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(wiki_url, headers=headers, timeout=aiohttp.ClientTimeout(total=3)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        img = data.get("originalimage", {}).get("source") or data.get("thumbnail", {}).get("source")
+                        if img:
+                            return img
+        except Exception:
+            pass
+
+        return None
+
     async def search_media(self, title: str, year: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Searches TMDb for a movie or TV show."""
+        """Searches TMDb for a movie or TV show, with multi-engine fallback for posters."""
         if not title:
             return None
 
+        import urllib.parse
         params = {"query": title, "include_adult": "false"}
         if year and year.isdigit():
             params["year"] = year
@@ -68,15 +105,31 @@ class TMDbService:
                 del params["year"]
                 data = await self._make_request("/search/multi", params)
 
-        if not data or not data.get("results"):
-            return None
+        if data and data.get("results"):
+            for item in data["results"]:
+                media_type = item.get("media_type")
+                if media_type in ("movie", "tv"):
+                    details = await self._extract_details(item, media_type)
+                    if not details.get("poster_url"):
+                        details["poster_url"] = await self.fetch_fallback_poster(title)
+                    return details
 
-        for item in data["results"]:
-            media_type = item.get("media_type")
-            if media_type in ("movie", "tv"):
-                return await self._extract_details(item, media_type)
-
-        return None
+        # Universal Fallback (when TMDb has no key or finds nothing)
+        fallback_poster = await self.fetch_fallback_poster(title)
+        return {
+            "id": None,
+            "title": title,
+            "original_title": title,
+            "media_type": "movie",
+            "year": year or "",
+            "poster_url": fallback_poster,
+            "rating": None,
+            "overview": "",
+            "trailer_url": f"https://www.youtube.com/results?search_query={urllib.parse.quote(title)}+official+trailer",
+            "imdb_id": None,
+            "genres": [],
+            "cast": []
+        }
 
     async def _extract_details(self, item: Dict[str, Any], media_type: str) -> Dict[str, Any]:
         """Extracts and enriches media details including trailer and genres."""

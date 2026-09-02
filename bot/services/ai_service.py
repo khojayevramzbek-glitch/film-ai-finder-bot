@@ -62,18 +62,22 @@ Javobni FAQAT quyidagi toza JSON formatida qaytaring:
 ```json
 {{
   "found": true,
-  "title_original": "Original Title (e.g. Undisputed II: Last Man Standing, Inception, Avatar)",
-  "title_uz": "O'zbekcha nomi (masalan: Bo'yko: Yengilmas)",
-  "title_ru": "Русское название (masalan: Неоспоримый)",
+  "title_original": "Original Title (e.g. Stranger Things, Undisputed II, Inception)",
+  "title_uz": "O'zbekcha nomi (masalan: Juda g'alati ishlar)",
+  "title_ru": "Русское название (masalan: Очень странные дела)",
   "media_type": "movie | series | cartoon | anime | trailer",
-  "release_year": "2006",
+  "release_year": "2016",
+  "rating": "8.7",
+  "genres": ["Fantastika", "Triller", "Drama"],
+  "format_details": "Teleserial (4 Fasl)",
+  "director": "The Duffer Brothers",
   "is_premiere": false,
   "premiere_date": null,
   "confidence": "high",
-  "characters_or_actors": ["Scott Adkins", "Yuri Boyka"],
-  "scene_description": "Videoda/suratda qaysi jang yoki sahna aks etgani",
-  "summary": "Filmning qisqacha mazmuni",
-  "confidence_reason": "Kadrdagi aktyor (Scott Adkins) va qamoqxona ringidagi jang orqali aniqlandi"
+  "characters_or_actors": ["Millie Bobby Brown", "Winona Ryder", "David Harbour", "Noah Schnapp"],
+  "scene_description": "Videoda/suratda qaysi epizod yoki jang aks etgani",
+  "summary": "Filmning to'liq va qiziqarli qisqacha mazmuni",
+  "confidence_reason": "Kadrdagi aktyorlar va mashhur sahna orqali aniqlandi"
 }}
 ```
 

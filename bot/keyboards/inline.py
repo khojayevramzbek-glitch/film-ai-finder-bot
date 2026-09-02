@@ -44,28 +44,29 @@ def get_movie_keyboard(
     encoded_title = urllib.parse.quote(title)
     clean_title = title.replace(":", " ").strip()[:20]
 
-    # 1. Trailer & Watch Online in Uzbek
+    # 1. Watch Online in HD & Official Trailer
     row1 = []
+    watch_uz_url = f"https://www.google.com/search?q={encoded_title}+tarjima+kino+uzbek+tilida+skachat+korish"
+    row1.append(InlineKeyboardButton(text="🍿 Kinoni Ko'rish (HD)", url=watch_uz_url))
+
     trailer_url = tmdb_data.get("trailer_url") if tmdb_data else None
     if trailer_url:
-        row1.append(InlineKeyboardButton(text=get_msg(lang, "btn_trailer"), url=trailer_url))
+        row1.append(InlineKeyboardButton(text="🎬 Rasmiy Treyler", url=trailer_url))
     else:
         yt_search_url = f"https://www.youtube.com/results?search_query={encoded_title}+trailer"
-        row1.append(InlineKeyboardButton(text=get_msg(lang, "btn_trailer_search"), url=yt_search_url))
+        row1.append(InlineKeyboardButton(text="🎬 Treyler (YouTube)", url=yt_search_url))
 
-    watch_uz_url = f"https://www.google.com/search?q={encoded_title}+tarjima+kino+uzbek+tilida+skachat+korish"
-    row1.append(InlineKeyboardButton(text=get_msg(lang, "btn_watch_uz"), url=watch_uz_url))
     buttons.append(row1)
 
     # 2. Save Watchlist (❤️) & Premiere Alert (🔔)
     row2 = []
-    save_text = get_msg(lang, "btn_saved_done") if is_saved else get_msg(lang, "btn_save_movie")
+    save_text = "💖 Saqlangan (Sevimlilarda)" if is_saved else "❤️ Sevimlilarga Saqlash"
     save_cb = safe_callback_data("unsave:" if is_saved else "save:", clean_title)
     row2.append(InlineKeyboardButton(text=save_text, callback_data=save_cb))
 
     is_premiere = ai_data.get("is_premiere", False) or (tmdb_data.get("is_premiere", False) if tmdb_data else False)
     if is_premiere:
-        alert_text = get_msg(lang, "btn_alert_done") if is_alert_set else get_msg(lang, "btn_premiere_alert")
+        alert_text = "🔕 Eslatma o'rnatilgan" if is_alert_set else "🔔 Premyerani Eslatish"
         alert_cb = safe_callback_data("unalert:" if is_alert_set else "alert:", clean_title)
         row2.append(InlineKeyboardButton(text=alert_text, callback_data=alert_cb))
 
@@ -74,39 +75,33 @@ def get_movie_keyboard(
     # 3. Similar Movies (AI recommendation)
     sim_cb = safe_callback_data("sim:", clean_title)
     buttons.append([
-        InlineKeyboardButton(text=get_msg(lang, "btn_similar"), callback_data=sim_cb)
+        InlineKeyboardButton(text="🎭 Shunga O'xshash TOP Kinolar", callback_data=sim_cb)
     ])
 
-    # 4. IMDb / Kinopoisk / TMDb
+    # 4. IMDb / Kinopoisk / Google
     row4 = []
+    rating_val = ai_data.get("rating") or (tmdb_data.get("rating") if tmdb_data else None) or "IMDb"
     imdb_id = tmdb_data.get("imdb_id") if tmdb_data else None
     if imdb_id:
         row4.append(
-            InlineKeyboardButton(text=get_msg(lang, "btn_imdb"), url=f"https://www.imdb.com/title/{imdb_id}/")
+            InlineKeyboardButton(text=f"⭐️ IMDb ({rating_val})", url=f"https://www.imdb.com/title/{imdb_id}/")
         )
     else:
-        kinopoisk_url = f"https://www.kinopoisk.ru/index.php?kp_query={encoded_title}"
         row4.append(
-            InlineKeyboardButton(text=get_msg(lang, "btn_kinopoisk"), url=kinopoisk_url)
+            InlineKeyboardButton(text=f"⭐️ IMDb ({rating_val})", url=f"https://www.google.com/search?q={encoded_title}+imdb")
         )
 
-    tmdb_url = tmdb_data.get("tmdb_url") if tmdb_data else None
-    if tmdb_url:
-        row4.append(
-            InlineKeyboardButton(text=get_msg(lang, "btn_tmdb"), url=tmdb_url)
-        )
-    else:
-        google_url = f"https://www.google.com/search?q={encoded_title}+movie"
-        row4.append(
-            InlineKeyboardButton(text=get_msg(lang, "btn_google"), url=google_url)
-        )
+    kinopoisk_url = f"https://www.kinopoisk.ru/index.php?kp_query={encoded_title}"
+    row4.append(
+        InlineKeyboardButton(text="🍿 Kinopoisk", url=kinopoisk_url)
+    )
     buttons.append(row4)
 
     # 5. Share button
-    share_template = get_msg(lang, "share_text", title=title)
-    share_url = f"https://t.me/share/url?url={urllib.parse.quote(share_template)}"
+    share_template = f"🎬 Men zo'r kino topdim: {title}! Sen ham @FilmAiFinderbot orqali qidirib ko'r!"
+    share_url = f"https://t.me/share/url?url={urllib.parse.quote('https://t.me/FilmAiFinderbot')}&text={urllib.parse.quote(share_template)}"
     buttons.append([
-        InlineKeyboardButton(text=get_msg(lang, "btn_share"), url=share_url)
+        InlineKeyboardButton(text="🚀 Do'stlarga Ulashish", url=share_url)
     ])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
