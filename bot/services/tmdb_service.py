@@ -54,38 +54,58 @@ class TMDbService:
         return None
 
     @staticmethod
-    async def fetch_fallback_poster(title: str) -> Optional[str]:
-        """Fetches HD movie poster from iTunes or Wikipedia without requiring any API keys."""
+    async def fetch_fallback_poster(title: str, year: Optional[str] = None) -> Optional[str]:
+        """
+        Fetches authentic HD cinema movie poster using Wikipedia Film Disambiguation
+        and strict Apple iTunes Movie filtering, ensuring TV reality shows or random albums
+        are never mistaken for feature films.
+        """
         import urllib.parse
         headers = {"User-Agent": "FilmFinderBot/3.5 (admin@filmfinder.uz)"}
+        clean = title.strip().replace(" ", "_")
 
-        # 1. Try iTunes Movie / TV
-        try:
-            url = f"https://itunes.apple.com/search?term={urllib.parse.quote(title)}&limit=1"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=4)) as resp:
+        # Prioritized cinema Wikipedia candidates
+        candidates = [
+            f"{clean}_(film)",
+            f"{clean}_({year}_film)" if year else "",
+            f"{clean}_(movie)",
+            f"{clean}_({year}_TV_series)" if year else "",
+            f"{clean}_(TV_series)",
+            clean
+        ]
+        candidates = [c for c in candidates if c]
+
+        async with aiohttp.ClientSession() as session:
+            # 1. Primary: Official Wikipedia Cinema Poster
+            for c in candidates:
+                wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{c}"
+                try:
+                    async with session.get(wiki_url, headers=headers, timeout=aiohttp.ClientTimeout(sock_connect=3, sock_read=3)) as resp:
+                        if resp.status == 200:
+                            data = await resp.json(content_type=None)
+                            img_dict = data.get("originalimage") or data.get("thumbnail")
+                            if img_dict and isinstance(img_dict, dict) and img_dict.get("source"):
+                                desc = (data.get("description") or "").lower()
+                                if "(film)" in c or "(movie)" in c or any(w in desc for w in ["film", "movie", "series", "directed", "drama", "thriller", "horror"]):
+                                    return img_dict["source"]
+                except Exception:
+                    pass
+
+            # 2. Secondary: Strict iTunes Movie Search (ONLY feature-movies, NO TV episodes)
+            try:
+                itunes_url = f"https://itunes.apple.com/search?term={urllib.parse.quote(title)}&entity=movie&limit=3"
+                async with session.get(itunes_url, headers=headers, timeout=aiohttp.ClientTimeout(sock_connect=3, sock_read=3)) as resp:
                     if resp.status == 200:
                         data = await resp.json(content_type=None)
-                        if data.get("resultCount", 0) > 0:
-                            artwork = data["results"][0].get("artworkUrl100", "")
-                            if artwork:
-                                return artwork.replace("100x100bb", "600x600bb")
-        except Exception:
-            pass
-
-        # 2. Try Wikipedia
-        try:
-            clean_title = title.replace(" ", "_")
-            wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(clean_title)}"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(wiki_url, headers=headers, timeout=aiohttp.ClientTimeout(total=4)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json(content_type=None)
-                        img = data.get("originalimage", {}).get("source") or data.get("thumbnail", {}).get("source")
-                        if img:
-                            return img
-        except Exception:
-            pass
+                        for item in data.get("results", []):
+                            t_name = (item.get("trackName") or "").lower()
+                            t_clean = title.lower().strip()
+                            if t_clean == t_name or t_clean in t_name or t_name in t_clean:
+                                art = item.get("artworkUrl100", "")
+                                if art:
+                                    return art.replace("100x100bb", "600x600bb")
+            except Exception:
+                pass
 
         return None
 
@@ -111,11 +131,11 @@ class TMDbService:
                 if media_type in ("movie", "tv"):
                     details = await self._extract_details(item, media_type)
                     if not details.get("poster_url"):
-                        details["poster_url"] = await self.fetch_fallback_poster(title)
+                        details["poster_url"] = await self.fetch_fallback_poster(title, year=year)
                     return details
 
         # Universal Fallback (when TMDb has no key or finds nothing)
-        fallback_poster = await self.fetch_fallback_poster(title)
+        fallback_poster = await self.fetch_fallback_poster(title, year=year)
         return {
             "id": None,
             "title": title,
