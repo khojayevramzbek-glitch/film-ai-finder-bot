@@ -16,5 +16,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy project files
 COPY . .
 
+# Expose HTTP port for Koyeb & health-checks
+EXPOSE 8000
+
 # Run bot
 CMD ["python", "run.py"]
+
