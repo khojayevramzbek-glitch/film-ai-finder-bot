@@ -98,8 +98,8 @@ async def main():
 
     logger.info(f"🔑 Gemini Kalitlar: {len(GEMINI_API_KEYS)} ta | Groq Kalitlar: {len(GROQ_API_KEYS)} ta")
 
-    # Start background health server (Koyeb, Render, Cloud Platforms)
-    port = os.getenv("PORT", "8000")
+    # Start background health server (Hugging Face Spaces, Koyeb, Render)
+    port = os.getenv("PORT", "7860")
     if port:
         try:
             await start_web_server(int(port))

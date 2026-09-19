@@ -6,6 +6,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Create non-root user for Hugging Face Spaces compatibility
+RUN useradd -m -u 1000 user
+
 WORKDIR /app
 
 # Upgrade pip and install Python packages
@@ -13,12 +16,20 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy project files
-COPY . .
+# Copy project files and ensure user ownership
+COPY --chown=user:user . .
 
-# Expose HTTP port for Koyeb & health-checks
-EXPOSE 8000
+# Ensure downloads directory exists with correct permissions
+RUN mkdir -p /app/downloads && chown -R user:user /app
+
+USER user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH
+
+# Expose HTTP port for Hugging Face (7860) and cloud platforms
+EXPOSE 7860
 
 # Run bot
 CMD ["python", "run.py"]
+
 
