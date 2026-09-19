@@ -1,3 +1,14 @@
+---
+title: Film Ai Finder Bot
+emoji: 🎬
+colorFrom: blue
+colorTo: indigo
+sdk: gradio
+app_file: app.py
+pinned: false
+license: mit
+---
+
 <div align="center">
   <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=1,12,24,31&height=220&section=header&text=FilmFinder%20AI%203.5&fontSize=50&fontAlignY=38&desc=Dual-Engine%20Multimodal%20Cinema%20AI%20Telegram%20Bot%20Cluster&descAlignY=58&descFontSize=20&fontColor=ffffff" alt="FilmFinder Header" width="100%" />
 
