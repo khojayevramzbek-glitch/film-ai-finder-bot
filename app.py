@@ -15,6 +15,16 @@ if sys.platform == "win32":
 
 import run
 
+try:
+    import spaces
+
+    @spaces.GPU
+    def zero_gpu_initializer(dummy=None):
+        """ZeroGPU requirement hook for Hugging Face Spaces."""
+        return "ZeroGPU Ready"
+except Exception:
+    pass
+
 
 def run_telegram_bot():
     """Runs the main bot cluster in a background event loop."""
