@@ -28,7 +28,7 @@ def parse_key_list(env_val: str) -> List[str]:
 
 
 # Gemini API Keys
-_raw_gemini = os.getenv("GEMINI_API_KEYS", "") or os.getenv("GEMINI_API_KEY", "")
+_raw_gemini = os.getenv("GEMINI_API_KEYS", "") or os.getenv("GEMINI_API_KEY", "") or os.getenv("GFMTNT_APT_KFYS", "")
 GEMINI_API_KEYS: List[str] = parse_key_list(_raw_gemini)
 
 # TMDb API Keys
