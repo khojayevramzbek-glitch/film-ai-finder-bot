@@ -67,8 +67,8 @@ async def main():
     dp.message.outer_middleware(AntiFloodMiddleware())
     dp.include_router(main_router)
 
-    # Eski navbatda turgan xabarlarni tozalash
-    await bot.delete_webhook(drop_pending_updates=True)
+    # Navbatdagi xabarlarni saqlab qolish
+    await bot.delete_webhook(drop_pending_updates=False)
 
     bot_info = await bot.get_me()
     logger.info(f"Bot faol: @{bot_info.username} ({bot_info.first_name}) [ID: {bot_info.id}]")
