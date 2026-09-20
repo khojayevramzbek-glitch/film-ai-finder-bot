@@ -53,6 +53,16 @@ def init_db():
                 updated_at TIMESTAMP NOT NULL
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_sleep (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                full_name TEXT,
+                sleep_until TIMESTAMP NOT NULL,
+                sleep_start TIMESTAMP NOT NULL,
+                reason TEXT
+            );
+        """)
         conn.commit()
 
 
@@ -273,3 +283,115 @@ def get_user_by_id(user_id: int) -> dict | None:
         )
         row = cursor.fetchone()
         return dict(row) if row else None
+
+
+def set_user_sleep(user_id: int, username: str | None, full_name: str, duration_seconds: int, reason: str | None = None) -> datetime:
+    """Foydalanuvchi uchun uyqu / bandlik rejimini belgilash."""
+    now_utc = datetime.now(timezone.utc)
+    sleep_until = now_utc + timedelta(seconds=duration_seconds)
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_sleep (user_id, username, full_name, sleep_until, sleep_start, reason)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                username = excluded.username,
+                full_name = excluded.full_name,
+                sleep_until = excluded.sleep_until,
+                sleep_start = excluded.sleep_start,
+                reason = excluded.reason
+            """,
+            (user_id, username, full_name, sleep_until.isoformat(), now_utc.isoformat(), reason)
+        )
+        conn.commit()
+    return sleep_until
+
+
+def get_user_sleep(user_id: int) -> dict | None:
+    """Foydalanuvchining faol uyqu rejimini olish. Agar muddati o'tgan bo'lsa, o'chirib None qaytaradi."""
+    now_utc = datetime.now(timezone.utc)
+    with get_connection() as conn:
+        cur = conn.execute("SELECT * FROM user_sleep WHERE user_id = ?", (user_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+
+        raw_until = row["sleep_until"]
+        if isinstance(raw_until, str):
+            sleep_until = datetime.fromisoformat(raw_until)
+        else:
+            sleep_until = raw_until
+        if sleep_until.tzinfo is None:
+            sleep_until = sleep_until.replace(tzinfo=timezone.utc)
+
+        if sleep_until <= now_utc:
+            conn.execute("DELETE FROM user_sleep WHERE user_id = ?", (user_id,))
+            conn.commit()
+            return None
+
+        raw_start = row["sleep_start"]
+        if isinstance(raw_start, str):
+            sleep_start = datetime.fromisoformat(raw_start)
+        else:
+            sleep_start = raw_start
+        if sleep_start.tzinfo is None:
+            sleep_start = sleep_start.replace(tzinfo=timezone.utc)
+
+        return {
+            "user_id": row["user_id"],
+            "username": row["username"],
+            "full_name": row["full_name"],
+            "sleep_until": sleep_until,
+            "sleep_start": sleep_start,
+            "reason": row["reason"]
+        }
+
+
+def remove_user_sleep(user_id: int):
+    """Foydalanuvchini uyqu rejimidan chiqarish."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM user_sleep WHERE user_id = ?", (user_id,))
+        conn.commit()
+
+
+def get_all_active_sleeps() -> list[dict]:
+    """Barcha faol uyqudagi foydalanuvchilar ro'yxati."""
+    now_utc = datetime.now(timezone.utc)
+    active = []
+    with get_connection() as conn:
+        cur = conn.execute("SELECT * FROM user_sleep")
+        rows = cur.fetchall()
+        expired_ids = []
+        for row in rows:
+            raw_until = row["sleep_until"]
+            if isinstance(raw_until, str):
+                sleep_until = datetime.fromisoformat(raw_until)
+            else:
+                sleep_until = raw_until
+            if sleep_until.tzinfo is None:
+                sleep_until = sleep_until.replace(tzinfo=timezone.utc)
+
+            if sleep_until <= now_utc:
+                expired_ids.append(row["user_id"])
+            else:
+                raw_start = row["sleep_start"]
+                if isinstance(raw_start, str):
+                    sleep_start = datetime.fromisoformat(raw_start)
+                else:
+                    sleep_start = raw_start
+                if sleep_start.tzinfo is None:
+                    sleep_start = sleep_start.replace(tzinfo=timezone.utc)
+
+                active.append({
+                    "user_id": row["user_id"],
+                    "username": row["username"],
+                    "full_name": row["full_name"],
+                    "sleep_until": sleep_until,
+                    "sleep_start": sleep_start,
+                    "reason": row["reason"]
+                })
+        if expired_ids:
+            placeholders = ",".join("?" for _ in expired_ids)
+            conn.execute(f"DELETE FROM user_sleep WHERE user_id IN ({placeholders})", expired_ids)
+            conn.commit()
+    return active
