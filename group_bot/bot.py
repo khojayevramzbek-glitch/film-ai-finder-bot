@@ -74,7 +74,11 @@ async def main():
     logger.info(f"Bot faol: @{bot_info.username} ({bot_info.first_name}) [ID: {bot_info.id}]")
 
     try:
-        await dp.start_polling(bot, allowed_updates=["message", "chat_member", "my_chat_member"], handle_signals=False)
+        await dp.start_polling(
+            bot,
+            allowed_updates=["message", "chat_member", "my_chat_member", "callback_query"],
+            handle_signals=False
+        )
     finally:
         await bot.session.close()
         logger.info("Bot to'xtatildi.")
