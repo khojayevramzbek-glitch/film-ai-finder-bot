@@ -1,64 +1,195 @@
-from aiogram import Router, types
+from aiogram import Router, types, Bot, F
 from aiogram.filters import Command
 from aiogram.enums import ChatType
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from html import escape
 
 router = Router()
 
+
+def get_main_menu_keyboard(bot_username: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="➕ Guruhga Qo'shish",
+                    url=f"https://t.me/{bot_username}?startgroup=true"
+                )
+            ],
+            [
+                InlineKeyboardButton(text="📋 Barcha Buyruqlar", callback_data="menu_commands"),
+                InlineKeyboardButton(text="🛡 Himoya Tizimlari", callback_data="menu_security"),
+            ],
+            [
+                InlineKeyboardButton(text="😴 AFK / Sleep Rejimi", callback_data="menu_afk"),
+                InlineKeyboardButton(text="📜 Qoidalar & Sozlash", callback_data="menu_rules"),
+            ],
+            [
+                InlineKeyboardButton(text="👑 Bosh Admin bilan bog'lanish", url="https://t.me/khojayev_ramz")
+            ]
+        ]
+    )
+
+
+def get_back_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="◀️ Asosiy Menyuga Qaytish", callback_data="menu_back")
+            ]
+        ]
+    )
+
+
+def get_welcome_text(user_full_name: str) -> str:
+    return (
+        f"🛡 <b>Assalomu alaykum, {escape(user_full_name)}!</b>\n\n"
+        "<b>Oken Sherda Bot</b> — Telegram guruhlaringizni 24/7 rejimida tartibda saqlovchi, "
+        "spam va toshqinlardan himoya qiluvchi hamda qulay boshqaruvni ta'minlovchi professional robot-moderator!\n\n"
+        "✨ <b>Botning Asosiy Imkoniyatlari:</b>\n"
+        "├ ⚡️ <b>Aqlli Anti-Flood & Anti-Spam:</b> Ketma-ket yozilgan xabarlar, stiker, GIF va premium emojilar toshqinini darhol o'chiradi va cheklaydi.\n"
+        "├ 🔇 <b>Kuchli Moderatsiya:</b> <code>/mute</code>, <code>/ban</code>, <code>/warn</code> — ham Reply, ham to'g'ridan-to'g'ri <code>@username</code> orqali ishlaydi!\n"
+        "├ 😴 <b>AFK / Uyqu Rejimi:</b> Adminlar band bo'lganda (<code>/sleep 1h</code>), ularni chaqirganlarga bot qachon kelishini avtomatik aytadi.\n"
+        "├ 📜 <b>Moslashuvchan Qoidalar:</b> Guruh qoidalarini saqlash va ko'rsatish (<code>/rules</code>, <code>/setrules</code>).\n"
+        "└ 📊 <b>Guruh Statistikasi:</b> 24 soatlik xabarlar va eng faol a'zolar hisobi.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🚀 <b>Botni Guruhingizga Qo'shish:</b>\n"
+        "1️⃣ Pastdagi <b>«➕ Guruhga Qo'shish»</b> tugmasini bosing va guruhingizni tanlang.\n"
+        "2️⃣ Botga guruhda <b>Administrator</b> huquqlarini bering (xabarlarni o'chirish va a'zolarni cheklash).\n"
+        "3️⃣ Tayyor! Bot guruhingizni bir umr xavfsiz himoya qiladi.\n\n"
+        "<i>Batafsil ma'lumot olish uchun quyidagi tugmalardan birini tanlang:</i>"
+    )
+
+
+COMMANDS_TEXT = (
+    "📋 <b>Barcha Buyruqlar Ro'yxati:</b>\n\n"
+    "👮‍♂️ <b>Admin Buyruqlari (Reply yoki @username orqali):</b>\n"
+    "• <code>/mute @user 15m</code> — Foydalanuvchini yozishdan cheklash (15m, 2h, 1d)\n"
+    "• <code>/unmute @user</code> — Yozish cheklovini olib tashlash\n"
+    "• <code>/ban @user</code> — Guruhdan chiqarish va bloklash\n"
+    "• <code>/unban @user</code> — Blokdan chiqarish\n"
+    "• <code>/warn @user [sabab]</code> — Ogohlantirish berish (3 tasida cheklanadi)\n"
+    "• <code>/unwarn @user</code> — Ogohlantirishni bekor qilish\n"
+    "• <code>statasi @user</code> — Foydalanuvchi faolligini ko'rish\n\n"
+    "😴 <b>AFK / Sleep Buyruqlari:</b>\n"
+    "• <code>/sleep 1h [sabab]</code> — Uyqu yoki bandlik rejimini yoqish\n"
+    "• <code>/wake</code> — Uyqu rejimidan chiqish\n\n"
+    "📜 <b>Umumiy Buyruqlar:</b>\n"
+    "• <code>/rules</code> — Guruh qoidalarini ko'rish\n"
+    "• <code>/setrules [matn]</code> — Yangi qoidalarni kiritish (faqat asosiy adminlar)\n"
+    "• <code>/info</code> — Guruh va shaxsiy ID ma'lumotlari\n"
+    "• <code>/help</code> — Yordam xabari"
+)
+
+SECURITY_TEXT = (
+    "🛡 <b>Aqlli Himoya Tizimlari (Anti-Flood & Anti-Spam):</b>\n\n"
+    "Botingiz guruhni quyidagi nojo'ya harakatlardan 24/7 avtomatik himoya qiladi:\n\n"
+    "1️⃣ <b>Stiker va GIF Toshqini:</b>\n"
+    "Foydalanuvchi 4 soniya ichida 2 tadan ortiq stiker yoki GIF yuborsa, bot xabarlarni darhol o'chiradi va 1 daqiqaga mute beradi.\n\n"
+    "2️⃣ <b>Ketma-ket Bo'lak Xabarlar (Piece Flood):</b>\n"
+    "Guruhda tez-tez qisqa-qisqa so'zlar (masalan: <i>'salom'</i>, <i>'qales'</i>, <i>'yaxshimisz'</i>) yozib chatni to'ldiruvchilarning xabarlari tozalanadi.\n\n"
+    "3️⃣ <b>Katta Matnlar (Offtop spam):</b>\n"
+    "Ekranni egallab oluvchi ko'p qatorli keraksiz matnlar zudlik bilan nazoratga olinadi.\n\n"
+    "4️⃣ <b>Adminlar Uchun Himoya:</b>\n"
+    "Adminlar guruhda bemalol boshqaruv olib borishlari uchun ularga nisbatan cheklovlar qo'llanmaydi, lekin nojo'ya flood bo'lsa chat tozalanadi."
+)
+
+AFK_TEXT = (
+    "😴 <b>AFK / Sleep (Uyqu va Bandlik) Tizimi:</b>\n\n"
+    "Adminlar yoki a'zolar darsda, ishda yoki uyquda bo'lganlarida guruhdoshlariga xushmuomala javob qaytarish tizimi!\n\n"
+    "📌 <b>Qanday Ishlatiladi?</b>\n"
+    "• <code>/sleep 1h</code> — 1 soatga uyqu rejimiga o'tish\n"
+    "• <code>/sleep 2</code> — 2 soatga (faqat son yozilsa, soat deb olinadi)\n"
+    "• <code>/sleep 30m darsdaman</code> — 30 daqiqaga, sababi ko'rsatilgan holda\n"
+    "• <code>/sleep 45m uxlayapman</code>\n\n"
+    "🤖 <b>Bot Qanday Javob Beradi?</b>\n"
+    "Siz yo'qligingizda kimdir sizning xabaringizga <b>Reply</b> qilsa, <b>@username</b> bilan chaqirsa yoki ismingizni yozsa, bot quyidagicha javob beradi:\n"
+    "<i>'😴 Ramzbek hozir online emas (uyquda / band).\n"
+    "⏰ Taxminiy qaytish vaqti: soat 23:45 da (45 daqiqa qoldi).\n"
+    "📝 Sabab: darsdaman'</i>\n\n"
+    "👋 <b>Uyg'onish:</b>\n"
+    "Guruhga qaytib istalgan xabar yozishingiz bilan bot sizni kutib oladi va rejim avtomatik o'chadi!"
+)
+
+RULES_TEXT = (
+    "📜 <b>Guruh Qoidalari & Statistika Tizimi:</b>\n\n"
+    "1️⃣ <b>Guruh Qoidalari:</b>\n"
+    "• Guruh a'zolari <code>/rules</code> yoki <code>qoidalar</code> deb yozishganda bot guruhning rasmiy qoidalarini ko'rsatadi.\n"
+    "• Asosiy adminlar <code>/setrules [matn]</code> buyrug'i orqali qoidalarni istalgan vaqt yangilashlari mumkin.\n\n"
+    "2️⃣ <b>Guruh Statistikasi:</b>\n"
+    "• Bot guruhdagi har bir a'zoning so'nggi 24 soat ichida yozgan xabarlarini aniq hisoblab boradi.\n"
+    "• <code>statasi @username</code> orqali istalgan foydalanuvchining faolligini tekshirish mumkin.\n"
+    "• Guruhda bot tozalagan barcha flood xabarlar statistikaga kiritilmaydi (aniq va toza hisob)."
+)
+
+
 @router.message(Command("start"))
-async def cmd_start(message: types.Message):
+async def cmd_start(message: types.Message, bot: Bot):
+    bot_info = await bot.get_me()
+    bot_username = bot_info.username or "oken_sherda_bot"
+
     if message.chat.type == ChatType.PRIVATE:
-        text = (
-            f"Assalomu alaykum, <b>{escape(message.from_user.full_name)}</b>!\n\n"
-            "Men Telegram guruhlarini boshqarish, yangi a'zolarni kutib olish va guruhda "
-            "tartibni saqlash uchun yaratilgan botman.\n\n"
-            "<b>Botni ishlatish uchun:</b>\n"
-            "1. Meni guruhingizga qo'shing.\n"
-            "2. Menga guruhda <b>Administrator</b> huquqlarini bering.\n"
-            "3. Guruhda <code>/help</code> buyrug'ini yuboring."
+        text = get_welcome_text(message.from_user.full_name)
+        await message.answer(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_main_menu_keyboard(bot_username)
         )
-        await message.answer(text, parse_mode="HTML")
     else:
         await message.reply(
-            "Bot guruhda faol ishlamoqda! Buyruqlar ro'yxatini ko'rish uchun <code>/help</code> deb yozing.",
+            "🛡 <b>Oken Sherda Bot guruhda faol ishlamoqda!</b>\n\n"
+            "Buyruqlar ro'yxatini ko'rish uchun <code>/help</code> deb yozing.",
             parse_mode="HTML"
         )
 
-@router.message(Command("help"))
-async def cmd_help(message: types.Message):
-    help_text = (
-        "<b>📋 Bot Buyruqlari:</b>\n\n"
-        "<b>Umumiy buyruqlar:</b>\n"
-        "• <code>/info</code> — Guruh haqida ma'lumot (ID, a'zolar soni)\n"
-        "• <code>/rules</code> — Guruh qoidalari\n"
-        "• <code>/help</code> — Ushbu yordam xabari\n\n"
-        "<b>👮‍♂️ Admin buyruqlari (xabarga reply qilib yoziladi):</b>\n"
-        "• <code>/ban</code> — Foydalanuvchini guruhdan chiqarish\n"
-        "• <code>/unban</code> — Foydalanuvchi blokini ochish\n"
-        "• <code>/mute &lt;vaqt&gt;</code> — Foydalanuvchini yozishdan cheklash (masalan: <code>/mute 10m</code>, <code>/mute 2h</code>)\n"
-        "• <code>/unmute</code> — Yozish cheklovini bekor qilish\n"
-        "• <code>/warn</code> — Foydalanuvchiga ogohlantirish berish (3 ta ogohlantirishda cheklanadi)"
-    )
-    await message.reply(help_text, parse_mode="HTML")
 
-@router.message(Command("rules"))
-async def cmd_rules(message: types.Message):
-    rules_text = (
-        "<b>📜 Guruh Qoidalari:</b>\n\n"
-        "1. Bir-biringizni hurmat qiling, haqorat va kamsitishlarga yo'l qo'yilmaydi.\n"
-        "2. Reklama, spam va ruxsatsiz havolalar (linklar) yuborish taqiqlanadi.\n"
-        "3. Mavzudan tashqari (offtop) xabarlarni ko'p yubormang.\n"
-        "4. Adminlar talablariga rioya qiling.\n\n"
-        "<i>Qoidalarni buzgan foydalanuvchilar guruhdan chiqariladi yoki cheklanadi.</i>"
-    )
-    await message.reply(rules_text, parse_mode="HTML")
+@router.message(Command("help"))
+async def cmd_help(message: types.Message, bot: Bot):
+    bot_info = await bot.get_me()
+    bot_username = bot_info.username or "oken_sherda_bot"
+
+    if message.chat.type == ChatType.PRIVATE:
+        await message.answer(
+            COMMANDS_TEXT,
+            parse_mode="HTML",
+            reply_markup=get_main_menu_keyboard(bot_username)
+        )
+    else:
+        await message.reply(
+            COMMANDS_TEXT,
+            parse_mode="HTML"
+        )
+
+
+@router.callback_query(F.data.startswith("menu_"))
+async def handle_menu_callbacks(call: CallbackQuery, bot: Bot):
+    bot_info = await bot.get_me()
+    bot_username = bot_info.username or "oken_sherda_bot"
+    data = call.data
+
+    if data == "menu_commands":
+        await call.message.edit_text(COMMANDS_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
+    elif data == "menu_security":
+        await call.message.edit_text(SECURITY_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
+    elif data == "menu_afk":
+        await call.message.edit_text(AFK_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
+    elif data == "menu_rules":
+        await call.message.edit_text(RULES_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
+    elif data == "menu_back":
+        text = get_welcome_text(call.from_user.full_name)
+        await call.message.edit_text(text, parse_mode="HTML", reply_markup=get_main_menu_keyboard(bot_username))
+
+    await call.answer()
+
 
 @router.message(Command("info"))
 async def cmd_info(message: types.Message):
     if message.chat.type == ChatType.PRIVATE:
         await message.answer(
-            f"Sizning ID raqamingiz: <code>{message.from_user.id}</code>\n"
-            f"Ismingiz: {escape(message.from_user.full_name)}",
+            f"👤 <b>Foydalanuvchi Ma'lumotlari:</b>\n\n"
+            f"<b>Ism:</b> {escape(message.from_user.full_name)}\n"
+            f"<b>ID:</b> <code>{message.from_user.id}</code>\n"
+            f"<b>Username:</b> @{message.from_user.username or 'yo‘q'}",
             parse_mode="HTML"
         )
         return
