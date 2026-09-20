@@ -526,3 +526,10 @@ def set_stats_public(chat_id: int, is_public: bool):
             (chat_id, val, val)
         )
         conn.commit()
+
+
+def get_all_group_ids() -> list[int]:
+    """Bazadagi barcha guruh chat_id larini olish."""
+    with get_connection() as conn:
+        cursor = conn.execute("SELECT DISTINCT chat_id FROM messages WHERE chat_id < 0")
+        return [row["chat_id"] for row in cursor.fetchall()]
