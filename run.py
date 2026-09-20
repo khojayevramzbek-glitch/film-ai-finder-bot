@@ -133,7 +133,7 @@ async def main():
     logger.info(f"✅ Asosiy qidiruv boti ulandi: @{main_me.username} ({main_me.first_name})")
 
     polling_tasks = [
-        main_dp.start_polling(main_bot),
+        main_dp.start_polling(main_bot, handle_signals=False),
         start_cloud_backup_scheduler()
     ]
 
@@ -152,7 +152,7 @@ async def main():
 
             admin_me = await admin_bot.get_me()
             logger.info(f"👑 Maxsus Admin Boti ulandi: @{admin_me.username} ({admin_me.first_name})")
-            polling_tasks.append(admin_dp.start_polling(admin_bot))
+            polling_tasks.append(admin_dp.start_polling(admin_bot, handle_signals=False))
         except Exception as e:
             logger.error(f"❌ Admin Botni ishga tushirishda xatolik: {e}")
 

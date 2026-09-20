@@ -31,26 +31,22 @@ except Exception:
 
 
 def run_telegram_bot():
-    """Runs the main bot cluster in a background event loop with auto-restart."""
+    """Runs the main bot cluster in a background event loop."""
     print("🚀 [Hugging Face Space] Kino Bot Klasteri ishga tushirilmoqda...", flush=True)
-    while True:
-        try:
-            asyncio.run(run.main())
-        except Exception as e:
-            print(f"❌ [Film Bot Fatal Error] {e}", flush=True)
-            time.sleep(5)
+    try:
+        asyncio.run(run.main())
+    except Exception as e:
+        print(f"❌ [Film Bot Fatal Error] {e}", flush=True)
 
 
 def run_group_bot():
-    """Runs the Telegram Group Moderation Bot (@oken_sherda_bot) in a background event loop with auto-restart."""
+    """Runs the Telegram Group Moderation Bot (@oken_sherda_bot) in a background event loop."""
     print("🛡 [Hugging Face Space] Guruh Moderatsiya Boti (@oken_sherda_bot) ishga tushirilmoqda...", flush=True)
-    while True:
-        try:
-            from group_bot import bot as group_bot_module
-            asyncio.run(group_bot_module.main())
-        except Exception as e:
-            print(f"❌ [Group Bot Fatal Error] {e}", flush=True)
-            time.sleep(5)
+    try:
+        from group_bot import bot as group_bot_module
+        asyncio.run(group_bot_module.main())
+    except Exception as e:
+        print(f"❌ [Group Bot Fatal Error] {e}", flush=True)
 
 
 # Start both bots in background daemon threads
