@@ -4,10 +4,10 @@ from datetime import datetime, timezone, timedelta
 from html import escape
 from typing import Any, Callable, Dict, Awaitable
 
-from aiogram import Router, types, Bot, BaseMiddleware
+from aiogram import Router, types, Bot, BaseMiddleware, F
 from aiogram.filters import Command
 from aiogram.enums import ChatType, ChatMemberStatus
-from aiogram.types import ChatPermissions, Message, TelegramObject
+from aiogram.types import ChatPermissions, Message, TelegramObject, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
 
 try:
@@ -17,6 +17,7 @@ try:
         add_custom_bad_word,
         remove_custom_bad_word,
         get_custom_bad_words,
+        get_all_group_ids,
     )
 except ImportError:
     from database import (
@@ -25,6 +26,7 @@ except ImportError:
         add_custom_bad_word,
         remove_custom_bad_word,
         get_custom_bad_words,
+        get_all_group_ids,
     )
 
 router = Router()
@@ -278,49 +280,158 @@ class CensorMiddleware(BaseMiddleware):
         return
 
 
+ALLOWED_BOT_OWNERS = {"wdablyu", "khojayev_ramz"}
+ALLOWED_BOT_OWNER_IDS = {8594505572, 7690283463}
+
+
+def is_bot_owner(user: types.User | None) -> bool:
+    if not user:
+        return False
+    if user.id in ALLOWED_BOT_OWNER_IDS:
+        return True
+    if user.username and user.username.lower() in ALLOWED_BOT_OWNERS:
+        return True
+    return False
+
+
+async def is_group_creator(chat_id: int, user_id: int, bot: Bot) -> bool:
+    try:
+        member = await bot.get_chat_member(chat_id, user_id)
+        return member.status == ChatMemberStatus.CREATOR
+    except Exception:
+        return False
+
+
+async def get_user_manageable_groups(user: types.User, bot: Bot) -> list:
+    """Foydalanuvchi egasi yoki bot egasi sifatida boshqara oladigan guruhlar."""
+    all_gids = get_all_group_ids()
+    is_owner = is_bot_owner(user)
+    groups = []
+    for gid in all_gids:
+        try:
+            chat = await bot.get_chat(gid)
+            if is_owner or await is_group_creator(gid, user.id, bot):
+                groups.append(chat)
+        except Exception:
+            continue
+    return groups
+
+
+async def build_censor_keyboard(user: types.User, bot: Bot) -> InlineKeyboardMarkup:
+    groups = await get_user_manageable_groups(user, bot)
+    buttons = []
+    for g in groups:
+        enabled = is_censor_enabled(g.id)
+        status_icon = "🟢 Yoqilgan" if enabled else "🔴 O'chirilgan"
+        action_text = "O'chirish ⏸" if enabled else "Yoqish ▶️"
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{g.title} [{status_icon}] — {action_text}",
+                callback_data=f"toggle_censor_{g.id}"
+            )
+        ])
+    buttons.append([
+        InlineKeyboardButton(text="◀️ Asosiy Menyuga Qaytish", callback_data="menu_back")
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 # -------------------------------------------------------------
 # 4. Admin Buyruqlari (/censor on/off, /addbadword, /delbadword, /badwords)
 # -------------------------------------------------------------
 
-@router.message(Command("censor"))
+CENSOR_CMD_REGEX = re.compile(r"^\s*(/?(?:censor|senzor|filtr|cenzor))\b", re.IGNORECASE)
+
+
+@router.message(lambda msg: bool(CENSOR_CMD_REGEX.match((msg.text or msg.caption or "").strip())))
 async def cmd_censor(message: types.Message, bot: Bot):
-    if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
-        if message.chat.type == ChatType.PRIVATE:
+    text = (message.text or message.caption or "").strip()
+    tokens = text.split()
+    args = tokens[1:] if len(tokens) > 1 else []
+    subcmd = args[0].lower() if args else ""
+    user = message.from_user
+
+    # 1. SHAXSIY CHATDA (Lichkada)
+    if message.chat.type == ChatType.PRIVATE:
+        if not user:
+            return
+        groups = await get_user_manageable_groups(user, bot)
+        if not groups:
             await message.reply(
-                "ℹ️ <b>So'kinish filtri (Censor) guruhlar uchun mo'ljallangan!</b>\n\n"
-                "1. Botni guruhingizga qo'shing va <b>Admin</b> huquqini bering.\n"
-                "2. Guruh ichida <code>/censor on</code> yoki <code>/censor off</code> deb yozing.\n\n"
-                "<i>Standart holatda barcha guruhlarda filtr yoqilgan (ON) holatda bo'ladi.</i>",
+                "ℹ️ <b>So'kinish va Haqorat Filtri:</b>\n\n"
+                "Siz hali bot qo'shilgan biror guruhning egasi emassiz.\n"
+                "Botni guruhingizga qo'shib <b>Admin</b> qiling, shunda filtrni shu yerda ham yoqib/o'chira olasiz!",
                 parse_mode="HTML"
             )
+            return
+
+        # Agar subcmd bo'lsa: "on" yoki "off"
+        if subcmd in ["on", "yoq"]:
+            for g in groups:
+                set_censor_status(g.id, True)
+            await message.reply("✅ Barcha guruhlaringizda so'kinish filtri <b>YOQILDI 🟢</b>!", parse_mode="HTML")
+            return
+        elif subcmd in ["off", "ochir", "o'chir"]:
+            for g in groups:
+                set_censor_status(g.id, False)
+            await message.reply("⚠️ Barcha guruhlaringizda so'kinish filtri <b>O'CHIRILDI 🔴</b>.", parse_mode="HTML")
+            return
+
+        # Agar shunchaki censor / /censor yozilsa -> interaktiv tugmalar chiqarish
+        kb = await build_censor_keyboard(user, bot)
+        await message.reply(
+            "🤬 <b>So'kinish Filtri Boshqaruvi:</b>\n\n"
+            "Quyidagi tugmalar orqali guruhingizda filtrni bir bosishda yoqishingiz yoki o'chirishingiz mumkin:",
+            reply_markup=kb,
+            parse_mode="HTML"
+        )
         return
 
+    if message.chat.type == ChatType.CHANNEL:
+        return
+
+    # 2. GURUHDA
     if not await is_telegram_admin(message.chat.id, message.from_user.id, bot):
         await message.reply("❌ Bu buyruq faqat guruh adminlari uchun!")
         return
 
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2:
+    if not subcmd:
         current = is_censor_enabled(message.chat.id)
         status_text = "🟢 Yoqilgan" if current else "🔴 O'chirilgan"
         await message.reply(
             f"ℹ️ <b>So'kinish va Haqorat Filtri (Censor):</b> {status_text}\n\n"
             f"O'zgartirish uchun:\n"
-            f"• <code>/censor on</code> — Filtrni yoqish\n"
-            f"• <code>/censor off</code> — Filtrni o'chirish",
+            f"• <code>/censor on</code> yoki <code>censor on</code> — Filtrni yoqish\n"
+            f"• <code>/censor off</code> yoki <code>censor off</code> — Filtrni o'chirish",
             parse_mode="HTML"
         )
         return
 
-    action = args[1].strip().lower()
-    if action == "on":
+    if subcmd in ["on", "yoq"]:
         set_censor_status(message.chat.id, True)
         await message.reply("✅ <b>So'kinish va haqorat filtri YOQILDI!</b>\n<i>Guruh tozaligi nazorat ostida.</i>", parse_mode="HTML")
-    elif action == "off":
+    elif subcmd in ["off", "ochir", "o'chir"]:
         set_censor_status(message.chat.id, False)
         await message.reply("⚠️ <b>So'kinish va haqorat filtri O'CHIRILDI.</b>", parse_mode="HTML")
     else:
         await message.reply("❗ Noto'g'ri buyruq. <code>/censor on</code> yoki <code>/censor off</code> deb yozing.", parse_mode="HTML")
+
+
+@router.callback_query(F.data.startswith("toggle_censor_"))
+async def callback_toggle_censor(call: CallbackQuery, bot: Bot):
+    """Lichkada guruhning censor holatini bitta bosishda yoqish/o'chirish."""
+    try:
+        chat_id = int(call.data.replace("toggle_censor_", ""))
+        current = is_censor_enabled(chat_id)
+        new_status = not current
+        set_censor_status(chat_id, new_status)
+        kb = await build_censor_keyboard(call.from_user, bot)
+        await call.message.edit_reply_markup(reply_markup=kb)
+        alert_text = "🟢 So'kinish filtri yoqildi!" if new_status else "🔴 So'kinish filtri o'chirildi!"
+        await call.answer(alert_text, show_alert=False)
+    except Exception as e:
+        await call.answer("Xatolik yuz berdi.", show_alert=True)
+    await call.answer()
 
 
 @router.message(Command("addbadword"))

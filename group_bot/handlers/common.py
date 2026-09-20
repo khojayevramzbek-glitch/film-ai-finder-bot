@@ -215,7 +215,12 @@ async def handle_menu_callbacks(call: CallbackQuery, bot: Bot):
     elif data == "menu_security":
         await call.message.edit_text(SECURITY_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
     elif data == "menu_censor":
-        await call.message.edit_text(CENSOR_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
+        try:
+            from group_bot.handlers.censor import build_censor_keyboard
+        except ImportError:
+            from handlers.censor import build_censor_keyboard
+        kb = await build_censor_keyboard(call.from_user, bot)
+        await call.message.edit_text(CENSOR_TEXT, parse_mode="HTML", reply_markup=kb)
     elif data == "menu_stats":
         await call.message.edit_text(STATS_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
     elif data == "menu_afk":
