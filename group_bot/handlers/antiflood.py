@@ -9,7 +9,7 @@ from aiogram.enums import ChatType, ChatMemberStatus
 from aiogram.types import Message, TelegramObject, ChatPermissions
 from aiogram.exceptions import TelegramBadRequest
 
-from database import delete_flood_messages
+from group_bot.database import delete_flood_messages
 
 # Sozlamalar:
 # 1. Stiker, GIF va Premium emoji uchun:

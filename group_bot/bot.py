@@ -13,10 +13,10 @@ from aiogram.enums import ParseMode
 from aiogram.types import Message, TelegramObject
 from aiogram.client.default import DefaultBotProperties
 
-from config import BOT_TOKEN
-from database import init_db, add_message, cleanup_old_messages
-from handlers import main_router
-from handlers.antiflood import AntiFloodMiddleware
+from group_bot.config import BOT_TOKEN
+from group_bot.database import init_db, add_message, cleanup_old_messages
+from group_bot.handlers import main_router
+from group_bot.handlers.antiflood import AntiFloodMiddleware
 
 
 class MessageTrackerMiddleware(BaseMiddleware):

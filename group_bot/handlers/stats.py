@@ -2,7 +2,7 @@ import re
 from html import escape
 from aiogram import Router, types
 from aiogram.enums import ChatType
-from database import get_24h_stats
+from group_bot.database import get_24h_stats
 
 router = Router()
 

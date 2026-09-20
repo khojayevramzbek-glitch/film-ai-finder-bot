@@ -6,7 +6,7 @@ from aiogram.enums import ChatType, ChatMemberStatus
 from aiogram.types import ChatPermissions
 from aiogram.exceptions import TelegramBadRequest
 
-from database import add_warn, get_warns, remove_warn, reset_warns, get_user_24h_stat
+from group_bot.database import add_warn, get_warns, remove_warn, reset_warns, get_user_24h_stat
 
 router = Router()
 

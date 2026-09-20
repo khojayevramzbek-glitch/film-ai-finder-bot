@@ -3,8 +3,8 @@ from html import escape
 from aiogram import Router, types, Bot
 from aiogram.filters import Command
 from aiogram.enums import ChatType
-from database import get_rules, set_rules
-from handlers.moderation import is_admin_or_allowed
+from group_bot.database import get_rules, set_rules
+from .moderation import is_admin_or_allowed
 
 router = Router()
 
