@@ -210,53 +210,71 @@ async def cmd_censor(message: types.Message, bot: Bot):
 
 @router.message(Command("addbadword"))
 async def cmd_addbadword(message: types.Message, bot: Bot):
-    if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
-        if message.chat.type == ChatType.PRIVATE:
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2 or not args[1].strip():
+        await message.reply("❗ Foydalanish: <code>/addbadword &lt;taqiqlangan so'z&gt;</code>\nMasalan: <code>/addbadword ahmoq</code>", parse_mode="HTML")
+        return
+
+    word = args[1].strip().strip("<>\"' ").lower()
+    if not word:
+        await message.reply("❗ Iltimos, haqiqiy so'z kiriting!", parse_mode="HTML")
+        return
+
+    # Lichkada (shaxsiy chatda)
+    if message.chat.type == ChatType.PRIVATE:
+        add_custom_bad_word(0, word)
+        if is_profane(word):
             await message.reply(
-                "ℹ️ <b>Taqiqlangan so'z qo'shish faqat guruh ichida ishlaydi!</b>\n\n"
-                "Chunki har bir guruhning o'z maxsus so'zlar ro'yxati bo'ladi.\n\n"
-                "1. Botni guruhingizga qo'shing va <b>Admin</b> huquqini bering.\n"
-                "2. Guruh ichida <code>/addbadword &lt;so'z&gt;</code> deb yozing.\n\n"
-                "💡 <i>Eslatma: 'gandon' va boshqa barcha so'kinishlar botning standart bazasida allaqachon mavjud va avtomatik ravishda o'chiriladi!</i>",
+                f"✅ <b>'{escape(word)}'</b> taqiqlangan so'zlar ro'yxatiga qo'shildi!\n\n"
+                f"💡 <i>Eslatma: Bu so'z allaqachon botning standart bazasida ham mavjud va guruhlarda avtomatik bloklanadi.</i>",
+                parse_mode="HTML"
+            )
+        else:
+            await message.reply(
+                f"✅ <b>'{escape(word)}'</b> muvaffaqiyatli taqiqlangan so'zlar ro'yxatiga qo'shildi!\n\n"
+                f"Endi bot ushbu so'zni barcha guruhlarda avtomatik tarzda o'chiradi va yozgan foydalanuvchiga 1 daqiqa mute beradi.",
                 parse_mode="HTML"
             )
         return
 
+    if message.chat.type == ChatType.CHANNEL:
+        return
+
+    # Guruhda
     if not await is_telegram_admin(message.chat.id, message.from_user.id, bot):
         await message.reply("❌ Bu buyruq faqat guruh adminlari uchun!")
         return
 
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2 or not args[1].strip():
-        await message.reply("❗ Foydalanish: <code>/addbadword &lt;taqiqlangan so'z&gt;</code>", parse_mode="HTML")
-        return
-
-    word = args[1].strip().lower()
     add_custom_bad_word(message.chat.id, word)
     await message.reply(f"✅ <b>'{escape(word)}'</b> so'zi guruhning qora ro'yxatiga qo'shildi.", parse_mode="HTML")
 
 
 @router.message(Command("delbadword"))
 async def cmd_delbadword(message: types.Message, bot: Bot):
-    if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
-        if message.chat.type == ChatType.PRIVATE:
-            await message.reply(
-                "ℹ️ <b>Bu buyruq faqat guruh ichida ishlaydi!</b>\n\n"
-                "Guruh ichida <code>/delbadword &lt;so'z&gt;</code> deb yozing.",
-                parse_mode="HTML"
-            )
-        return
-
-    if not await is_telegram_admin(message.chat.id, message.from_user.id, bot):
-        await message.reply("❌ Bu buyruq faqat guruh adminlari uchun!")
-        return
-
     args = message.text.split(maxsplit=1)
     if len(args) < 2 or not args[1].strip():
         await message.reply("❗ Foydalanish: <code>/delbadword &lt;so'z&gt;</code>", parse_mode="HTML")
         return
 
-    word = args[1].strip().lower()
+    word = args[1].strip().strip("<>\"' ").lower()
+
+    # Lichkada
+    if message.chat.type == ChatType.PRIVATE:
+        removed = remove_custom_bad_word(0, word)
+        if removed:
+            await message.reply(f"✅ <b>'{escape(word)}'</b> so'zi qora ro'yxatdan o'chirildi.", parse_mode="HTML")
+        else:
+            await message.reply(f"ℹ️ <b>'{escape(word)}'</b> ro'yxatda topilmadi.", parse_mode="HTML")
+        return
+
+    if message.chat.type == ChatType.CHANNEL:
+        return
+
+    # Guruhda
+    if not await is_telegram_admin(message.chat.id, message.from_user.id, bot):
+        await message.reply("❌ Bu buyruq faqat guruh adminlari uchun!")
+        return
+
     removed = remove_custom_bad_word(message.chat.id, word)
     if removed:
         await message.reply(f"✅ <b>'{escape(word)}'</b> so'zi qora ro'yxatdan o'chirildi.", parse_mode="HTML")
@@ -266,17 +284,29 @@ async def cmd_delbadword(message: types.Message, bot: Bot):
 
 @router.message(Command("badwords"))
 async def cmd_badwords(message: types.Message, bot: Bot):
-    if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
-        if message.chat.type == ChatType.PRIVATE:
+    # Lichkada
+    if message.chat.type == ChatType.PRIVATE:
+        words = get_custom_bad_words(0)
+        if words:
+            words_list = ", ".join(f"<code>{escape(w)}</code>" for w in words)
             await message.reply(
-                "ℹ️ <b>Bu buyruq guruh ichida ishlatiladi!</b>\n\n"
-                "Har bir guruhning o'z taqiqlangan so'zlar ro'yxati bo'ladi.\n"
-                "Guruh ichida <code>/badwords</code> deb yozsangiz, o'sha guruh uchun qo'shilgan maxsus so'zlarni ko'rsatadi.\n\n"
-                "💡 <i>Standart filtr (o'zbekcha, ruscha, inglizcha barcha haqorat va so'kinishlar) esa har doim barcha guruhlarda avtomatik ishlaydi!</i>",
+                f"📋 <b>Qo'shilgan Maxsus Taqiqlangan So'zlar:</b>\n{words_list}\n\n"
+                f"💡 <i>Bundan tashqari, botning standart bazasida yuzlab o'zbekcha, ruscha va inglizcha so'kinishlar doimiy faol!</i>",
+                parse_mode="HTML"
+            )
+        else:
+            await message.reply(
+                "ℹ️ Hozircha qo'shimcha maxsus so'zlar kiritilmagan.\n\n"
+                "💡 <i>Lekin botning standart bazasida 'gandon', 'xaromi' kabi yuzlab o'zbekcha, ruscha va inglizcha so'kinishlar avtomatik bloklanadi!</i>\n\n"
+                "Yangi so'z qo'shish uchun: <code>/addbadword &lt;so'z&gt;</code>",
                 parse_mode="HTML"
             )
         return
 
+    if message.chat.type == ChatType.CHANNEL:
+        return
+
+    # Guruhda
     if not await is_telegram_admin(message.chat.id, message.from_user.id, bot):
         await message.reply("❌ Bu buyruq faqat guruh adminlari uchun!")
         return

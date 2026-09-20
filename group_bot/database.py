@@ -434,8 +434,8 @@ def set_censor_status(chat_id: int, enabled: bool):
 
 
 def add_custom_bad_word(chat_id: int, word: str) -> bool:
-    """Guruh uchun yangi taqiqlangan so'z qo'shish."""
-    clean_word = word.strip().lower()
+    """Guruh yoki umumiy (chat_id=0) uchun yangi taqiqlangan so'z qo'shish."""
+    clean_word = word.strip().strip("<>\"' ").lower()
     if not clean_word:
         return False
     with get_connection() as conn:
@@ -448,19 +448,28 @@ def add_custom_bad_word(chat_id: int, word: str) -> bool:
 
 
 def remove_custom_bad_word(chat_id: int, word: str) -> bool:
-    """Guruh uchun taqiqlangan so'zni ro'yxatdan chiqarish."""
-    clean_word = word.strip().lower()
+    """Guruh yoki umumiy uchun taqiqlangan so'zni ro'yxatdan chiqarish."""
+    clean_word = word.strip().strip("<>\"' ").lower()
     with get_connection() as conn:
-        cur = conn.execute(
-            "DELETE FROM custom_bad_words WHERE chat_id = ? AND word = ?",
-            (chat_id, clean_word)
-        )
+        if chat_id != 0:
+            cur = conn.execute(
+                "DELETE FROM custom_bad_words WHERE (chat_id = ? OR chat_id = 0) AND word = ?",
+                (chat_id, clean_word)
+            )
+        else:
+            cur = conn.execute(
+                "DELETE FROM custom_bad_words WHERE word = ?",
+                (clean_word,)
+            )
         conn.commit()
         return cur.rowcount > 0
 
 
-def get_custom_bad_words(chat_id: int) -> list[str]:
-    """Guruh uchun kiritilgan maxsus taqiqlangan so'zlar ro'yxati."""
+def get_custom_bad_words(chat_id: int = 0) -> list[str]:
+    """Guruh va umumiy kiritilgan maxsus taqiqlangan so'zlar ro'yxati."""
     with get_connection() as conn:
-        cur = conn.execute("SELECT word FROM custom_bad_words WHERE chat_id = ?", (chat_id,))
+        if chat_id != 0:
+            cur = conn.execute("SELECT DISTINCT word FROM custom_bad_words WHERE chat_id IN (?, 0)", (chat_id,))
+        else:
+            cur = conn.execute("SELECT DISTINCT word FROM custom_bad_words WHERE chat_id = 0")
         return [row["word"] for row in cur.fetchall()]
