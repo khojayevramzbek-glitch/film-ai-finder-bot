@@ -21,11 +21,12 @@ def get_main_menu_keyboard(bot_username: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🛡 Himoya Tizimlari", callback_data="menu_security"),
             ],
             [
+                InlineKeyboardButton(text="🤬 So'kinish Filtri", callback_data="menu_censor"),
                 InlineKeyboardButton(text="😴 AFK / Sleep Rejimi", callback_data="menu_afk"),
-                InlineKeyboardButton(text="📜 Qoidalar & Sozlash", callback_data="menu_rules"),
             ],
             [
-                InlineKeyboardButton(text="👑 Bosh Admin bilan bog'lanish", url="https://t.me/khojayev_ramz")
+                InlineKeyboardButton(text="📜 Qoidalar & Sozlash", callback_data="menu_rules"),
+                InlineKeyboardButton(text="👑 Bosh Admin", url="https://t.me/khojayev_ramz")
             ]
         ]
     )
@@ -48,6 +49,7 @@ def get_welcome_text(user_full_name: str) -> str:
         "spam va toshqinlardan himoya qiluvchi hamda qulay boshqaruvni ta'minlovchi professional robot-moderator!\n\n"
         "✨ <b>Botning Asosiy Imkoniyatlari:</b>\n"
         "├ ⚡️ <b>Aqlli Anti-Flood & Anti-Spam:</b> Ketma-ket yozilgan xabarlar, stiker, GIF va premium emojilar toshqinini darhol o'chiradi va cheklaydi.\n"
+        "├ 🤬 <b>So'kinish & Haqorat Filtri:</b> So'kingan a'zolarni 1 minut mute qiladi, adminlarga esa qat'iy ogohlantirish beradi.\n"
         "├ 🔇 <b>Kuchli Moderatsiya:</b> <code>/mute</code>, <code>/ban</code>, <code>/warn</code> — ham Reply, ham to'g'ridan-to'g'ri <code>@username</code> orqali ishlaydi!\n"
         "├ 😴 <b>AFK / Uyqu Rejimi:</b> Adminlar band bo'lganda (<code>/sleep 1h</code>), ularni chaqirganlarga bot qachon kelishini avtomatik aytadi.\n"
         "├ 📜 <b>Moslashuvchan Qoidalar:</b> Guruh qoidalarini saqlash va ko'rsatish (<code>/rules</code>, <code>/setrules</code>).\n"
@@ -71,6 +73,11 @@ COMMANDS_TEXT = (
     "• <code>/warn @user [sabab]</code> — Ogohlantirish berish (3 tasida cheklanadi)\n"
     "• <code>/unwarn @user</code> — Ogohlantirishni bekor qilish\n"
     "• <code>statasi @user</code> — Foydalanuvchi faolligini ko'rish\n\n"
+    "🤬 <b>So'kinish Filtri (Censor) Buyruqlari:</b>\n"
+    "• <code>/censor on</code> / <code>/censor off</code> — Filtrni yoqish yoki o'chirish\n"
+    "• <code>/addbadword &lt;so'z&gt;</code> — Yangi taqiqlangan so'z qo'shish\n"
+    "• <code>/delbadword &lt;so'z&gt;</code> — So'zni ro'yxatdan chiqarish\n"
+    "• <code>/badwords</code> — Guruhning maxsus taqiqlangan so'zlarini ko'rish\n\n"
     "😴 <b>AFK / Sleep Buyruqlari:</b>\n"
     "• <code>/sleep 1h [sabab]</code> — Uyqu yoki bandlik rejimini yoqish\n"
     "• <code>/wake</code> — Uyqu rejimidan chiqish\n\n"
@@ -92,6 +99,21 @@ SECURITY_TEXT = (
     "Ekranni egallab oluvchi ko'p qatorli keraksiz matnlar zudlik bilan nazoratga olinadi.\n\n"
     "4️⃣ <b>Adminlar Uchun Himoya:</b>\n"
     "Adminlar guruhda bemalol boshqaruv olib borishlari uchun ularga nisbatan cheklovlar qo'llanmaydi, lekin nojo'ya flood bo'lsa chat tozalanadi."
+)
+
+CENSOR_TEXT = (
+    "🤬 <b>Aqlli So'kinish va Haqorat Filtri (Censor):</b>\n\n"
+    "Guruhda madaniyat va tozalikni 24/7 ta'minlovchi ko'p tilli (O'zbekcha, Ruscha, Inglizcha) filtr!\n\n"
+    "📌 <b>Qanday Ishlaydi?</b>\n"
+    "• <b>Oddiy a'zo so'kinganda:</b> Xabar darhol o'chiriladi va <b>1 daqiqa mute</b> beriladi.\n"
+    "• <b>Admin so'kinganda:</b> Xabar o'chiriladi va <i>'Admin bo'lib turib so'kinmang!'</i> deb qat'iy ogohlantiriladi.\n"
+    "• <b>Anti-Bypass:</b> Probel (<code>s o k</code>), nuqta (<code>s.u.k.a</code>), yulduzcha (<code>f*c*k</code>) yoki raqamlar (<code>g@nd0n</code>) bilan yozilgan so'kinishlarni ham aniqlaydi.\n"
+    "• <b>Zararsiz so'zlar:</b> Kundalik so'zlar (<i>kutubxona</i>, <i>komanda</i>, <i>rubl</i>, <i>salom</i>) xato o'chib ketmaydi.\n\n"
+    "⚙️ <b>Admin Buyruqlari:</b>\n"
+    "• <code>/censor on</code> / <code>/censor off</code> — Filtrni yoqish yoki o'chirish\n"
+    "• <code>/addbadword &lt;so'z&gt;</code> — Yangi taqiqlangan so'z qo'shish\n"
+    "• <code>/delbadword &lt;so'z&gt;</code> — So'zni ro'yxatdan chiqarish\n"
+    "• <code>/badwords</code> — Guruhning maxsus taqiqlangan so'zlarini ko'rish"
 )
 
 AFK_TEXT = (
@@ -171,6 +193,8 @@ async def handle_menu_callbacks(call: CallbackQuery, bot: Bot):
         await call.message.edit_text(COMMANDS_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
     elif data == "menu_security":
         await call.message.edit_text(SECURITY_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
+    elif data == "menu_censor":
+        await call.message.edit_text(CENSOR_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
     elif data == "menu_afk":
         await call.message.edit_text(AFK_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
     elif data == "menu_rules":
