@@ -99,12 +99,13 @@ async def main():
     logger.info(f"🔑 Gemini Kalitlar: {len(GEMINI_API_KEYS)} ta | Groq Kalitlar: {len(GROQ_API_KEYS)} ta")
 
     # Start background health server (Hugging Face Spaces, Koyeb, Render)
-    port = os.getenv("PORT", "7860")
-    if port:
-        try:
-            await start_web_server(int(port))
-        except Exception as e:
-            logger.warning(f"[Web Server Warning] Port {port} da web server ishga tushmadi: {e}")
+    if os.getenv("RUN_WEB_SERVER", "true").lower() == "true":
+        port = os.getenv("PORT", "7860")
+        if port:
+            try:
+                await start_web_server(int(port))
+            except Exception as e:
+                logger.warning(f"[Web Server Warning] Port {port} da web server ishga tushmadi: {e}")
 
     # 1. Initialize Main Search Bot
     main_bot = Bot(

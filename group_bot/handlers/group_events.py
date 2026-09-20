@@ -14,26 +14,6 @@ LINK_PATTERN = re.compile(
 )
 
 
-@router.message(F.new_chat_members)
-async def on_user_joined(message: types.Message, bot: Bot):
-    """Yangi a'zo guruhga qo'shilganda kutib olish."""
-    for user in message.new_chat_members:
-        if user.id == bot.id:
-            # Botning o'zi guruhga qo'shilganda
-            await message.answer(
-                "👋 Assalomu alaykum! Meni guruhingizga qo'shganingiz uchun rahmat.\n\n"
-                "To'liq ishlashim va guruh xavfsizligini ta'minlashim uchun menga <b>Administrator</b> huquqlarini bering.\n"
-                "Buyruqlar ro'yxatini ko'rish: <code>/help</code>",
-                parse_mode="HTML"
-            )
-        else:
-            # Yangi foydalanuvchi qo'shilganda
-            welcome_text = (
-                f"🎉 Xush kelibsiz, <b>{escape(user.full_name)}</b>!\n\n"
-                f"<b>{escape(message.chat.title or 'Guruhimiz')}</b>ga xush kelibsiz.\n"
-                "Iltimos, guruh qoidalari bilan tanishib chiqing: <code>/rules</code>"
-            )
-            await message.answer(welcome_text, parse_mode="HTML")
 
 
 @router.message(F.left_chat_member)

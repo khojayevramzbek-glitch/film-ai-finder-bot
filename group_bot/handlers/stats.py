@@ -1,7 +1,7 @@
 import re
 from html import escape
 from aiogram import Router, types
-from aiogram.enums import ChatType
+from aiogram.enums import ChatType, ChatMemberStatus
 from group_bot.database import get_24h_stats
 
 router = Router()
@@ -17,17 +17,26 @@ STATA_REGEX = re.compile(
 )
 
 
-def is_authorized_user(user: types.User | None) -> bool:
-    """Faqat ruxsat berilgan foydalanuvchilarni tekshirish."""
-    if not user or not user.username:
+async def is_authorized_user(message: types.Message) -> bool:
+    """Faqat ruxsat berilgan foydalanuvchilar va guruh adminlarini tekshirish."""
+    user = message.from_user
+    if not user:
         return False
-    return user.username.lower() in ALLOWED_USERNAMES
+    if user.username and user.username.lower() in ALLOWED_USERNAMES:
+        return True
+    try:
+        member = await message.bot.get_chat_member(message.chat.id, user.id)
+        if member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]:
+            return True
+    except Exception:
+        pass
+    return False
 
 
 @router.message(lambda msg: bool(STATA_REGEX.search((msg.text or msg.caption or "").strip())))
 async def check_stata_command(message: types.Message):
-    # Faqat ruxsat berilganlar uchun (@wdablyu, @khojayev_ramz). Boshqalarga hech qanday javob bermaymiz!
-    if not is_authorized_user(message.from_user):
+    # Faqat ruxsat berilganlar va adminlar uchun. Boshqalarga hech qanday javob bermaymiz!
+    if not await is_authorized_user(message):
         return
 
     # Guruh yoki chat ID sini aniqlash
