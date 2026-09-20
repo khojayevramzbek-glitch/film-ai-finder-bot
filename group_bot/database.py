@@ -35,6 +35,10 @@ def init_db():
             ON messages(chat_id, created_at);
         """)
         conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_messages_username
+            ON messages(username);
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS warnings (
                 chat_id INTEGER NOT NULL,
                 user_id INTEGER NOT NULL,
@@ -221,3 +225,51 @@ def get_user_24h_stat(chat_id: int, user_id: int) -> int:
         )
         row = cur.fetchone()
         return row["cnt"] if row else 0
+
+
+def get_user_by_username(chat_id: int, username: str) -> dict | None:
+    """Foydalanuvchini username bo'yicha bazadan qidirish."""
+    clean_username = username.lstrip("@").strip().lower()
+    with get_connection() as conn:
+        # 1. Avval shu guruhning o'zidan qidirish
+        cursor = conn.execute(
+            """
+            SELECT user_id, full_name, username 
+            FROM messages 
+            WHERE chat_id = ? AND LOWER(username) = ? 
+            ORDER BY id DESC LIMIT 1
+            """,
+            (chat_id, clean_username)
+        )
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+
+        # 2. Agar guruhda topilmasa, umumiy baza bo'yicha qidirish
+        cursor = conn.execute(
+            """
+            SELECT user_id, full_name, username 
+            FROM messages 
+            WHERE LOWER(username) = ? 
+            ORDER BY id DESC LIMIT 1
+            """,
+            (clean_username,)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_user_by_id(user_id: int) -> dict | None:
+    """Foydalanuvchini ID bo'yicha bazadan qidirish."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT user_id, full_name, username 
+            FROM messages 
+            WHERE user_id = ? 
+            ORDER BY id DESC LIMIT 1
+            """,
+            (user_id,)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
