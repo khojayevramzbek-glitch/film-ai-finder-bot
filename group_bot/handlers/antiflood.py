@@ -1,3 +1,4 @@
+import asyncio
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -22,16 +23,31 @@ MEDIA_LONG_LIMIT = 4
 SLASH_WINDOW = 5.0   # soniya
 SLASH_LIMIT = 5
 
-# 3. Oddiy matnli xabarlar (flood) uchun: 4 ta bo'lsa (30 sekund mute)
-TEXT_WINDOW = 5.0    # soniya
+# 3. Matnli xabarlar va bo'lak-bo'lak (salom, qales, yaxshimisz) flood:
+TEXT_WINDOW = 5.0          # Tezkor: 5s ichida 4 ta bo'lsa
 TEXT_LIMIT = 4
-MULTILINE_LIMIT = 4  # Bitta xabarda 4+ qator bo'lib ekranni egallasa
+PIECE_FAST_WINDOW = 10.0   # 10s ichida 3 ta bo'lak xabar
+PIECE_FAST_LIMIT = 3
+PIECE_SLOW_WINDOW = 20.0   # 20s ichida 5 ta xabar
+PIECE_SLOW_LIMIT = 5
+MULTILINE_LIMIT = 4        # Bitta xabarda 4+ qator bo'lib ekranni egallasa
 
 # Foydalanuvchilar tarixi: (chat_id, user_id) -> list[(timestamp, message_id)]
 _media_history: dict[tuple[int, int], list[tuple[float, int]]] = defaultdict(list)
 _media_long_history: dict[tuple[int, int], list[tuple[float, int]]] = defaultdict(list)
 _slash_history: dict[tuple[int, int], list[tuple[float, int]]] = defaultdict(list)
 _text_history: dict[tuple[int, int], list[tuple[float, int]]] = defaultdict(list)
+_piece_fast_history: dict[tuple[int, int], list[tuple[float, int]]] = defaultdict(list)
+_piece_slow_history: dict[tuple[int, int], list[tuple[float, int]]] = defaultdict(list)
+
+
+async def delete_message_later(bot: Bot, chat_id: int, message_id: int, delay: int = 15):
+    """Xabarni ma'lum vaqtdan so'ng chatdan avtomatik tozalash."""
+    await asyncio.sleep(delay)
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception:
+        pass
 
 
 async def is_telegram_admin(chat_id: int, user_id: int, bot: Bot) -> bool:
@@ -99,15 +115,16 @@ async def handle_flood_action(
     if is_admin_user:
         admin_name = f"@{event.from_user.username}" if event.from_user.username else escape(event.from_user.full_name)
         warning_text = (
-            f"⚠️ <b>Hurmatli {admin_name}</b> agar yana flood qilishni to'xtatmasangiz "
-            "adminlikdan olinasiz yoki owner @wdablyu tomonidan jazolanasiz!"
+            f"⚠️ <b>Hurmatli {admin_name}</b>, guruhda bo‘lak-bo‘lak xabarlar yuborib flood qilmang!\n"
+            f"Barcha yuborgan xabarlaringiz darhol o‘chirildi. Agar bu holat takrorlansa, owner @wdablyu tomonidan adminlikdan olinasiz!"
         )
         try:
-            await bot.send_message(
+            warn_msg = await bot.send_message(
                 chat_id=event.chat.id,
                 text=warning_text,
                 parse_mode="HTML"
             )
+            asyncio.create_task(delete_message_later(bot, event.chat.id, warn_msg.message_id, delay=15))
         except TelegramBadRequest:
             pass
         return
@@ -191,6 +208,8 @@ class AntiFloodMiddleware(BaseMiddleware):
                 _media_long_history[key] = []
                 _slash_history[key] = []
                 _text_history[key] = []
+                _piece_fast_history[key] = []
+                _piece_slow_history[key] = []
                 await handle_flood_action(
                     event,
                     bot,
@@ -212,6 +231,8 @@ class AntiFloodMiddleware(BaseMiddleware):
                 _media_history[key] = []
                 _slash_history[key] = []
                 _text_history[key] = []
+                _piece_fast_history[key] = []
+                _piece_slow_history[key] = []
                 await handle_flood_action(
                     event,
                     bot,
@@ -222,7 +243,7 @@ class AntiFloodMiddleware(BaseMiddleware):
                 )
                 return
 
-        # 3. Oddiy matnli xabarlar flood tekshiruvi (4 ta yoki ko'p qatorli spam)
+        # 3. Oddiy matnli va bo'lak-bo'lak (salom, qales, yaxshimisz) flood tekshiruvi
         else:
             text = (event.text or event.caption or "").strip()
 
@@ -231,6 +252,8 @@ class AntiFloodMiddleware(BaseMiddleware):
                 _media_history[key] = []
                 _slash_history[key] = []
                 _text_history[key] = []
+                _piece_fast_history[key] = []
+                _piece_slow_history[key] = []
                 await handle_flood_action(
                     event,
                     bot,
@@ -241,22 +264,44 @@ class AntiFloodMiddleware(BaseMiddleware):
                 )
                 return
 
+            # a) Tezkor flood: 5s ichida 4 ta xabar
             history = [(t, m_id) for (t, m_id) in _text_history[key] if now - t <= TEXT_WINDOW]
             history.append((now, event.message_id))
             _text_history[key] = history
 
-            if len(history) >= TEXT_LIMIT:
-                msg_ids = [m_id for (_, m_id) in history]
+            # b) Bo'lak-bo'lak tezkor flood: 10s ichida 3 ta xabar (masalan: salom, qales, yaxshimisz)
+            piece_fast = [(t, m_id) for (t, m_id) in _piece_fast_history[key] if now - t <= PIECE_FAST_WINDOW]
+            piece_fast.append((now, event.message_id))
+            _piece_fast_history[key] = piece_fast
+
+            # c) Bo'lak-bo'lak sekin flood: 20s ichida 5 ta xabar
+            piece_slow = [(t, m_id) for (t, m_id) in _piece_slow_history[key] if now - t <= PIECE_SLOW_WINDOW]
+            piece_slow.append((now, event.message_id))
+            _piece_slow_history[key] = piece_slow
+
+            is_piece_flood = len(piece_fast) >= PIECE_FAST_LIMIT or len(piece_slow) >= PIECE_SLOW_LIMIT
+            is_fast_flood = len(history) >= TEXT_LIMIT
+
+            if is_fast_flood or is_piece_flood:
+                all_flood_ids = list(set(
+                    [m_id for (_, m_id) in history] +
+                    [m_id for (_, m_id) in piece_fast] +
+                    [m_id for (_, m_id) in piece_slow]
+                ))
                 _media_history[key] = []
                 _slash_history[key] = []
                 _text_history[key] = []
+                _piece_fast_history[key] = []
+                _piece_slow_history[key] = []
+
+                reason = "bo‘lak-bo‘lak qilib ketma-ket xabarlar yuborganingiz" if is_piece_flood else "ketma-ket xabarlar yuborib flood qilganingiz"
                 await handle_flood_action(
                     event,
                     bot,
                     is_admin_user=is_admin_user,
-                    msg_ids=msg_ids,
+                    msg_ids=all_flood_ids,
                     duration=timedelta(seconds=35),
-                    reason="ketma-ket xabarlar yuborib flood qilganingiz"
+                    reason=reason
                 )
                 return
 

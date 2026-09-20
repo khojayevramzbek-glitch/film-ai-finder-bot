@@ -10,6 +10,16 @@ router = Router()
 
 RULES_REGEX = re.compile(r"^/?(rules|qoidalar|правила)$", re.IGNORECASE)
 
+ALLOWED_USERNAMES = {"wdablyu", "khojayev_ramz"}
+
+
+def is_owner_user(user: types.User | None) -> bool:
+    """Faqat @wdablyu va @khojayev_ramz uchun ruxsat."""
+    if not user or not user.username:
+        return False
+    return user.username.lower() in ALLOWED_USERNAMES
+
+
 DEFAULT_RULES = (
     "📌 <b>GURUH QOIDALARI:</b>\n"
     "1. ❌ <b>Haqorat</b> (so‘z, stiker, GIF, emoji) — 1 daq mute\n"
@@ -18,8 +28,7 @@ DEFAULT_RULES = (
     "4. ❌ <b>Janjal / provokatsiya</b> (tortishuv chiqarish) — 1 daq mute\n"
     "5. ❌ <b>Keraksiz xabarlar</b> (mazmunsiz/offtop) — 1 daq mute\n"
     "6. ❌ <b>Adminga qarshilik</b> (qasddan bo‘ysunmaslik) — 1 daq mute\n"
-    "7. 📊 <b>СТАТА</b> — haftalik TOP 1 ga 1 hafta Admin (sun’iy oshirilsa — mute va bekor)\n"
-    "8. ⚠️ <b>Takroriy qoidabuzarlik</b> — mute vaqti oshiriladi\n"
+    "7. ⚠️ <b>Takroriy qoidabuzarlik</b> — mute vaqti oshiriladi\n"
     "—\n"
     "🤝 <i>Hurmat saqlaymiz. Har bir qoidabuzarlik = kamida 1 daqiqa mute.</i>"
 )
@@ -30,7 +39,8 @@ async def cmd_setrules(message: types.Message, bot: Bot):
     if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
         return
 
-    if not await is_admin_or_allowed(message.chat.id, message.from_user, bot):
+    # Faqat @wdablyu va @khojayev_ramz uchun
+    if not is_owner_user(message.from_user):
         return
 
     # /setrules dan keyingi matnni olish
@@ -49,8 +59,11 @@ async def cmd_setrules(message: types.Message, bot: Bot):
 
 @router.message(lambda msg: bool(RULES_REGEX.match((msg.text or msg.caption or "").strip())))
 async def check_rules_command(message: types.Message):
-    text = (message.text or message.caption or "").strip()
+    # Faqat @wdablyu va @khojayev_ramz uchun
+    if not is_owner_user(message.from_user):
+        return
 
+    text = (message.text or message.caption or "").strip()
     if RULES_REGEX.match(text):
         custom_rules = get_rules(message.chat.id)
         if custom_rules:
