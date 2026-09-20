@@ -44,7 +44,7 @@ def get_back_keyboard() -> InlineKeyboardMarkup:
 def get_welcome_text(user_full_name: str) -> str:
     return (
         f"🛡 <b>Assalomu alaykum, {escape(user_full_name)}!</b>\n\n"
-        "<b>Oken Sherda Bot</b> — Telegram guruhlaringizni 24/7 rejimida tartibda saqlovchi, "
+        "<b>Blizkiy's bot 🔰</b> — Telegram guruhlaringizni 24/7 rejimida tartibda saqlovchi, "
         "spam va toshqinlardan himoya qiluvchi hamda qulay boshqaruvni ta'minlovchi professional robot-moderator!\n\n"
         "✨ <b>Botning Asosiy Imkoniyatlari:</b>\n"
         "├ ⚡️ <b>Aqlli Anti-Flood & Anti-Spam:</b> Ketma-ket yozilgan xabarlar, stiker, GIF va premium emojilar toshqinini darhol o'chiradi va cheklaydi.\n"
@@ -137,7 +137,7 @@ async def cmd_start(message: types.Message, bot: Bot):
         )
     else:
         await message.reply(
-            "🛡 <b>Oken Sherda Bot guruhda faol ishlamoqda!</b>\n\n"
+            "🛡 <b>Blizkiy's bot 🔰 guruhda faol ishlamoqda!</b>\n\n"
             "Buyruqlar ro'yxatini ko'rish uchun <code>/help</code> deb yozing.",
             parse_mode="HTML"
         )
