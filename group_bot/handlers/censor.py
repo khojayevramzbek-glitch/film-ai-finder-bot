@@ -157,6 +157,26 @@ async def delete_message_later(bot: Bot, chat_id: int, message_id: int, delay: i
         pass
 
 
+async def unmute_after(bot: Bot, chat_id: int, user_id: int, delay: int = 15):
+    """Foydalanuvchini 15 soniyadan so'ng avtomatik muterdan chiqarish."""
+    await asyncio.sleep(delay)
+    try:
+        permissions = ChatPermissions(
+            can_send_messages=True,
+            can_send_photos=True,
+            can_send_videos=True,
+            can_send_other_messages=True,
+            can_add_web_page_previews=True
+        )
+        await bot.restrict_chat_member(
+            chat_id=chat_id,
+            user_id=user_id,
+            permissions=permissions
+        )
+    except Exception:
+        pass
+
+
 # -------------------------------------------------------------
 # 3. Censor Middleware (Guruhdagi har bir xabarni tekshiradi)
 # -------------------------------------------------------------
@@ -166,7 +186,7 @@ class CensorMiddleware(BaseMiddleware):
     So'kinish aniqlansa:
     - Xabar darhol o'chiriladi.
     - Admin bo'lsa: qat'iy ogohlantiriladi.
-    - Oddiy a'zo bo'lsa: 1 daqiqaga mute qilinadi.
+    - Oddiy a'zo bo'lsa: 15 soniyaga mute qilinadi.
     - Xabar boshqa handlerlarga o'tkazilmaydi.
     """
     async def __call__(
@@ -208,7 +228,7 @@ class CensorMiddleware(BaseMiddleware):
         except Exception:
             pass
 
-        # 2. Xatti-harakat: Admin bo'lsa ogohlantirish, oddiy a'zo bo'lsa 1 minut mute
+        # 2. Xatti-harakat: Admin bo'lsa ogohlantirish, oddiy a'zo bo'lsa 15 soniya mute
         is_admin = await is_telegram_admin(chat_id, user.id, bot)
         if is_admin:
             try:
@@ -222,7 +242,9 @@ class CensorMiddleware(BaseMiddleware):
             except Exception:
                 pass
         else:
-            until_date = datetime.now(timezone.utc) + timedelta(minutes=1)
+            # Telegram Bot API: until_date < 30s bo'lsa cheksiz (forever) deb hisoblaydi.
+            # Shuning uchun Telegramga 35s xavfsizlik muddati beramiz va bot 15s dan so'ng avtomatik yechadi!
+            until_date = datetime.now(timezone.utc) + timedelta(seconds=35)
             try:
                 permissions = ChatPermissions(
                     can_send_messages=False,
@@ -237,10 +259,13 @@ class CensorMiddleware(BaseMiddleware):
                     permissions=permissions,
                     until_date=until_date
                 )
+                # 15 soniyadan so'ng avtomatik yozishni tiklash
+                asyncio.create_task(unmute_after(bot, chat_id, user.id, delay=15))
+
                 warn_msg = await bot.send_message(
                     chat_id=chat_id,
                     text=f"⚠️ <b>{escape(user.full_name)}</b>, guruhda so'kinish va haqorat qat'iyan taqiqlangan!\n"
-                         f"<i>Siz 1 daqiqaga yozishdan cheklandingiz (Mute).</i>",
+                         f"<i>Siz 15 soniyaga yozishdan cheklandingiz (Mute).</i>",
                     parse_mode="HTML"
                 )
                 asyncio.create_task(delete_message_later(bot, chat_id, warn_msg.message_id, delay=15))
