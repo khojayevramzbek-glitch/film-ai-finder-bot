@@ -22,10 +22,13 @@ def get_main_menu_keyboard(bot_username: str) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="🤬 So'kinish Filtri", callback_data="menu_censor"),
-                InlineKeyboardButton(text="😴 AFK / Sleep Rejimi", callback_data="menu_afk"),
+                InlineKeyboardButton(text="📊 Guruh Statistikasi", callback_data="menu_stats"),
             ],
             [
+                InlineKeyboardButton(text="😴 AFK / Sleep Rejimi", callback_data="menu_afk"),
                 InlineKeyboardButton(text="📜 Qoidalar & Sozlash", callback_data="menu_rules"),
+            ],
+            [
                 InlineKeyboardButton(text="👑 Bosh Admin", url="https://t.me/khojayev_ramz")
             ]
         ]
@@ -71,8 +74,12 @@ COMMANDS_TEXT = (
     "• <code>/ban @user</code> — Guruhdan chiqarish va bloklash\n"
     "• <code>/unban @user</code> — Blokdan chiqarish\n"
     "• <code>/warn @user [sabab]</code> — Ogohlantirish berish (3 tasida cheklanadi)\n"
-    "• <code>/unwarn @user</code> — Ogohlantirishni bekor qilish\n"
-    "• <code>statasi @user</code> — Foydalanuvchi faolligini ko'rish\n\n"
+    "• <code>/unwarn @user</code> — Ogohlantirishni bekor qilish\n\n"
+    "📊 <b>Statistika (Stata) Buyruqlari:</b>\n"
+    "• <code>stata</code> / <code>/stata</code> — Guruh faolligi reytingi (Top aktivlar)\n"
+    "• <code>statasi @user</code> — Foydalanuvchi faolligini ko'rish\n"
+    "• <code>/stata on</code> / <code>/stata off</code> — Statistikani yoqish yoki o'chirish\n"
+    "• <code>/stata public</code> / <code>/stata admin</code> — Ko'rish huquqini sozlash\n\n"
     "🤬 <b>So'kinish Filtri (Censor) Buyruqlari:</b>\n"
     "• <code>/censor on</code> / <code>/censor off</code> — Filtrni yoqish yoki o'chirish\n"
     "• <code>/addbadword &lt;so'z&gt;</code> — Yangi taqiqlangan so'z qo'shish\n"
@@ -86,6 +93,20 @@ COMMANDS_TEXT = (
     "• <code>/setrules [matn]</code> — Yangi qoidalarni kiritish (faqat asosiy adminlar)\n"
     "• <code>/info</code> — Guruh va shaxsiy ID ma'lumotlari\n"
     "• <code>/help</code> — Yordam xabari"
+)
+
+STATS_TEXT = (
+    "📊 <b>Guruh Statistikasi (Stata) Tizimi:</b>\n\n"
+    "Guruhdagi 24 soatlik xabarlarni va eng faol a'zolar (Top aktivlar) reytingini aniq hisoblab boruvchi aqlli tizim!\n\n"
+    "📌 <b>Asosiy Buyruqlar:</b>\n"
+    "• <code>stata</code> yoki <code>/stata</code> — Guruhning 24 soatlik Top faol a'zolari reytingini ko'rish (medallar bilan)\n"
+    "• <code>statasi @username</code> — Bitta foydalanuvchining so'nggi 24 soatdagi xabarlar sonini bilish (Reply yoki tag orqali)\n\n"
+    "⚙️ <b>Admin Sozlamalari (Yoqish / O'chirish):</b>\n"
+    "• <code>/stata on</code> — Guruhda statistikani yoqish\n"
+    "• <code>/stata off</code> — Guruhda statistikani o'chirish\n"
+    "• <code>/stata public</code> — Statistikani barcha a'zolar ko'rishi uchun ochish\n"
+    "• <code>/stata admin</code> — Statistikani faqat adminlar ko'rishi uchun cheklash\n\n"
+    "💡 <i>Anti-flood tizimi tozalagan barcha nojo'ya va spam xabarlar hisobga olinmaydi — faqat haqiqiy va toza xabarlar sanaladi!</i>"
 )
 
 SECURITY_TEXT = (
@@ -195,6 +216,8 @@ async def handle_menu_callbacks(call: CallbackQuery, bot: Bot):
         await call.message.edit_text(SECURITY_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
     elif data == "menu_censor":
         await call.message.edit_text(CENSOR_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
+    elif data == "menu_stats":
+        await call.message.edit_text(STATS_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
     elif data == "menu_afk":
         await call.message.edit_text(AFK_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
     elif data == "menu_rules":

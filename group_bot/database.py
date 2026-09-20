@@ -76,6 +76,13 @@ def init_db():
                 PRIMARY KEY (chat_id, word)
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_stats_settings (
+                chat_id INTEGER PRIMARY KEY,
+                is_enabled INTEGER DEFAULT 1,
+                is_public INTEGER DEFAULT 0
+            );
+        """)
         conn.commit()
 
 
@@ -473,3 +480,49 @@ def get_custom_bad_words(chat_id: int = 0) -> list[str]:
         else:
             cur = conn.execute("SELECT DISTINCT word FROM custom_bad_words WHERE chat_id = 0")
         return [row["word"] for row in cur.fetchall()]
+
+
+def is_stats_enabled(chat_id: int) -> bool:
+    """Guruhda statistika (stata) yoqilganligini tekshirish."""
+    with get_connection() as conn:
+        cur = conn.execute("SELECT is_enabled FROM chat_stats_settings WHERE chat_id = ?", (chat_id,))
+        row = cur.fetchone()
+        return bool(row["is_enabled"]) if row else True
+
+
+def set_stats_status(chat_id: int, enabled: bool):
+    """Guruhda statistikani yoqish yoki o'chirish."""
+    val = 1 if enabled else 0
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chat_stats_settings (chat_id, is_enabled)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET is_enabled = ?
+            """,
+            (chat_id, val, val)
+        )
+        conn.commit()
+
+
+def is_stats_public(chat_id: int) -> bool:
+    """Statistikani barcha a'zolar ko'ra oladimi yoki faqat adminlarmi."""
+    with get_connection() as conn:
+        cur = conn.execute("SELECT is_public FROM chat_stats_settings WHERE chat_id = ?", (chat_id,))
+        row = cur.fetchone()
+        return bool(row["is_public"]) if row else False
+
+
+def set_stats_public(chat_id: int, is_public: bool):
+    """Statistikani ko'rish huquqini sozlash (barcha yoki faqat adminlar)."""
+    val = 1 if is_public else 0
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chat_stats_settings (chat_id, is_public)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET is_public = ?
+            """,
+            (chat_id, val, val)
+        )
+        conn.commit()
