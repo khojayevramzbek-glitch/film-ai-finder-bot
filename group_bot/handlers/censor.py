@@ -171,6 +171,13 @@ async def delete_message_later(bot: Bot, chat_id: int, message_id: int, delay: i
 @router.message(Command("censor"))
 async def cmd_censor(message: types.Message, bot: Bot):
     if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
+        if message.chat.type == ChatType.PRIVATE:
+            await message.reply(
+                "ℹ️ <b>So'kinish filtri (Censor) guruhlar uchun mo'ljallangan!</b>\n\n"
+                "1. Botni guruhingizga qo'shing va <b>Admin</b> huquqini bering.\n"
+                "2. Guruh ichida <code>/censor on</code> yoki <code>/censor off</code> deb yozing.",
+                parse_mode="HTML"
+            )
         return
 
     if not await is_telegram_admin(message.chat.id, message.from_user.id, bot):
@@ -204,6 +211,15 @@ async def cmd_censor(message: types.Message, bot: Bot):
 @router.message(Command("addbadword"))
 async def cmd_addbadword(message: types.Message, bot: Bot):
     if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
+        if message.chat.type == ChatType.PRIVATE:
+            await message.reply(
+                "ℹ️ <b>Taqiqlangan so'z qo'shish faqat guruh ichida ishlaydi!</b>\n\n"
+                "Chunki har bir guruhning o'z maxsus so'zlar ro'yxati bo'ladi.\n\n"
+                "1. Botni guruhingizga qo'shing va <b>Admin</b> huquqini bering.\n"
+                "2. Guruh ichida <code>/addbadword &lt;so'z&gt;</code> deb yozing.\n\n"
+                "💡 <i>Eslatma: 'gandon' va boshqa barcha so'kinishlar botning standart bazasida allaqachon mavjud va avtomatik ravishda o'chiriladi!</i>",
+                parse_mode="HTML"
+            )
         return
 
     if not await is_telegram_admin(message.chat.id, message.from_user.id, bot):
@@ -223,6 +239,12 @@ async def cmd_addbadword(message: types.Message, bot: Bot):
 @router.message(Command("delbadword"))
 async def cmd_delbadword(message: types.Message, bot: Bot):
     if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
+        if message.chat.type == ChatType.PRIVATE:
+            await message.reply(
+                "ℹ️ <b>Bu buyruq faqat guruh ichida ishlaydi!</b>\n\n"
+                "Guruh ichida <code>/delbadword &lt;so'z&gt;</code> deb yozing.",
+                parse_mode="HTML"
+            )
         return
 
     if not await is_telegram_admin(message.chat.id, message.from_user.id, bot):
@@ -245,6 +267,14 @@ async def cmd_delbadword(message: types.Message, bot: Bot):
 @router.message(Command("badwords"))
 async def cmd_badwords(message: types.Message, bot: Bot):
     if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
+        if message.chat.type == ChatType.PRIVATE:
+            await message.reply(
+                "ℹ️ <b>Bu buyruq guruh ichida ishlatiladi!</b>\n\n"
+                "Har bir guruhning o'z taqiqlangan so'zlar ro'yxati bo'ladi.\n"
+                "Guruh ichida <code>/badwords</code> deb yozsangiz, o'sha guruh uchun qo'shilgan maxsus so'zlarni ko'rsatadi.\n\n"
+                "💡 <i>Standart filtr (o'zbekcha, ruscha, inglizcha barcha haqorat va so'kinishlar) esa har doim barcha guruhlarda avtomatik ishlaydi!</i>",
+                parse_mode="HTML"
+            )
         return
 
     if not await is_telegram_admin(message.chat.id, message.from_user.id, bot):
