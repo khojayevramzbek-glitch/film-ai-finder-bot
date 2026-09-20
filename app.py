@@ -28,16 +28,29 @@ except Exception:
 
 def run_telegram_bot():
     """Runs the main bot cluster in a background event loop."""
-    print("🚀 [Hugging Face Space] Telegram Bot klasteri ishga tushirilmoqda...")
+    print("🚀 [Hugging Face Space] Kino Bot Klasteri ishga tushirilmoqda...")
     try:
         asyncio.run(run.main())
     except Exception as e:
-        print(f"❌ [Bot Fatal Error] {e}")
+        print(f"❌ [Film Bot Fatal Error] {e}")
 
 
-# Start the bot in a background daemon thread
+def run_group_bot():
+    """Runs the Telegram Group Moderation Bot (@oken_sherda_bot) in a background event loop."""
+    print("🛡 [Hugging Face Space] Guruh Moderatsiya Boti (@oken_sherda_bot) ishga tushirilmoqda...")
+    try:
+        from group_bot import bot as group_bot_module
+        asyncio.run(group_bot_module.main())
+    except Exception as e:
+        print(f"❌ [Group Bot Fatal Error] {e}")
+
+
+# Start both bots in background daemon threads
 bot_thread = threading.Thread(target=run_telegram_bot, daemon=True)
 bot_thread.start()
+
+group_bot_thread = threading.Thread(target=run_group_bot, daemon=True)
+group_bot_thread.start()
 
 
 def get_system_stats():
@@ -45,23 +58,25 @@ def get_system_stats():
     ram = psutil.virtual_memory()
     cpu = psutil.cpu_percent(interval=0.1)
     return (
-        f"🟢 Bot Holati: ONLINE (24/7)\n"
+        f"🟢 Server Holati: ONLINE (24/7 Doimiy)\n"
         f"🧠 RAM (Xotira): {ram.used / (1024*1024):.1f} MB / {ram.total / (1024*1024):.1f} MB ({ram.percent}%)\n"
         f"⚡️ CPU (Protsessor): {cpu}%\n"
-        f"🤖 Asosiy Bot: @FilmAiFinderbot\n"
-        f"👑 Admin Bot: @filmfinder_admin_bot"
+        f"🎬 Kino Qidiruv Boti: @FilmAiFinderbot (Faol)\n"
+        f"👑 Kino Admin Boti: @filmfinder_admin_bot (Faol)\n"
+        f"🛡 Guruh Moderatsiya Boti: @oken_sherda_bot (Faol)"
     )
 
 
 # Build a sleek, minimal Gradio web dashboard
-with gr.Blocks(title="FilmFinder AI - 24/7 Bot Cluster") as demo:
-    gr.Markdown("# 🎬 FilmFinder AI Telegram Bot Cluster")
+with gr.Blocks(title="Multi-Bot AI Cloud Cluster (16 GB)") as demo:
+    gr.Markdown("# 🚀 Multi-Bot 24/7 Cloud Cluster (16 GB RAM)")
     gr.Markdown(
-        "Botingiz Hugging Face Spaces bulutida **16 GB RAM** bilan 24/7 rejimda muvaffaqiyatli ishlamoqda!\n\n"
-        "👉 **Telegram Botga o'tish:** [@FilmAiFinderbot](https://t.me/FilmAiFinderbot)\n"
-        "👉 **Admin Paneli:** [@filmfinder_admin_bot](https://t.me/filmfinder_admin_bot)"
+        "Barcha Telegram botlaringiz Hugging Face Spaces bulutida **16 GB RAM** bilan 24/7 rejimda muvaffaqiyatli ishlamoqda!\n\n"
+        "👉 **Kino Qidiruv Boti:** [@FilmAiFinderbot](https://t.me/FilmAiFinderbot)\n"
+        "👉 **Admin Boti:** [@filmfinder_admin_bot](https://t.me/filmfinder_admin_bot)\n"
+        "👉 **Guruh Moderatsiya Boti:** [@oken_sherda_bot](https://t.me/oken_sherda_bot)"
     )
-    status_box = gr.Textbox(value=get_system_stats, label="📊 Jonli Tizim Ko'rsatkichlari", every=5)
+    status_box = gr.Textbox(value=get_system_stats, label="📊 Jonli Server va Botlar Ko'rsatkichi", every=5)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "7860"))
