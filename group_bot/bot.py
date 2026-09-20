@@ -17,6 +17,7 @@ from group_bot.config import BOT_TOKEN
 from group_bot.database import init_db, add_message, cleanup_old_messages
 from group_bot.handlers import main_router
 from group_bot.handlers.antiflood import AntiFloodMiddleware
+from group_bot.handlers.censor import CensorMiddleware
 
 
 class MessageTrackerMiddleware(BaseMiddleware):
@@ -63,6 +64,8 @@ async def main():
     dp = Dispatcher()
     # Har bir xabarni hisobga oluvchi middleware qo'shish
     dp.message.outer_middleware(MessageTrackerMiddleware())
+    # So'kinish va haqorat filtri (Censor) - barcha xabarlardan oldin tekshiradi
+    dp.message.outer_middleware(CensorMiddleware())
     # Qoida 2 bo'yicha Anti-Flood middleware (barcha xabar va stikerlarni tekshirish uchun outer_middleware)
     dp.message.outer_middleware(AntiFloodMiddleware())
     dp.include_router(main_router)

@@ -215,11 +215,46 @@ async def cmd_wake(message: types.Message):
         await message.reply("ℹ️ Sizda faol uyqu rejimi yo'q edi.", parse_mode="HTML")
 
 
-@router.message(F.chat.type.in_([ChatType.GROUP, ChatType.SUPERGROUP]))
-async def check_sleep_mentions(message: types.Message, bot: Bot):
+def is_sleep_mention_or_sleeping_user(message: types.Message) -> bool:
+    """Faqat xabar uyqudagi foydalanuvchiga tegishli bo'lsagina True qaytaradi."""
     if not message.from_user or message.from_user.is_bot:
-        return
+        return False
 
+    # 1. Agar xabar yozgan odamning o'zi uyquda bo'lsa
+    if get_user_sleep(message.from_user.id):
+        return True
+
+    text = (message.text or message.caption or "").strip()
+    if text.startswith("/"):
+        return False
+
+    # 2. Reply qilingan bo'lsa
+    if message.reply_to_message and message.reply_to_message.from_user:
+        if message.reply_to_message.from_user.id in ALLOWED_SLEEP_USER_IDS:
+            return True
+
+    # 3. Mention entity
+    entities = message.entities or message.caption_entities or []
+    for ent in entities:
+        if ent.type == "mention":
+            mention_username = text[ent.offset:ent.offset + ent.length].lstrip("@").lower()
+            if mention_username in ALLOWED_SLEEP_USERNAMES:
+                return True
+        elif ent.type == "text_mention" and ent.user:
+            if ent.user.id in ALLOWED_SLEEP_USER_IDS:
+                return True
+
+    # 4. Kalit so'zlar
+    if text:
+        for data in TRACKED_SLEEP_USERS.values():
+            if data["regex"].search(text):
+                return True
+
+    return False
+
+
+@router.message(F.chat.type.in_([ChatType.GROUP, ChatType.SUPERGROUP]), is_sleep_mention_or_sleeping_user)
+async def check_sleep_mentions(message: types.Message, bot: Bot):
     user_id = message.from_user.id
     chat_id = message.chat.id
     text = (message.text or message.caption or "").strip()

@@ -2,10 +2,12 @@ import asyncio
 import re
 from datetime import datetime, timezone, timedelta
 from html import escape
-from aiogram import Router, types, Bot, F
+from typing import Any, Callable, Dict, Awaitable
+
+from aiogram import Router, types, Bot, BaseMiddleware
 from aiogram.filters import Command
 from aiogram.enums import ChatType, ChatMemberStatus
-from aiogram.types import ChatPermissions
+from aiogram.types import ChatPermissions, Message, TelegramObject
 from aiogram.exceptions import TelegramBadRequest
 
 try:
@@ -31,11 +33,11 @@ router = Router()
 # 1. Normalizatsiya va harflarni almashtirish (Anti-Bypass)
 # -------------------------------------------------------------
 CYRILLIC_TO_LATIN = {
-    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
     'ж': 'j', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
     'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
     'ф': 'f', 'х': 'x', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sh', 'ъ': '',
-    'ы': 'i', 'ь': '', 'э': 'e', 'ю': 'yu', 'ya': 'ya'
+    'ы': 'i', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
 }
 
 LEET_REPLACEMENTS = {
@@ -49,20 +51,19 @@ LEET_REPLACEMENTS = {
 
 # O'zbekcha haqorat va so'kinishlar
 UZBEK_BAD_PATTERNS = [
-    r'\b(onang[nd]i|enang[nd]i|opang[nd]i|singling[nd]i|oting[nd]i|otang[nd]i)\b',
-    r'\b(itvachcha|xaromi|haromi|jalap|jalaq|gandon|foxisha|fohisha|qanjiq|dalbayob|padariga|amxona|omxona|qotoq|qoxtoq|kutvachcha)\b',
-    r'\b(siktir[a-z]*|sikvotti|sikaman|sikay|sikarman|sikyatgan|sikish)\b',
-    r'\b(s[i1]k[i1]sh|s[i1]k[a-z]+)\b',
-    r'\b(am|om)(i|[nd]i|ing|ingni|ingi|xona|xo[\'`]?r|taloq)\b',
-    r'\b(ami|omini|omingni|amingni)\b',
-    r'\b(ko[\'`]?t|kot)(i|[nd]i|[nd]a|[nd]an|[nd]iki|ing|ingni|inga|vachcha)\b',
-    r'\b(ko[\'`]?tsan|kotsan)\b',
+    r'\b(onang[nd]i|enang[nd]i|opang[nd]i|singling[nd]i|oting[nd]i|otang[nd]i|onangni|enangni|padaring[a-z]*)\b',
+    r'\b(itvachcha|xaromi[a-z]*|haromi[a-z]*|jalap[a-z]*|jalaq[a-z]*|gandon[a-z]*|foxisha[a-z]*|fohisha[a-z]*|qanjiq[a-z]*|dalbayob[a-z]*|dalbaeb[a-z]*|amxona|omxona|kutvachcha)\b',
+    r'\b(qotoq[a-z]*|qoxtoq[a-z]*)\b',
+    r'\b(siktir[a-z]*|sikvotti|sikaman|sikay|sikarman|sikyatgan|sikish|sikaylik|sikaychi|sikvor)\b',
+    r'\b(s[i1]k[a-z]*)\b',
+    r'\b(am|om)(i|[nd]i|ing|ingni|ingi|xona|xo[\'`]?r|taloq|san|cha)\b',
+    r'\b(ami|omini|omingni|amingni|amisan|omisan)\b',
+    r'\b(kot|koot)(i|[nd]i|[nd]a|[nd]an|[nd]iki|ing|ingni|inga|vachcha|san|cha|lar|boz)?\b',
 ]
 
 # Ruscha matlar (Kirill va Translit)
 RUSSIAN_BAD_PATTERNS = [
-    r'(?i)\b(ху[йиеяё][а-я]*|хули|хер[а-я]*|пизд[а-я]*|еб[а-яё]*|ёб[а-яё]*|бля[тд][а-я]*|сук[а-я]*|сучк[а-я]*|муда[кч][а-я]*|пид[ao]р[а-я]*|гандон[а-я]*|гондон[а-я]*|шлюх[а-я]*|залуп[а-я]*|дроч[а-я]*)\b',
-    r'\b(xuy[a-z]*|huy[a-z]*|pizd[a-z]*|yeb[a-z]*|eb[a-z]*|blya[td][a-z]*|suk[ai][a-z]*|mudak[a-z]*|pid[ao]r[a-z]*|shlyux[a-z]*|gandon[a-z]*|chmo)\b',
+    r'\b(xuy[a-z]*|huy[a-z]*|pizd[a-z]*|yeb[a-z]*|eb[a-z]*|blya[a-z]*|blat|suk[ai][a-z]*|mudak[a-z]*|pid[ao]r[a-z]*|shlyux[a-z]*|gandon[a-z]*|gondon[a-z]*|chmo|zaluip[a-z]*|droch[a-z]*)\b',
 ]
 
 # Inglizcha haqoratlar
@@ -71,7 +72,6 @@ ENGLISH_BAD_PATTERNS = [
     r'\b(shit|faggot)\b',
 ]
 
-# Barcha standart naqshlarni birlashtirish
 ALL_PATTERNS = [
     re.compile(p, re.IGNORECASE) for p in (UZBEK_BAD_PATTERNS + RUSSIAN_BAD_PATTERNS + ENGLISH_BAD_PATTERNS)
 ]
@@ -79,69 +79,62 @@ ALL_PATTERNS = [
 # Ruxsat berilgan oddiy so'zlar (False Positive bo'lmasligi uchun)
 EXCLUDED_SAFE_WORDS = {
     'kutubxona', 'kutish', 'kutib', 'komanda', 'rubl', 'salom', 'tamom',
-    'katta', 'sikl', 'tsikl', 'sirk', 'kuti', 'kutgani', 'kutaylik'
+    'katta', 'sikl', 'tsikl', 'sirk', 'kuti', 'kutgani', 'kutaylik',
+    'rahmat', 'yaxshi', 'qanday', 'assalomu', 'alaykum', 'amal', 'omon'
 }
 
 
 def normalize_text(text: str) -> str:
-    """
-    Matnni har xil hiylalardan tozalash:
-    - Kichik harfga o'tkazish
-    - Belgilar va raqamlarni harfga aylantirish (@ -> a, 0 -> o)
-    - Kirillni lotinga o'tkazish
-    - Harflar orasidagi nuqta, probel, yulduzchalarni olib tashlash
-    """
+    """Matnni leetspeak, kirill va apostroflardan tozalab kichik harfga o'tkazish."""
     if not text:
         return ""
 
-    result = text.lower()
-
-    # 1. Leetspeak almashtirish
+    res = text.lower()
     for char, rep in LEET_REPLACEMENTS.items():
-        result = result.replace(char, rep)
+        res = res.replace(char, rep)
 
-    # 2. Kirillni lotinga almashtirish
     for char, rep in CYRILLIC_TO_LATIN.items():
-        result = result.replace(char, rep)
+        res = res.replace(char, rep)
 
-    return result
+    # Apostroflarni olib tashlash (ko't -> kot, qo'toq -> qotoq)
+    res = re.sub(r'[\'’`ʻ‘]', '', res)
+    return res
 
 
 def is_profane(text: str, custom_words: list[str] = None) -> bool:
-    """
-    Matnda haqorat yoki so'kinish borligini tekshiradi.
-    """
+    """Matnda haqorat yoki so'kinish borligini tekshirish."""
     if not text or not text.strip():
         return False
 
-    raw_lower = text.lower()
     normalized = normalize_text(text)
+    words = re.findall(r'[a-z]+', normalized)
 
-    # A) Xabar ichidagi bo'lak so'zlarni tekshirish
-    words = re.findall(r'[a-zA-Zа-яА-ЯёЁ]+', raw_lower)
-    norm_words = re.findall(r'[a-zA-Z]+', normalized)
-
-    # Harflar orasida probel yoki nuqtalar bo'lsa (masalan: s.u.k.a yoki s u k a)
-    condensed = re.sub(r'[\s\.\,\*\-\_\~\#\/\\]+', '', normalized)
-
-    # 1. Standart naqshlar bo'yicha tekshirish
-    for pattern in ALL_PATTERNS:
-        if pattern.search(raw_lower) or pattern.search(normalized):
-            # Safe words tekshiruvi
-            matched_words = [w for w in words if w in EXCLUDED_SAFE_WORDS]
-            if not matched_words:
+    # 1. So'zma-so'z tekshirish
+    for w in words:
+        if w in EXCLUDED_SAFE_WORDS:
+            continue
+        for pattern in ALL_PATTERNS:
+            if pattern.search(w):
                 return True
+        if custom_words:
+            for cw in custom_words:
+                clean_cw = normalize_text(cw)
+                if clean_cw and clean_cw == w:
+                    return True
 
-        # Qisqartirilgan/birlashgan shaklda tekshirish (masalan s.u.k.a)
-        if pattern.search(condensed):
-            return True
-
-    # 2. Guruh uchun maxsus kiritilgan taqiqlangan so'zlar
+    # 2. Xabar ichida orasi ochiq yoki belgilar bilan yozilgan bo'lsa (masalan: s u k a, s.u.k.a, g a n d o n)
+    condensed = re.sub(r'[^a-z]+', '', normalized)
+    condensed_keywords = [
+        'gandon', 'jalap', 'xaromi', 'haromi', 'dalbayob', 'itvachcha',
+        'suka', 'blyat', 'pizda', 'xuy', 'huy', 'yebal', 'ebat',
+        'fuck', 'bitch', 'asshole', 'qotoq', 'siktir', 'sikaman', 'fck'
+    ]
     if custom_words:
-        for cw in custom_words:
-            cw_norm = normalize_text(cw)
-            if cw_norm in normalized or cw_norm in condensed or cw in raw_lower:
-                return True
+        condensed_keywords.extend([normalize_text(cw) for cw in custom_words if cw])
+
+    for kw in condensed_keywords:
+        if kw and kw in condensed:
+            return True
 
     return False
 
@@ -165,7 +158,103 @@ async def delete_message_later(bot: Bot, chat_id: int, message_id: int, delay: i
 
 
 # -------------------------------------------------------------
-# 3. Admin Buyruqlari (/censor on/off, /addbadword, /delbadword)
+# 3. Censor Middleware (Guruhdagi har bir xabarni tekshiradi)
+# -------------------------------------------------------------
+class CensorMiddleware(BaseMiddleware):
+    """
+    Guruhdagi barcha xabarlarni routerlardan OLDIN tekshiruvchi middleware.
+    So'kinish aniqlansa:
+    - Xabar darhol o'chiriladi.
+    - Admin bo'lsa: qat'iy ogohlantiriladi.
+    - Oddiy a'zo bo'lsa: 1 daqiqaga mute qilinadi.
+    - Xabar boshqa handlerlarga o'tkazilmaydi.
+    """
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        if not isinstance(event, Message) or not event.chat:
+            return await handler(event, data)
+
+        if event.chat.type not in [ChatType.GROUP, ChatType.SUPERGROUP]:
+            return await handler(event, data)
+
+        if not event.from_user or event.from_user.is_bot:
+            return await handler(event, data)
+
+        chat_id = event.chat.id
+        user = event.from_user
+
+        # Filtr o'chirilgan bo'lsa tekshirmaymiz
+        if not is_censor_enabled(chat_id):
+            return await handler(event, data)
+
+        text = event.text or event.caption or ""
+        if not text:
+            return await handler(event, data)
+
+        custom_words = get_custom_bad_words(chat_id)
+        if not is_profane(text, custom_words):
+            return await handler(event, data)
+
+        # Haqorat aniqlandi!
+        bot: Bot = data.get("bot") or event.bot
+
+        # 1. Haqoratli xabarni zudlik bilan o'chirish
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=event.message_id)
+        except Exception:
+            pass
+
+        # 2. Xatti-harakat: Admin bo'lsa ogohlantirish, oddiy a'zo bo'lsa 1 minut mute
+        is_admin = await is_telegram_admin(chat_id, user.id, bot)
+        if is_admin:
+            try:
+                warn_msg = await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"⚠️ <b>{escape(user.full_name)}</b>, admin bo'lib turib so'kinmang! "
+                         f"Iltimos, boshqalarga o'rnak bo'ling va guruhda madaniyatni saqlang!",
+                    parse_mode="HTML"
+                )
+                asyncio.create_task(delete_message_later(bot, chat_id, warn_msg.message_id, delay=15))
+            except Exception:
+                pass
+        else:
+            until_date = datetime.now(timezone.utc) + timedelta(minutes=1)
+            try:
+                permissions = ChatPermissions(
+                    can_send_messages=False,
+                    can_send_photos=False,
+                    can_send_videos=False,
+                    can_send_other_messages=False,
+                    can_add_web_page_previews=False
+                )
+                await bot.restrict_chat_member(
+                    chat_id=chat_id,
+                    user_id=user.id,
+                    permissions=permissions,
+                    until_date=until_date
+                )
+                warn_msg = await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"⚠️ <b>{escape(user.full_name)}</b>, guruhda so'kinish va haqorat qat'iyan taqiqlangan!\n"
+                         f"<i>Siz 1 daqiqaga yozishdan cheklandingiz (Mute).</i>",
+                    parse_mode="HTML"
+                )
+                asyncio.create_task(delete_message_later(bot, chat_id, warn_msg.message_id, delay=15))
+            except TelegramBadRequest:
+                pass
+            except Exception:
+                pass
+
+        # Xabar haqoratli bo'lgani sababli keyingi handlerlarga o'tkazmaymiz
+        return
+
+
+# -------------------------------------------------------------
+# 4. Admin Buyruqlari (/censor on/off, /addbadword, /delbadword, /badwords)
 # -------------------------------------------------------------
 
 @router.message(Command("censor"))
@@ -175,7 +264,8 @@ async def cmd_censor(message: types.Message, bot: Bot):
             await message.reply(
                 "ℹ️ <b>So'kinish filtri (Censor) guruhlar uchun mo'ljallangan!</b>\n\n"
                 "1. Botni guruhingizga qo'shing va <b>Admin</b> huquqini bering.\n"
-                "2. Guruh ichida <code>/censor on</code> yoki <code>/censor off</code> deb yozing.",
+                "2. Guruh ichida <code>/censor on</code> yoki <code>/censor off</code> deb yozing.\n\n"
+                "<i>Standart holatda barcha guruhlarda filtr yoqilgan (ON) holatda bo'ladi.</i>",
                 parse_mode="HTML"
             )
         return
@@ -226,7 +316,7 @@ async def cmd_addbadword(message: types.Message, bot: Bot):
         if is_profane(word):
             await message.reply(
                 f"✅ <b>'{escape(word)}'</b> taqiqlangan so'zlar ro'yxatiga qo'shildi!\n\n"
-                f"💡 <i>Eslatma: Bu so'z allaqachon botning standart bazasida ham mavjud va guruhlarda avtomatik bloklanadi.</i>",
+                f"💡 <i>Eslatma: Bu so'z allaqachon botning standart bazasida ham mavjud va barcha guruhlarda avtomatik bloklanadi.</i>",
                 parse_mode="HTML"
             )
         else:
@@ -317,71 +407,3 @@ async def cmd_badwords(message: types.Message, bot: Bot):
         await message.reply(f"📋 <b>Guruhning Maxsus Taqiqlangan So'zlari:</b>\n{words_list}", parse_mode="HTML")
     else:
         await message.reply("ℹ️ Ushbu guruhda hozircha qo'shimcha taqiqlangan so'zlar yo'q. Standart filtr faol.", parse_mode="HTML")
-
-
-# -------------------------------------------------------------
-# 4. Asosiy Xabarlarni Tekshirish (Censor Listener)
-# -------------------------------------------------------------
-
-@router.message(F.chat.type.in_([ChatType.GROUP, ChatType.SUPERGROUP]))
-async def check_profanity(message: types.Message, bot: Bot):
-    if not message.from_user or message.from_user.is_bot:
-        return
-
-    chat_id = message.chat.id
-    user = message.from_user
-
-    # Censor filtri o'chirilgan bo'lsa tekshirmaymiz
-    if not is_censor_enabled(chat_id):
-        return
-
-    text = message.text or message.caption or ""
-    if not text:
-        return
-
-    custom_words = get_custom_bad_words(chat_id)
-    if not is_profane(text, custom_words):
-        return
-
-    # Haqorat aniqlandi!
-    # 1. Haqoratli xabarni darhol o'chirish
-    try:
-        await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
-    except Exception:
-        pass
-
-    is_admin = await is_telegram_admin(chat_id, user.id, bot)
-
-    # 2. Xatti-harakat: Admin bo'lsa qat'iy ogohlantirish, oddiy foydalanuvchi bo'lsa 1 minut mute
-    if is_admin:
-        warn_msg = await message.answer(
-            f"⚠️ <b>{escape(user.full_name)}</b>, admin bo'lib turib so'kinmang! "
-            f"Iltimos, boshqalarga o'rnak bo'ling va qoidalarga rioya qiling!",
-            parse_mode="HTML"
-        )
-        asyncio.create_task(delete_message_later(bot, chat_id, warn_msg.message_id, delay=15))
-    else:
-        # 1 daqiqa mute
-        until_date = datetime.now(timezone.utc) + timedelta(minutes=1)
-        try:
-            permissions = ChatPermissions(
-                can_send_messages=False,
-                can_send_photos=False,
-                can_send_videos=False,
-                can_send_other_messages=False,
-                can_add_web_page_previews=False
-            )
-            await bot.restrict_chat_member(
-                chat_id=chat_id,
-                user_id=user.id,
-                permissions=permissions,
-                until_date=until_date
-            )
-            warn_msg = await message.answer(
-                f"⚠️ <b>{escape(user.full_name)}</b>, guruhda so'kinish va haqorat qat'iyan taqiqlangan!\n"
-                f"<i>Siz 1 daqiqaga yozishdan cheklandingiz (Mute).</i>",
-                parse_mode="HTML"
-            )
-            asyncio.create_task(delete_message_later(bot, chat_id, warn_msg.message_id, delay=15))
-        except TelegramBadRequest as e:
-            pass
