@@ -63,6 +63,19 @@ def init_db():
                 reason TEXT
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_censor_settings (
+                chat_id INTEGER PRIMARY KEY,
+                is_enabled INTEGER DEFAULT 1
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS custom_bad_words (
+                chat_id INTEGER,
+                word TEXT,
+                PRIMARY KEY (chat_id, word)
+            );
+        """)
         conn.commit()
 
 
@@ -395,3 +408,59 @@ def get_all_active_sleeps() -> list[dict]:
             conn.execute(f"DELETE FROM user_sleep WHERE user_id IN ({placeholders})", expired_ids)
             conn.commit()
     return active
+
+
+def is_censor_enabled(chat_id: int) -> bool:
+    """Guruhda censor filtri yoqilganligini tekshirish (standart: yoqilgan - True)."""
+    with get_connection() as conn:
+        cur = conn.execute("SELECT is_enabled FROM chat_censor_settings WHERE chat_id = ?", (chat_id,))
+        row = cur.fetchone()
+        return bool(row["is_enabled"]) if row else True
+
+
+def set_censor_status(chat_id: int, enabled: bool):
+    """Guruhda censor filtrini yoqish yoki o'chirish."""
+    val = 1 if enabled else 0
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chat_censor_settings (chat_id, is_enabled)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET is_enabled = ?
+            """,
+            (chat_id, val, val)
+        )
+        conn.commit()
+
+
+def add_custom_bad_word(chat_id: int, word: str) -> bool:
+    """Guruh uchun yangi taqiqlangan so'z qo'shish."""
+    clean_word = word.strip().lower()
+    if not clean_word:
+        return False
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO custom_bad_words (chat_id, word) VALUES (?, ?)",
+            (chat_id, clean_word)
+        )
+        conn.commit()
+    return True
+
+
+def remove_custom_bad_word(chat_id: int, word: str) -> bool:
+    """Guruh uchun taqiqlangan so'zni ro'yxatdan chiqarish."""
+    clean_word = word.strip().lower()
+    with get_connection() as conn:
+        cur = conn.execute(
+            "DELETE FROM custom_bad_words WHERE chat_id = ? AND word = ?",
+            (chat_id, clean_word)
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def get_custom_bad_words(chat_id: int) -> list[str]:
+    """Guruh uchun kiritilgan maxsus taqiqlangan so'zlar ro'yxati."""
+    with get_connection() as conn:
+        cur = conn.execute("SELECT word FROM custom_bad_words WHERE chat_id = ?", (chat_id,))
+        return [row["word"] for row in cur.fetchall()]
