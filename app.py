@@ -4,9 +4,8 @@ import time
 import threading
 import asyncio
 import psutil
-from fastapi import FastAPI
+from fastapi import Request
 from fastapi.responses import HTMLResponse
-import uvicorn
 import gradio as gr
 
 # Ensure UTF-8 output
@@ -17,7 +16,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-# Disable internal aiohttp server in run.py so FastAPI/Uvicorn alone binds port 7860
+# Disable internal aiohttp server in run.py so Gradio alone binds port 7860
 os.environ["RUN_WEB_SERVER"] = "false"
 
 import run
@@ -60,23 +59,6 @@ group_bot_thread = threading.Thread(target=run_group_bot, daemon=True)
 group_bot_thread.start()
 
 
-# ---------------------------------------------------------------------------
-# FastAPI Main Web Application (Telegram Mini App is primary on / and /webapp)
-# ---------------------------------------------------------------------------
-app = FastAPI(title="Blizkiy Bot Telegram Mini App")
-
-from group_bot.webapp_server import get_webapp_html, attach_fastapi_routes
-attach_fastapi_routes(app)
-
-@app.get("/", response_class=HTMLResponse)
-async def serve_root():
-    """Telegram Mini App ni bosh sahifada to'g'ridan-to'g'ri ko'rsatish."""
-    return HTMLResponse(content=get_webapp_html())
-
-
-# ---------------------------------------------------------------------------
-# Gradio Server Status Dashboard (mounted at /status)
-# ---------------------------------------------------------------------------
 def get_system_stats():
     """Returns live server metrics for the Gradio UI."""
     try:
@@ -94,25 +76,33 @@ def get_system_stats():
         return f"🟢 Server Holati: ONLINE\nBotlar faol ishlamoqda. ({e})"
 
 
-with gr.Blocks(title="Multi-Bot AI Cloud Cluster (16 GB)") as demo:
-    gr.Markdown("# 🚀 Multi-Bot 24/7 Cloud Cluster (16 GB RAM)")
-    gr.Markdown(
-        "Barcha Telegram botlaringiz Hugging Face Spaces bulutida **16 GB RAM** bilan 24/7 rejimda muvaffaqiyatli ishlamoqda!\n\n"
-        "👉 **Kino Qidiruv Boti:** [@FilmAiFinderbot](https://t.me/FilmAiFinderbot)\n"
-        "👉 **Admin Boti:** [@filmfinder_admin_bot](https://t.me/filmfinder_admin_bot)\n"
-        "👉 **Guruh Moderatsiya Boti:** [@oken_sherda_bot](https://t.me/oken_sherda_bot)\n"
-        "📱 **Guruh Boshqaruv Mini App:** [Boshqaruv Paneli](/)"
-    )
-    status_box = gr.Textbox(value=get_system_stats, label="📊 Jonli Server va Botlar Ko'rsatkichi", lines=6)
-    refresh_btn = gr.Button("🔄 Yangilash / Refresh", variant="primary")
-    refresh_btn.click(fn=get_system_stats, outputs=status_box)
+from group_bot.webapp_server import get_webapp_html, attach_fastapi_routes
 
+# Build Gradio Blocks (Hugging Face Spaces native runner)
+with gr.Blocks(
+    title="Blizkiy Moderatsiya — Guruh Boshqaruv Markazi",
+    css="""
+        footer { display: none !important; }
+        .gradio-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; background: #0b0f19 !important; }
+    """
+) as demo:
+    # Telegram Mini App ni to'g'ridan-to'g'ri Gradio ichida ham render qilish
+    gr.HTML(value=get_webapp_html())
+
+# Attach Telegram Mini App routes and API endpoints to demo.app (FastAPI)
 try:
-    app = gr.mount_gradio_app(app, demo, path="/status")
+    attach_fastapi_routes(demo.app)
+
+    @demo.app.middleware("http")
+    async def serve_webapp_for_tg(request: Request, call_next):
+        # Bosh sahifa "/" yoki "/webapp" ga so'rov kelsa darhol sof Mini App HTML ni yuborish
+        if request.method == "GET" and request.url.path in ["/", "/webapp"]:
+            return HTMLResponse(content=get_webapp_html())
+        return await call_next(request)
 except Exception as e:
-    print(f"⚠️ [Gradio Warning] Gradio mount qilishda xatolik: {e}", flush=True)
+    print(f"⚠️ [Web App Warning] FastAPI routes ulashda xatolik: {e}", flush=True)
 
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "7860"))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    demo.queue().launch(server_name="0.0.0.0", server_port=port)
