@@ -19,7 +19,7 @@ from group_bot.handlers import main_router
 from group_bot.handlers.antiflood import AntiFloodMiddleware
 from group_bot.handlers.censor import CensorMiddleware
 
-WEBAPP_URL = "https://uchunrisk-film-ai-finder-bot.hf.space/webapp"
+WEBAPP_URL = "https://uchunrisk-film-ai-finder-bot.hf.space/gradio_api/webapp"
 
 
 class MessageTrackerMiddleware(BaseMiddleware):

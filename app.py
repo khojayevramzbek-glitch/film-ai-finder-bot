@@ -30,6 +30,7 @@ except Exception:
 
 # Disable internal aiohttp server in run.py so FastAPI/Gradio alone binds port 7860
 os.environ["RUN_WEB_SERVER"] = "false"
+os.environ["GRADIO_SSR_MODE"] = "false"
 
 import run
 
@@ -103,6 +104,7 @@ if __name__ == "__main__":
         server_name="0.0.0.0",
         server_port=port,
         prevent_thread_lock=True,
+        ssr_mode=False,
         app_kwargs={
             "middleware": [Middleware(TelegramWebAppMiddleware)]
         }

@@ -6,7 +6,7 @@ from html import escape
 
 router = Router()
 
-WEBAPP_URL = "https://uchunrisk-film-ai-finder-bot.hf.space/webapp"
+WEBAPP_URL = "https://uchunrisk-film-ai-finder-bot.hf.space/gradio_api/webapp"
 
 
 def get_main_menu_keyboard(bot_username: str) -> InlineKeyboardMarkup:
