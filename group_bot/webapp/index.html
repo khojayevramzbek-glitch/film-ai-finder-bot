@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Blizkiy Bot — Professional Guruh Boshqaruv Markazi</title>
+  <title>Blizkiy Bot — Guruh Boshqaruv Markazi</title>
   <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <!-- Google Fonts: Plus Jakarta Sans -->
@@ -14,9 +14,8 @@
   <style>
     :root {
       --bg-primary: #0b0f19;
-      --bg-secondary: #131c2e;
-      --bg-card: rgba(23, 32, 54, 0.75);
-      --bg-card-hover: rgba(33, 46, 74, 0.85);
+      --bg-card: rgba(22, 31, 51, 0.85);
+      --bg-card-hover: rgba(30, 42, 69, 0.95);
       --accent-blue: #38bdf8;
       --accent-indigo: #6366f1;
       --accent-green: #10b981;
@@ -58,7 +57,7 @@
 
     body {
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: radial-gradient(circle at top right, #172554, #0b0f19 65%);
+      background: radial-gradient(circle at top right, #172554, #0b0f19 70%);
       color: var(--text-primary);
       min-height: 100vh;
       overflow-x: hidden;
@@ -72,7 +71,7 @@
       z-index: 50;
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
-      background: rgba(11, 15, 25, 0.88);
+      background: rgba(11, 15, 25, 0.92);
       border-bottom: 1px solid var(--border-color);
       padding: 14px 20px;
       display: flex;
@@ -123,7 +122,6 @@
       padding: 5px 14px 5px 5px;
       font-size: 13px;
       font-weight: 700;
-      transition: background 0.2s;
     }
 
     .user-avatar {
@@ -141,30 +139,26 @@
 
     /* Container */
     .container {
-      max-width: 980px;
+      max-width: 920px;
       margin: 0 auto;
       padding: 20px;
     }
 
-    /* =================================================================== */
-    /* RESPONSIVE NAVIGATION: DESKTOP TABS vs MOBILE BOTTOM BAR */
-    /* =================================================================== */
-    
-    /* Desktop Top Navigation Bar (Visible on PC / screen >= 768px) */
+    /* Desktop Navigation (Top Pills on PC) */
     .desktop-nav-wrap {
       display: none;
       position: sticky;
       top: 73px;
       z-index: 45;
-      background: rgba(11, 15, 25, 0.9);
+      background: rgba(11, 15, 25, 0.92);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border-color);
-      padding: 8px 20px;
+      padding: 10px 20px;
     }
 
     .desktop-nav {
-      max-width: 980px;
+      max-width: 920px;
       margin: 0 auto;
       display: flex;
       align-items: center;
@@ -184,7 +178,7 @@
       border: 1px solid var(--border-color);
       color: var(--text-secondary);
       border-radius: 30px;
-      padding: 8px 16px;
+      padding: 9px 18px;
       font-size: 13px;
       font-weight: 700;
       cursor: pointer;
@@ -193,8 +187,8 @@
     }
 
     .desktop-nav-item:hover {
-      background: rgba(56, 189, 248, 0.1);
-      color: var(--text-primary);
+      background: rgba(56, 189, 248, 0.12);
+      color: #fff;
       border-color: rgba(56, 189, 248, 0.3);
     }
 
@@ -205,7 +199,7 @@
       box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
     }
 
-    /* Mobile Bottom Navigation Bar (Visible on phones / screen < 768px) */
+    /* Mobile Bottom Navigation */
     .bottom-nav {
       display: flex;
       position: fixed;
@@ -213,7 +207,7 @@
       left: 0;
       right: 0;
       z-index: 50;
-      background: rgba(11, 15, 25, 0.95);
+      background: rgba(11, 15, 25, 0.96);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border-top: 1px solid var(--border-color);
@@ -245,16 +239,16 @@
       font-size: 19px;
     }
 
-    /* PC / Desktop Responsive Adjustments */
+    /* Responsive Breakpoints */
     @media (min-width: 768px) {
       body {
-        padding-bottom: 40px; /* No bottom nav on PC */
+        padding-bottom: 40px;
       }
       .desktop-nav-wrap {
         display: block;
       }
       .bottom-nav {
-        display: none !important; /* Hide mobile bottom nav on PC */
+        display: none !important;
       }
       .hero-card {
         display: flex;
@@ -267,7 +261,7 @@
         flex: 1;
       }
       .hero-btn-wrap {
-        width: 280px;
+        width: 300px;
         flex-shrink: 0;
       }
       .grid-2-col {
@@ -282,7 +276,7 @@
 
     @media (max-width: 767px) {
       body {
-        padding-bottom: 95px; /* Extra padding for mobile bottom bar */
+        padding-bottom: 95px;
       }
       .container {
         padding: 12px;
@@ -293,14 +287,14 @@
         gap: 12px;
       }
       .number-input, .text-input, .field-select {
-        font-size: 16px !important; /* Prevent iOS auto-zoom on mobile inputs */
+        font-size: 16px !important;
       }
     }
 
     /* Hero Card */
     .hero-card {
-      background: linear-gradient(135deg, rgba(30, 58, 138, 0.7), rgba(15, 23, 42, 0.95));
-      border: 1px solid rgba(56, 189, 248, 0.3);
+      background: linear-gradient(135deg, rgba(30, 58, 138, 0.75), rgba(15, 23, 42, 0.95));
+      border: 1px solid rgba(56, 189, 248, 0.35);
       border-radius: var(--radius-lg);
       padding: 22px;
       position: relative;
@@ -333,8 +327,8 @@
     .hero-desc {
       font-size: 13px;
       color: #cbd5e1;
-      margin-bottom: 14px;
-      line-height: 1.5;
+      margin-bottom: 16px;
+      line-height: 1.6;
     }
 
     .btn-add-group {
@@ -364,7 +358,7 @@
       transform: scale(0.98);
     }
 
-    /* Group Selector Section */
+    /* Section Title */
     .section-title {
       font-size: 13px;
       font-weight: 800;
@@ -377,6 +371,7 @@
       gap: 6px;
     }
 
+    /* Group Selector */
     .group-selector-wrap {
       position: relative;
       margin-bottom: 22px;
@@ -428,19 +423,41 @@
       border-color: rgba(56, 189, 248, 0.25);
     }
 
+    .card-header {
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .card-header h2 {
+      font-size: 17px;
+      font-weight: 800;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-header p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+
     /* Switch Rows */
     .switch-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      padding: 10px 0;
+      padding: 12px 0;
     }
 
     .switch-row:not(:last-child) {
       border-bottom: 1px solid var(--border-color);
       margin-bottom: 10px;
-      padding-bottom: 12px;
+      padding-bottom: 14px;
     }
 
     .switch-info h3 {
@@ -455,16 +472,16 @@
     .switch-info p {
       font-size: 12px;
       color: var(--text-secondary);
-      margin-top: 3px;
-      line-height: 1.4;
+      margin-top: 4px;
+      line-height: 1.5;
     }
 
     /* Modern Toggle Switch */
     .toggle {
       position: relative;
       display: inline-block;
-      width: 52px;
-      height: 28px;
+      width: 54px;
+      height: 30px;
       flex-shrink: 0;
     }
 
@@ -488,8 +505,8 @@
       content: "";
       height: 22px;
       width: 22px;
-      left: 3px;
-      bottom: 3px;
+      left: 4px;
+      bottom: 4px;
       background-color: white;
       border-radius: 50%;
       transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -704,7 +721,7 @@
       padding: 14px;
       color: #fff;
       font-size: 14px;
-      line-height: 1.5;
+      line-height: 1.6;
       font-family: inherit;
       resize: vertical;
       outline: none;
@@ -871,7 +888,7 @@
         <span>⏱ Jazolar & Vaqtlar</span>
       </button>
       <button class="desktop-nav-item" data-tab="tab-flood">
-        <span>⚡️ Anti-Flood</span>
+        <span>⚡️ Toshqin (Anti-Flood)</span>
       </button>
       <button class="desktop-nav-item" data-tab="tab-badwords">
         <span>🤬 Taqiqlangan So'zlar</span>
@@ -897,7 +914,9 @@
           <span>🚀 Botni Guruhingizga Qo'shing</span>
         </div>
         <p class="hero-desc">
-          Guruhni toshqin, so'kinish va kiber-spamdan 24/7 himoya qilish uchun botni birgina bosish bilan guruhingizga qo'shing, so'ng daqiqalar, jazo va filtrlarni o'zingizga moslang!
+          <b>1.</b> Quyidagi tugmani bosing va guruhingizni tanlang.<br>
+          <b>2.</b> Botga guruhda <b>Administrator</b> huquqini bering.<br>
+          <b>3.</b> Guruhingiz pastdagi ro'yxatda paydo bo'ladi va barcha qoidalarni 100% o'zingizga moslaysiz!
         </p>
       </div>
       <div class="hero-btn-wrap">
@@ -909,7 +928,7 @@
 
     <!-- Active Group Selector -->
     <div class="section-title">
-      <span>⚙️ Boshqarilayotgan Guruh</span>
+      <span>⚙️ Sozlanayotgan Guruh</span>
     </div>
     <div class="group-selector-wrap">
       <select id="groupSelect" class="group-select">
@@ -923,10 +942,15 @@
     <!-- =================================================================== -->
     <div id="tab-general" class="tab-pane active">
       <div class="glass-card">
+        <div class="card-header">
+          <h2>🎛 Asosiy Boshqaruv Qalampiri</h2>
+          <p>Guruhingizdagi asosiy modullarni bitta bosish bilan yoqing yoki o'chiring. Har bir modul vazifasi aniq tushuntirilgan:</p>
+        </div>
+
         <div class="switch-row">
           <div class="switch-info">
             <h3>🔘 Bot Umumiy Holati</h3>
-            <p>O'chirilganda bot guruhda barcha buyruq va xabarlarga sukut saqlaydi</p>
+            <p>Agar guruhingizda vaqtincha bot ishlashini to'xtatmoqchi bo'lsangiz, bitta tugma bilan pauzaga qo'yasiz. O'chirilganda bot barcha xabarlarga sukut saqlaydi, hech kimni jazolamaydi.</p>
           </div>
           <label class="toggle">
             <input type="checkbox" id="toggleBotStatus">
@@ -936,8 +960,8 @@
 
         <div class="switch-row">
           <div class="switch-info">
-            <h3>🤬 So'kinish & Haqorat Filtri</h3>
-            <p>Haqoratli so'z yozgan a'zolarni avtomatik jazolaydi</p>
+            <h3>🤬 So'kinish & Haqoratdan Himoya</h3>
+            <p>Guruhda a'zolar nojo'ya yoki haqoratli so'z yozganda bot uning xabarini avtomatik o'chiradi va siz belgilagan jazoni qo'llaydi.</p>
           </div>
           <label class="toggle">
             <input type="checkbox" id="toggleCensor">
@@ -947,8 +971,8 @@
 
         <div class="switch-row">
           <div class="switch-info">
-            <h3>🔗 Reklama & Link Filtri</h3>
-            <p>Ruxsatsiz havola (t.me/, http) tarqatishni darhol to'xtatish</p>
+            <h3>🔗 Reklama & Havolalar Filtri</h3>
+            <p>Guruhda ruxsatsiz Telegram kanallar, guruhlar yoki veb-sayt havolalarini (t.me/, http) tarqatishni darhol to'xtatadi va xabarni o'chiradi.</p>
           </div>
           <label class="toggle">
             <input type="checkbox" id="toggleLinkFilter">
@@ -959,7 +983,7 @@
         <div class="switch-row">
           <div class="switch-info">
             <h3>👋 Yangi A'zolar Bilan Salomlashish</h3>
-            <p>Guruhga yangi qo'shilganlarga xush kelibsiz xabarini yuborish</p>
+            <p>Guruhga yangi a'zo qo'shilganda bot chiroyli xush kelibsiz xabari bilan kutib oladi.</p>
           </div>
           <label class="toggle">
             <input type="checkbox" id="toggleWelcome">
@@ -970,7 +994,7 @@
         <div class="switch-row">
           <div class="switch-info">
             <h3>📊 Guruh Statistikasi (Stata)</h3>
-            <p>24 soatlik xabarlar va eng faol a'zolar reytingini yuritish</p>
+            <p>Guruh a'zolarining 24 soatlik xabarlari hisobi va eng faol a'zolar reytingini yuritish.</p>
           </div>
           <label class="toggle">
             <input type="checkbox" id="toggleStats">
@@ -981,7 +1005,7 @@
         <div class="switch-row" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
           <div class="switch-info">
             <h3>👥 Statani Ommaga Ko'rsatish</h3>
-            <p>Yoqilgan bo'lsa barcha a'zolar, aks holda faqat adminlar ko'radi</p>
+            <p>Yoqilgan bo'lsa barcha oddiy a'zolar ham reytingni ko'ra oladi, o'chirilgan bo'lsa faqat adminlar ko'radi.</p>
           </div>
           <label class="toggle">
             <input type="checkbox" id="toggleStatsPublic">
@@ -1021,14 +1045,19 @@
       <div class="grid-2-col">
         <!-- So'kinish jazosi va vaqti -->
         <div class="glass-card">
-          <label class="field-label">🤬 So'kinganlar Uchun Jazo Turi:</label>
+          <div class="card-header">
+            <h2>🤬 So'kinish Uchun Jazo & Vaqt</h2>
+            <p>A'zo nojo'ya so'z yozganda unga qanday jazo berilishi va yozishdan cheklash (mute) vaqtini shaxsan belgilang:</p>
+          </div>
+
+          <label class="field-label">Jazo Turi:</label>
           <select id="selectCensorAction" class="field-select" style="width: 100%; margin-bottom: 14px;">
             <option value="mute">Mute (Yozishni vaqtincha cheklash)</option>
             <option value="delete">Faqat xabarni o'chirish (Mute qilmasdan)</option>
             <option value="warn">Ogohlantirish (Warn berish)</option>
           </select>
 
-          <label class="field-label">⏱ So'kinish Uchun Mute Vaqtini Tanlang:</label>
+          <label class="field-label">Mute Vaqtini Tanlang:</label>
           <div class="preset-group" id="censorMutePresets">
             <button class="preset-btn" data-sec="15">15 sek</button>
             <button class="preset-btn" data-sec="60">1 daq</button>
@@ -1038,7 +1067,7 @@
             <button class="preset-btn" data-sec="86400">1 kun</button>
           </div>
 
-          <div class="field-label" style="font-size: 12px; color: var(--text-muted);">Yoki ixtiyoriy daqiqa/soatni kiriting:</div>
+          <div class="field-label" style="font-size: 12px; color: var(--text-muted);">Yoki ixtiyoriy daqiqa/soatni o'zingiz kiriting:</div>
           <div class="custom-row">
             <input type="number" id="inputCensorCustomVal" class="number-input" style="width: 110px;" placeholder="15">
             <select id="selectCensorCustomUnit" class="field-select" style="flex: 1;">
@@ -1052,7 +1081,12 @@
 
         <!-- Anti-Flood mute vaqti -->
         <div class="glass-card">
-          <label class="field-label">⚡️ Anti-Flood Toshqin Uchun Mute Vaqti:</label>
+          <div class="card-header">
+            <h2>⚡️ Toshqin (Flood) Mute Vaqti</h2>
+            <p>Ketma-ket xabar yoki stiker tashlagan a'zoni qancha muddatga yozishdan cheklashni belgilang:</p>
+          </div>
+
+          <label class="field-label">Toshqin Uchun Mute Vaqti:</label>
           <div class="preset-group" id="floodMutePresets">
             <button class="preset-btn" data-sec="300">5 daq</button>
             <button class="preset-btn" data-sec="900">15 daq</button>
@@ -1075,18 +1109,23 @@
 
       <!-- Warn (Ogohlantirish) Sozlamasi -->
       <div class="glass-card">
+        <div class="card-header">
+          <h2>⚠️ Ogohlantirishlar (Warn) Tizimi</h2>
+          <p>Qoidabuzarlarga ogohlantirish beriladi. Limit to'lganda bot avtomatik qat'iy jazo qo'llaydi:</p>
+        </div>
+
         <div class="grid-2-col">
           <div>
-            <label class="field-label">⚠️ Ogohlantirishlar (Warn) Chegarasi:</label>
+            <label class="field-label">Nechta Ogohlantirishda Jazo:</label>
             <select id="selectWarnLimit" class="field-select" style="width: 100%;">
-              <option value="3">3 ta ogohlantirishda jazo</option>
+              <option value="3">3 ta ogohlantirishda jazo (Standart)</option>
               <option value="5">5 ta ogohlantirishda jazo</option>
               <option value="10">10 ta ogohlantirishda jazo</option>
             </select>
           </div>
 
           <div>
-            <label class="field-label">🚨 Chegara To'lganda Qo'llanadigan Jazo:</label>
+            <label class="field-label">Chegara To'lganda Qo'llanadigan Jazo:</label>
             <select id="selectWarnAction" class="field-select" style="width: 100%;">
               <option value="mute">Mute (1 kun yozishni cheklash)</option>
               <option value="mute_7d">Mute (7 kun yozishni cheklash)</option>
@@ -1107,9 +1146,9 @@
     <div id="tab-flood" class="tab-pane">
       <div class="grid-2-col">
         <div class="glass-card">
-          <div class="switch-info" style="margin-bottom: 14px;">
-            <h3>⚡️ Ketma-ket Xabarlar Toshqini</h3>
-            <p>Bir a'zo qisqa vaqtda ketma-ket xabar yuborsa avtomatik to'xtatish:</p>
+          <div class="card-header">
+            <h2>⚡️ Ketma-ket Xabarlar Toshqini</h2>
+            <p>Bir a'zo qisqa vaqt ichida juda ko'p xabar yozib chatni to'ldirib tashlashiga qarshi cheklovlar:</p>
           </div>
 
           <div class="custom-row" style="margin-bottom: 16px;">
@@ -1136,9 +1175,9 @@
         </div>
 
         <div class="glass-card">
-          <div class="switch-info" style="margin-bottom: 14px;">
-            <h3>🖼 Stiker & GIF Toshqini</h3>
-            <p>Stikerlar bilan guruhni to'ldirib tashlashga qarshi cheklov:</p>
+          <div class="card-header">
+            <h2>🖼 Stiker & GIF Toshqini</h2>
+            <p>Stikerlar va GIFlar bilan guruhni to'ldirib tashlashga qarshi cheklovlar:</p>
           </div>
 
           <div class="custom-row" style="margin-bottom: 16px;">
@@ -1174,9 +1213,9 @@
     <!-- =================================================================== -->
     <div id="tab-badwords" class="tab-pane">
       <div class="glass-card">
-        <div class="switch-info">
-          <h3>🚫 Guruhingiz Uchun Maxsus So'zlar</h3>
-          <p>Guruhingizda taqiqlanadigan qo'shimcha so'zlar ro'yxati (har birini bitta bosishda o'chirish mumkin):</p>
+        <div class="card-header">
+          <h2>🚫 Maxsus Taqiqlangan So'zlar</h2>
+          <p>Guruhingizda taqiqlanadigan so'zlarni o'z qo'lingiz bilan kiriting. A'zolar bu so'zlarni yozsa bot darhol xabarni o'chiradi va jazolaydi:</p>
         </div>
 
         <div class="tags-container" id="badwordsContainer">
@@ -1214,9 +1253,9 @@
     <div id="tab-rules" class="tab-pane">
       <div class="grid-2-col">
         <div class="glass-card">
-          <div class="switch-info" style="margin-bottom: 10px;">
-            <h3>📜 Guruh Qoidalarini Sozlash</h3>
-            <p>Guruhda <code>/rules</code> yozilganda ko'rsatiladigan rasmiy qoidalar:</p>
+          <div class="card-header">
+            <h2>📜 Guruh Qoidalarini Sozlash</h2>
+            <p>Guruhda <code>/rules</code> deb yozilganda a'zolarga aynan shu siz kiritgan qoidalar ko'rsatiladi:</p>
           </div>
 
           <textarea id="textareaRules" class="custom-textarea" placeholder="Guruh qoidalarini bu yerga yozing..."></textarea>
@@ -1227,9 +1266,9 @@
         </div>
 
         <div class="glass-card">
-          <div class="switch-info" style="margin-bottom: 10px;">
-            <h3>👋 Salomlashish Matni (Welcome)</h3>
-            <p>Yangi kirganlarga yuboriladigan xabar (<code>{name}</code> — a'zo ismi):</p>
+          <div class="card-header">
+            <h2>👋 Salomlashish Matni (Welcome)</h2>
+            <p>Yangi kirgan a'zoga yuboriladigan xush kelibsiz xabari (<code>{name}</code> — a'zo ismi):</p>
           </div>
 
           <textarea id="textareaWelcome" class="custom-textarea" placeholder="Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!"></textarea>

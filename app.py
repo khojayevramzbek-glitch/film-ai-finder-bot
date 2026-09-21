@@ -84,10 +84,12 @@ with gr.Blocks(
     css="""
         footer { display: none !important; }
         .gradio-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; background: #0b0f19 !important; }
+        #component-0 { padding: 0 !important; margin: 0 !important; }
     """
 ) as demo:
-    # Telegram Mini App ni to'g'ridan-to'g'ri Gradio ichida ham render qilish
-    gr.HTML(value=get_webapp_html())
+    # Full screen iframe prevents any Gradio CSS or layout interference
+    gr.HTML('<iframe src="/webapp" style="width:100vw; height:100vh; border:none; position:fixed; top:0; left:0; z-index:999999; margin:0; padding:0;"></iframe>')
+
 
 # Attach Telegram Mini App routes and API endpoints to demo.app (FastAPI)
 try:
