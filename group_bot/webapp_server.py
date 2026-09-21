@@ -25,9 +25,17 @@ def attach_fastapi_routes(app: Any):
         from fastapi import Request
         from fastapi.responses import HTMLResponse, JSONResponse
 
+        @app.middleware("http")
+        async def root_webapp_middleware(request: Request, call_next):
+            # Root "/" ga so'rov kelsa to'g'ridan-to'g'ri Mini App ni ko'rsatish
+            if request.url.path == "/" and request.method == "GET":
+                return HTMLResponse(content=get_webapp_html())
+            return await call_next(request)
+
         @app.get("/webapp", response_class=HTMLResponse)
         async def fastapi_serve_webapp():
             return HTMLResponse(content=get_webapp_html())
+
 
         @app.get("/api/groups")
         async def fastapi_get_groups():

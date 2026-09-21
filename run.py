@@ -74,15 +74,18 @@ async def health_check_handler(request):
 
 async def start_web_server(port: int):
     """Starts a minimal HTTP web server for Render health checks and Web App."""
-    app = web.Application()
-    app.router.add_get("/", health_check_handler)
     app.router.add_get("/health", health_check_handler)
     
     try:
-        from group_bot.webapp_server import attach_aiohttp_routes
+        from group_bot.webapp_server import attach_aiohttp_routes, get_webapp_html
         attach_aiohttp_routes(app)
+        async def aiohttp_serve_root(request):
+            return web.Response(text=get_webapp_html(), content_type="text/html")
+        app.router.add_get("/", aiohttp_serve_root)
     except Exception as e:
         logger.warning(f"[Web App Warning] Aiohttp routes ulashda xatolik: {e}")
+        app.router.add_get("/", health_check_handler)
+
 
     runner = web.AppRunner(app)
     await runner.setup()
