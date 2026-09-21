@@ -701,7 +701,7 @@ DEFAULT_CHAT_SETTINGS = {
 
 
 def format_duration(seconds: int) -> str:
-    """Vaqtni soniyalardan inson tushunadigan o'zbekcha matnga aylantirish."""
+    """Vaqtni soniyalardan inson tushunadigan o'zbekcha matnga aylantirish (sekunddan yilgacha)."""
     sec = int(seconds)
     if sec < 60:
         return f"{sec} soniya"
@@ -711,9 +711,18 @@ def format_duration(seconds: int) -> str:
     elif sec < 86400:
         hrs = sec // 3600
         return f"{hrs} soat"
-    else:
+    elif sec < 604800:
         days = sec // 86400
         return f"{days} kun"
+    elif sec < 2592000:
+        weeks = sec // 604800
+        return f"{weeks} hafta"
+    elif sec < 31536000:
+        months = sec // 2592000
+        return f"{months} oy"
+    else:
+        years = sec // 31536000
+        return f"{years} yil"
 
 
 def get_chat_full_settings(chat_id: int) -> dict:

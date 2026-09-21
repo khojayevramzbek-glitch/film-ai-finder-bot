@@ -1339,8 +1339,24 @@
             <button class="preset-btn" data-sec="3600">1 soat</button>
             <button class="preset-btn" data-sec="86400">1 kun</button>
           </div>
-          <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
-            Tanlangan vaqt guruhda so'kingan a'zoga aniq qo'llanadi.
+
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color);">
+            <label class="field-label">⏱ Ixtiyoriy vaqt kiritish (Sekunddan Yilgacha):</label>
+            <div class="custom-row">
+              <input type="number" id="inputCensorCustomVal" class="number-input" style="width: 100px;" min="1" placeholder="15">
+              <select id="selectCensorCustomUnit" class="field-select" style="flex: 1;">
+                <option value="1">Soniya (sekund)</option>
+                <option value="60">Daqiqa (minut)</option>
+                <option value="3600">Soat</option>
+                <option value="86400">Kun</option>
+                <option value="604800">Hafta</option>
+                <option value="2592000">Oy (30 kun)</option>
+                <option value="31536000">Yil (365 kun)</option>
+              </select>
+            </div>
+            <div id="censorPreviewText" style="font-size: 12px; color: var(--accent-blue); margin-top: 6px; font-weight: 700;">
+              Joriy vaqt: 15 soniya
+            </div>
           </div>
         </div>
 
@@ -1360,8 +1376,24 @@
             <button class="preset-btn" data-sec="86400">1 kun</button>
             <button class="preset-btn" data-sec="604800">7 kun</button>
           </div>
-          <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
-            Ketma-ket yozuvchi va spam qiluvchi a'zolarga shu vaqt davomida mute beriladi.
+
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color);">
+            <label class="field-label">⏱ Ixtiyoriy vaqt kiritish (Sekunddan Yilgacha):</label>
+            <div class="custom-row">
+              <input type="number" id="inputFloodCustomVal" class="number-input" style="width: 100px;" min="1" placeholder="15">
+              <select id="selectFloodCustomUnit" class="field-select" style="flex: 1;">
+                <option value="1">Soniya (sekund)</option>
+                <option value="60">Daqiqa (minut)</option>
+                <option value="3600">Soat</option>
+                <option value="86400">Kun</option>
+                <option value="604800">Hafta</option>
+                <option value="2592000">Oy (30 kun)</option>
+                <option value="31536000">Yil (365 kun)</option>
+              </select>
+            </div>
+            <div id="floodPreviewText" style="font-size: 12px; color: var(--accent-blue); margin-top: 6px; font-weight: 700;">
+              Joriy vaqt: 15 daqiqa
+            </div>
           </div>
         </div>
       </div>
@@ -1760,9 +1792,77 @@
     const urlParams = new URLSearchParams(window.location.search);
     const initialChatId = urlParams.get('chat_id');
 
-    // Preset Button Handlers for Mute Times
+    // Preset & Custom Time Handlers (from seconds to years)
     let activeCensorSeconds = 15;
     let activeFloodSeconds = 900;
+
+    function formatDurationUz(seconds) {
+      const sec = parseInt(seconds, 10);
+      if (isNaN(sec) || sec <= 0) return "0 soniya";
+      if (sec < 60) return `${sec} soniya`;
+      if (sec < 3600) return `${Math.floor(sec / 60)} daqiqa`;
+      if (sec < 86400) return `${Math.floor(sec / 3600)} soat`;
+      if (sec < 604800) return `${Math.floor(sec / 86400)} kun`;
+      if (sec < 2592000) return `${Math.floor(sec / 604800)} hafta`;
+      if (sec < 31536000) return `${Math.floor(sec / 2592000)} oy`;
+      return `${Math.floor(sec / 31536000)} yil`;
+    }
+
+    function decomposeSeconds(seconds) {
+      const sec = parseInt(seconds, 10);
+      if (isNaN(sec) || sec <= 0) return { val: 15, unit: 1 };
+      if (sec % 31536000 === 0) return { val: sec / 31536000, unit: 31536000 };
+      if (sec % 2592000 === 0) return { val: sec / 2592000, unit: 2592000 };
+      if (sec % 604800 === 0) return { val: sec / 604800, unit: 604800 };
+      if (sec % 86400 === 0) return { val: sec / 86400, unit: 86400 };
+      if (sec % 3600 === 0) return { val: sec / 3600, unit: 3600 };
+      if (sec % 60 === 0) return { val: sec / 60, unit: 60 };
+      return { val: sec, unit: 1 };
+    }
+
+    function updateCensorDisplay(sec) {
+      activeCensorSeconds = sec;
+      const preview = document.getElementById('censorPreviewText');
+      if (preview) preview.textContent = "Joriy vaqt: " + formatDurationUz(sec);
+      const dec = decomposeSeconds(sec);
+      const inputVal = document.getElementById('inputCensorCustomVal');
+      const selectUnit = document.getElementById('selectCensorCustomUnit');
+      if (inputVal && document.activeElement !== inputVal) inputVal.value = dec.val;
+      if (selectUnit && document.activeElement !== selectUnit) selectUnit.value = String(dec.unit);
+
+      const container = document.getElementById('censorMutePresets');
+      if (container) {
+        container.querySelectorAll('.preset-btn').forEach(btn => {
+          if (parseInt(btn.getAttribute('data-sec'), 10) === sec) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+      }
+    }
+
+    function updateFloodDisplay(sec) {
+      activeFloodSeconds = sec;
+      const preview = document.getElementById('floodPreviewText');
+      if (preview) preview.textContent = "Joriy vaqt: " + formatDurationUz(sec);
+      const dec = decomposeSeconds(sec);
+      const inputVal = document.getElementById('inputFloodCustomVal');
+      const selectUnit = document.getElementById('selectFloodCustomUnit');
+      if (inputVal && document.activeElement !== inputVal) inputVal.value = dec.val;
+      if (selectUnit && document.activeElement !== selectUnit) selectUnit.value = String(dec.unit);
+
+      const container = document.getElementById('floodMutePresets');
+      if (container) {
+        container.querySelectorAll('.preset-btn').forEach(btn => {
+          if (parseInt(btn.getAttribute('data-sec'), 10) === sec) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+      }
+    }
 
     function setupPresetButtons(containerId, onSelect) {
       const container = document.getElementById(containerId);
@@ -1778,11 +1878,42 @@
     }
 
     setupPresetButtons('censorMutePresets', (sec) => {
-      activeCensorSeconds = sec;
+      updateCensorDisplay(sec);
     });
 
     setupPresetButtons('floodMutePresets', (sec) => {
-      activeFloodSeconds = sec;
+      updateFloodDisplay(sec);
+    });
+
+    // Custom time input listeners
+    document.getElementById('inputCensorCustomVal').addEventListener('input', () => {
+      const val = parseInt(document.getElementById('inputCensorCustomVal').value, 10);
+      const unit = parseInt(document.getElementById('selectCensorCustomUnit').value, 10);
+      if (!isNaN(val) && val > 0) {
+        updateCensorDisplay(val * unit);
+      }
+    });
+    document.getElementById('selectCensorCustomUnit').addEventListener('change', () => {
+      const val = parseInt(document.getElementById('inputCensorCustomVal').value, 10);
+      const unit = parseInt(document.getElementById('selectCensorCustomUnit').value, 10);
+      if (!isNaN(val) && val > 0) {
+        updateCensorDisplay(val * unit);
+      }
+    });
+
+    document.getElementById('inputFloodCustomVal').addEventListener('input', () => {
+      const val = parseInt(document.getElementById('inputFloodCustomVal').value, 10);
+      const unit = parseInt(document.getElementById('selectFloodCustomUnit').value, 10);
+      if (!isNaN(val) && val > 0) {
+        updateFloodDisplay(val * unit);
+      }
+    });
+    document.getElementById('selectFloodCustomUnit').addEventListener('change', () => {
+      const val = parseInt(document.getElementById('inputFloodCustomVal').value, 10);
+      const unit = parseInt(document.getElementById('selectFloodCustomUnit').value, 10);
+      if (!isNaN(val) && val > 0) {
+        updateFloodDisplay(val * unit);
+      }
     });
 
     // Validation helper
@@ -2005,11 +2136,8 @@
 
         // Update Punishments Tab
         document.getElementById('selectCensorAction').value = currentSettings.censor_action || 'mute';
-        activeCensorSeconds = currentSettings.censor_mute_seconds || 15;
-        highlightPreset('censorMutePresets', activeCensorSeconds);
-
-        activeFloodSeconds = currentSettings.flood_mute_seconds || 900;
-        highlightPreset('floodMutePresets', activeFloodSeconds);
+        updateCensorDisplay(currentSettings.censor_mute_seconds || 15);
+        updateFloodDisplay(currentSettings.flood_mute_seconds || 900);
 
         document.getElementById('selectWarnLimit').value = String(currentSettings.warn_limit || 3);
         document.getElementById('selectWarnAction').value = currentSettings.warn_action || 'mute';
@@ -2036,23 +2164,6 @@
 
       } catch (err) {
         console.error("Guruh tafsilotlarini yuklashda xatolik:", err);
-      }
-    }
-
-    function highlightPreset(containerId, sec) {
-      const container = document.getElementById(containerId);
-      let matched = false;
-      container.querySelectorAll('.preset-btn').forEach(btn => {
-        if (parseInt(btn.getAttribute('data-sec'), 10) === sec) {
-          btn.classList.add('active');
-          matched = true;
-        } else {
-          btn.classList.remove('active');
-        }
-      });
-      if (!matched) {
-        const firstBtn = container.querySelector('.preset-btn');
-        if (firstBtn) firstBtn.classList.add('active');
       }
     }
 
