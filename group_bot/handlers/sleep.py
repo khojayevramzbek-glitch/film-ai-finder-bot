@@ -11,12 +11,14 @@ try:
     from group_bot.database import (
         set_user_sleep,
         get_user_sleep,
+        get_user_sleep_by_username,
         remove_user_sleep,
     )
 except ImportError:
     from database import (
         set_user_sleep,
         get_user_sleep,
+        get_user_sleep_by_username,
         remove_user_sleep,
     )
 
@@ -25,7 +27,7 @@ router = Router()
 # Toshkent vaqt mintaqasi (UTC+5)
 TASHKENT_TZ = timezone(timedelta(hours=5))
 
-# Maxsus ruxsat berilgan 2 ta foydalanuvchi
+# Maxsus ruxsat berilgan 2 ta foydalanuvchi (kalit so'zlar orqali chaqirish uchun)
 ALLOWED_SLEEP_USER_IDS = {8594505572, 7690283463}
 ALLOWED_SLEEP_USERNAMES = {"khojayev_ramz", "wdablyu"}
 
@@ -48,14 +50,9 @@ _last_notified: dict[tuple[int, int], float] = {}
 
 
 def is_sleep_allowed(user: types.User | None) -> bool:
-    """Faqat @khojayev_ramz va @wdablyu uchun ruxsat."""
-    if not user:
-        return False
-    if user.id in ALLOWED_SLEEP_USER_IDS:
-        return True
-    if user.username and user.username.lower() in ALLOWED_SLEEP_USERNAMES:
-        return True
-    return False
+    """Barcha foydalanuvchilar (botlardan tashqari) /sleep buyrug'idan foydalana oladi."""
+    return bool(user and not user.is_bot)
+
 
 
 def parse_sleep_args(args_text: str) -> tuple[int | None, str | None]:
@@ -236,7 +233,8 @@ def is_sleep_mention_or_sleeping_user(message: types.Message) -> bool:
 
     # 2. Reply qilingan bo'lsa
     if message.reply_to_message and message.reply_to_message.from_user:
-        if message.reply_to_message.from_user.id in ALLOWED_SLEEP_USER_IDS:
+        ru = message.reply_to_message.from_user
+        if not ru.is_bot and ru.id != message.from_user.id and get_user_sleep(ru.id):
             return True
 
     # 3. Mention entity
@@ -244,16 +242,16 @@ def is_sleep_mention_or_sleeping_user(message: types.Message) -> bool:
     for ent in entities:
         if ent.type == "mention":
             mention_username = text[ent.offset:ent.offset + ent.length].lstrip("@").lower()
-            if mention_username in ALLOWED_SLEEP_USERNAMES:
+            if get_user_sleep_by_username(mention_username):
                 return True
         elif ent.type == "text_mention" and ent.user:
-            if ent.user.id in ALLOWED_SLEEP_USER_IDS:
+            if get_user_sleep(ent.user.id):
                 return True
 
-    # 4. Kalit so'zlar
+    # 4. Kalit so'zlar (Ramzbek va Wdablyu uchun)
     if text:
-        for data in TRACKED_SLEEP_USERS.values():
-            if data["regex"].search(text):
+        for uid, data in TRACKED_SLEEP_USERS.items():
+            if data["regex"].search(text) and get_user_sleep(uid):
                 return True
 
     return False
@@ -295,7 +293,7 @@ async def check_sleep_mentions(message: types.Message, bot: Bot):
     # A) Reply qilingan bo'lsa
     if message.reply_to_message and message.reply_to_message.from_user and not message.reply_to_message.from_user.is_bot:
         reply_user_id = message.reply_to_message.from_user.id
-        if reply_user_id != user_id and reply_user_id in ALLOWED_SLEEP_USER_IDS:
+        if reply_user_id != user_id and get_user_sleep(reply_user_id):
             target_user_ids.add(reply_user_id)
 
     # B) Entity orqali mention qilingan bo'lsa
@@ -303,18 +301,17 @@ async def check_sleep_mentions(message: types.Message, bot: Bot):
     for ent in entities:
         if ent.type == "mention":
             mention_username = text[ent.offset:ent.offset + ent.length].lstrip("@").lower()
-            for uid, data in TRACKED_SLEEP_USERS.items():
-                if data["canonical_username"] == mention_username:
-                    if uid != user_id:
-                        target_user_ids.add(uid)
+            sleep_info = get_user_sleep_by_username(mention_username)
+            if sleep_info and sleep_info["user_id"] != user_id:
+                target_user_ids.add(sleep_info["user_id"])
         elif ent.type == "text_mention" and ent.user:
-            if ent.user.id != user_id and ent.user.id in ALLOWED_SLEEP_USER_IDS:
+            if ent.user.id != user_id and get_user_sleep(ent.user.id):
                 target_user_ids.add(ent.user.id)
 
     # C) 2 ta maxsus foydalanuvchi uchun matnli kalit so'zlar (Lotin va Kirill)
     if text:
         for uid, data in TRACKED_SLEEP_USERS.items():
-            if uid != user_id and data["regex"].search(text):
+            if uid != user_id and data["regex"].search(text) and get_user_sleep(uid):
                 target_user_ids.add(uid)
 
     # Agar hech kim topilmasa, bot jim turadi

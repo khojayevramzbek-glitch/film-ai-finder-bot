@@ -452,6 +452,19 @@ def remove_user_sleep(user_id: int):
         conn.commit()
 
 
+def get_user_sleep_by_username(username: str) -> dict | None:
+    """Username bo'yicha faol uyqu rejimini olish."""
+    clean = username.lstrip("@").strip().lower()
+    if not clean:
+        return None
+    active = get_all_active_sleeps()
+    for s in active:
+        if s.get("username") and s["username"].lower() == clean:
+            return s
+    return None
+
+
+
 def get_all_active_sleeps() -> list[dict]:
     """Barcha faol uyqudagi foydalanuvchilar ro'yxati."""
     now_utc = datetime.now(timezone.utc)
