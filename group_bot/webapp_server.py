@@ -10,9 +10,19 @@ WEBAPP_HTML_PATH = Path(__file__).resolve().parent / "webapp" / "index.html"
 
 
 def get_webapp_html() -> str:
-    """Returns the Mini App HTML content."""
+    """Returns the Mini App HTML content with pre-populated initial groups data."""
     if WEBAPP_HTML_PATH.exists():
-        return WEBAPP_HTML_PATH.read_text(encoding="utf-8")
+        html = WEBAPP_HTML_PATH.read_text(encoding="utf-8")
+        try:
+            groups = group_db.get_all_managed_groups()
+            inject_script = f"<script>window.__INITIAL_GROUPS__ = {json.dumps(groups)};</script>"
+            if "</head>" in html:
+                html = html.replace("</head>", f"{inject_script}\n</head>")
+            else:
+                html = f"{inject_script}\n{html}"
+        except Exception as e:
+            logger.warning(f"Error injecting initial groups: {e}")
+        return html
     return "<h1>Blizkiy Bot Web App topilmadi</h1>"
 
 
@@ -116,6 +126,7 @@ def attach_fastapi_routes(app: Any):
             return make_json_response({"ok": True, "settings": updated})
 
         routes_to_add = [
+            # Standard paths
             Route("/webapp", endpoint=serve_webapp, methods=["GET"]),
             Route("/", endpoint=serve_root, methods=["GET"]),
             Route("/api/groups", endpoint=get_groups, methods=["GET"]),
@@ -128,6 +139,19 @@ def attach_fastapi_routes(app: Any):
             Route("/api/group/{chat_id}/badwords", endpoint=del_badword, methods=["DELETE"]),
             Route("/api/group/{chat_id}/rules", endpoint=save_rules, methods=["POST"]),
             Route("/api/group/{chat_id}/settings", endpoint=update_settings, methods=["POST"]),
+
+            # Gradio 5 internal subpaths (/gradio_api/*)
+            Route("/gradio_api/webapp", endpoint=serve_webapp, methods=["GET"]),
+            Route("/gradio_api/api/groups", endpoint=get_groups, methods=["GET"]),
+            Route("/gradio_api/api/group/{chat_id}", endpoint=get_group_details, methods=["GET"]),
+            Route("/gradio_api/api/group/{chat_id}/toggle_bot", endpoint=toggle_bot, methods=["POST"]),
+            Route("/gradio_api/api/group/{chat_id}/toggle_censor", endpoint=toggle_censor, methods=["POST"]),
+            Route("/gradio_api/api/group/{chat_id}/toggle_stats", endpoint=toggle_stats, methods=["POST"]),
+            Route("/gradio_api/api/group/{chat_id}/set_stats_public", endpoint=set_stats_public, methods=["POST"]),
+            Route("/gradio_api/api/group/{chat_id}/badwords", endpoint=add_badword, methods=["POST"]),
+            Route("/gradio_api/api/group/{chat_id}/badwords", endpoint=del_badword, methods=["DELETE"]),
+            Route("/gradio_api/api/group/{chat_id}/rules", endpoint=save_rules, methods=["POST"]),
+            Route("/gradio_api/api/group/{chat_id}/settings", endpoint=update_settings, methods=["POST"]),
         ]
 
         # Starlette router routes ro'yxatining boshiga qo'shish (Gradio catch-all dan oldin)

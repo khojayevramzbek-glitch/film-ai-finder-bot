@@ -1524,36 +1524,56 @@
       document.getElementById('inputFloodCustomVal').value = '';
     });
 
+    // Helper to send API requests trying /gradio_api first then fallback to /
+    async function apiFetch(path, options = {}) {
+      try {
+        const res = await fetch('/gradio_api' + path, options);
+        if (res.ok) return res;
+      } catch (e) {}
+      return await fetch(path, options);
+    }
+
+    // Render Groups Dropdown
+    function renderGroupsDropdown() {
+      const select = document.getElementById('groupSelect');
+      select.innerHTML = '';
+
+      if (groupsList.length === 0) {
+        select.innerHTML = '<option value="">Hech qanday guruh topilmadi</option>';
+        return;
+      }
+
+      groupsList.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g.chat_id;
+        opt.textContent = `${g.title} (${g.msg_count_24h} xabar/24h)`;
+        select.appendChild(opt);
+      });
+
+      // Select initial chat_id if matched
+      if (initialChatId && groupsList.some(g => String(g.chat_id) === String(initialChatId))) {
+        select.value = initialChatId;
+      }
+
+      currentChatId = select.value;
+      if (currentChatId) {
+        loadGroupDetails(currentChatId);
+      }
+    }
+
     // Fetch Groups List
     async function loadGroups() {
+      if (window.__INITIAL_GROUPS__ && Array.isArray(window.__INITIAL_GROUPS__) && window.__INITIAL_GROUPS__.length > 0) {
+        groupsList = window.__INITIAL_GROUPS__;
+        renderGroupsDropdown();
+      }
+
       try {
-        const res = await fetch('/api/groups');
+        const res = await apiFetch('/api/groups');
         const data = await res.json();
-        groupsList = data.groups || [];
-        
-        const select = document.getElementById('groupSelect');
-        select.innerHTML = '';
-
-        if (groupsList.length === 0) {
-          select.innerHTML = '<option value="">Hech qanday guruh topilmadi</option>';
-          return;
-        }
-
-        groupsList.forEach(g => {
-          const opt = document.createElement('option');
-          opt.value = g.chat_id;
-          opt.textContent = `${g.title} (${g.msg_count_24h} xabar/24h)`;
-          select.appendChild(opt);
-        });
-
-        // Select initial chat_id if matched
-        if (initialChatId && groupsList.some(g => String(g.chat_id) === String(initialChatId))) {
-          select.value = initialChatId;
-        }
-
-        currentChatId = select.value;
-        if (currentChatId) {
-          loadGroupDetails(currentChatId);
+        if (data.groups && data.groups.length > 0) {
+          groupsList = data.groups;
+          renderGroupsDropdown();
         }
       } catch (err) {
         console.error("Guruhlarni yuklashda xatolik:", err);
@@ -1572,7 +1592,7 @@
     // Fetch Selected Group Details
     async function loadGroupDetails(chatId) {
       try {
-        const res = await fetch(`/api/group/${chatId}`);
+        const res = await apiFetch(`/api/group/${chatId}`);
         const data = await res.json();
         if (!data.group) return;
 
@@ -1704,7 +1724,7 @@
       if (!currentChatId) return;
       const enabled = e.target.checked;
       try {
-        await fetch(`/api/group/${currentChatId}/toggle_bot`, {
+        await apiFetch(`/api/group/${currentChatId}/toggle_bot`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ enabled })
@@ -1720,7 +1740,7 @@
       if (!currentChatId) return;
       const enabled = e.target.checked;
       try {
-        await fetch(`/api/group/${currentChatId}/toggle_censor`, {
+        await apiFetch(`/api/group/${currentChatId}/toggle_censor`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ enabled })
@@ -1750,7 +1770,7 @@
       if (!currentChatId) return;
       const enabled = e.target.checked;
       try {
-        await fetch(`/api/group/${currentChatId}/toggle_stats`, {
+        await apiFetch(`/api/group/${currentChatId}/toggle_stats`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ enabled })
@@ -1766,7 +1786,7 @@
       if (!currentChatId) return;
       const is_public = e.target.checked;
       try {
-        await fetch(`/api/group/${currentChatId}/set_stats_public`, {
+        await apiFetch(`/api/group/${currentChatId}/set_stats_public`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ is_public })
@@ -1780,7 +1800,7 @@
     // Helper to save settings
     async function savePartialSetting(settingsObj, successMsg) {
       try {
-        await fetch(`/api/group/${currentChatId}/settings`, {
+        await apiFetch(`/api/group/${currentChatId}/settings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(settingsObj)
@@ -1850,7 +1870,7 @@
       if (!word) return;
 
       try {
-        const res = await fetch(`/api/group/${currentChatId}/badwords`, {
+        const res = await apiFetch(`/api/group/${currentChatId}/badwords`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ word })
@@ -1876,7 +1896,7 @@
       haptic('light');
       if (!currentChatId) return;
       try {
-        const res = await fetch(`/api/group/${currentChatId}/badwords`, {
+        const res = await apiFetch(`/api/group/${currentChatId}/badwords`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ word })
@@ -1904,7 +1924,7 @@
       if (!currentChatId) return;
       const rules_text = document.getElementById('textareaRules').value;
       try {
-        await fetch(`/api/group/${currentChatId}/rules`, {
+        await apiFetch(`/api/group/${currentChatId}/rules`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ rules: rules_text })

@@ -89,8 +89,8 @@ with gr.Blocks(
         #component-0 { padding: 0 !important; margin: 0 !important; }
     """
 ) as demo:
-    # Full screen iframe prevents any Gradio CSS or layout interference
-    gr.HTML('<iframe src="/webapp" style="width:100vw; height:100vh; border:none; position:fixed; top:0; left:0; z-index:999999; margin:0; padding:0;"></iframe>')
+    # Render Mini App directly into the page (no iframe)
+    gr.HTML(get_webapp_html())
 
     # ZeroGPU hook
     init_btn = gr.Button("gpu_init", visible=False)
