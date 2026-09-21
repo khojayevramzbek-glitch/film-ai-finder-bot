@@ -20,60 +20,70 @@ def get_webapp_html() -> str:
 # FastAPI Router Attach (for Gradio / demo.app in app.py)
 # ---------------------------------------------------------------------------
 def attach_fastapi_routes(app: Any):
-    """FastAPI (demo.app) ga Web App va uning API marshrutlarini biriktirish."""
+    """FastAPI ga Web App va uning API marshrutlarini biriktirish."""
     try:
         from fastapi import Request
         from fastapi.responses import HTMLResponse, JSONResponse
 
-        @app.middleware("http")
-        async def root_webapp_middleware(request: Request, call_next):
-            # Root "/" ga so'rov kelsa to'g'ridan-to'g'ri Mini App ni ko'rsatish
-            if request.url.path == "/" and request.method == "GET":
-                return HTMLResponse(content=get_webapp_html())
-            return await call_next(request)
+        RESPONSE_HEADERS = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Content-Security-Policy": "frame-ancestors *",
+            "X-Frame-Options": "ALLOWALL"
+        }
+
+        def make_html_response():
+            return HTMLResponse(content=get_webapp_html(), headers=RESPONSE_HEADERS)
+
+        def make_json_response(data: dict, status_code: int = 200):
+            return JSONResponse(content=data, status_code=status_code, headers=RESPONSE_HEADERS)
 
         @app.get("/webapp", response_class=HTMLResponse)
         async def fastapi_serve_webapp():
-            return HTMLResponse(content=get_webapp_html())
+            return make_html_response()
 
+        @app.get("/", response_class=HTMLResponse)
+        async def fastapi_serve_root():
+            return make_html_response()
 
         @app.get("/api/groups")
         async def fastapi_get_groups():
             groups = group_db.get_all_managed_groups()
-            return JSONResponse({"ok": True, "groups": groups})
+            return make_json_response({"ok": True, "groups": groups})
 
         @app.get("/api/group/{chat_id}")
         async def fastapi_get_group_details(chat_id: int):
             details = group_db.get_group_details(chat_id)
-            return JSONResponse({"ok": True, "group": details})
+            return make_json_response({"ok": True, "group": details})
 
         @app.post("/api/group/{chat_id}/toggle_bot")
         async def fastapi_toggle_bot(chat_id: int, request: Request):
             data = await request.json()
             enabled = bool(data.get("enabled", True))
             group_db.set_bot_status(chat_id, enabled)
-            return JSONResponse({"ok": True, "is_bot_enabled": enabled})
+            return make_json_response({"ok": True, "is_bot_enabled": enabled})
 
         @app.post("/api/group/{chat_id}/toggle_censor")
         async def fastapi_toggle_censor(chat_id: int, request: Request):
             data = await request.json()
             enabled = bool(data.get("enabled", True))
             group_db.set_censor_status(chat_id, enabled)
-            return JSONResponse({"ok": True, "is_censor_enabled": enabled})
+            return make_json_response({"ok": True, "is_censor_enabled": enabled})
 
         @app.post("/api/group/{chat_id}/toggle_stats")
         async def fastapi_toggle_stats(chat_id: int, request: Request):
             data = await request.json()
             enabled = bool(data.get("enabled", True))
             group_db.set_stats_status(chat_id, enabled)
-            return JSONResponse({"ok": True, "is_stats_enabled": enabled})
+            return make_json_response({"ok": True, "is_stats_enabled": enabled})
 
         @app.post("/api/group/{chat_id}/set_stats_public")
         async def fastapi_set_stats_public(chat_id: int, request: Request):
             data = await request.json()
             is_public = bool(data.get("is_public", False))
             group_db.set_stats_public(chat_id, is_public)
-            return JSONResponse({"ok": True, "is_stats_public": is_public})
+            return make_json_response({"ok": True, "is_stats_public": is_public})
 
         @app.post("/api/group/{chat_id}/badwords")
         async def fastapi_add_badword(chat_id: int, request: Request):
@@ -82,7 +92,7 @@ def attach_fastapi_routes(app: Any):
             if word:
                 group_db.add_custom_bad_word(chat_id, word)
             bad_words = group_db.get_custom_bad_words(chat_id)
-            return JSONResponse({"ok": True, "bad_words": bad_words})
+            return make_json_response({"ok": True, "bad_words": bad_words})
 
         @app.delete("/api/group/{chat_id}/badwords")
         async def fastapi_del_badword(chat_id: int, request: Request):
@@ -91,22 +101,21 @@ def attach_fastapi_routes(app: Any):
             if word:
                 group_db.remove_custom_bad_word(chat_id, word)
             bad_words = group_db.get_custom_bad_words(chat_id)
-            return JSONResponse({"ok": True, "bad_words": bad_words})
+            return make_json_response({"ok": True, "bad_words": bad_words})
 
         @app.post("/api/group/{chat_id}/rules")
         async def fastapi_save_rules(chat_id: int, request: Request):
             data = await request.json()
             rules = str(data.get("rules", "")).strip()
             group_db.set_rules(chat_id, rules)
-            return JSONResponse({"ok": True, "rules": rules})
+            return make_json_response({"ok": True, "rules": rules})
 
         @app.post("/api/group/{chat_id}/settings")
         async def fastapi_update_settings(chat_id: int, request: Request):
             data = await request.json()
             group_db.update_chat_settings(chat_id, data)
             updated = group_db.get_chat_full_settings(chat_id)
-            return JSONResponse({"ok": True, "settings": updated})
-
+            return make_json_response({"ok": True, "settings": updated})
 
         logger.info("✅ [FastAPI] Telegram Mini App (/webapp) va API marshrutlari muvaffaqiyatli ulandi!")
     except Exception as e:

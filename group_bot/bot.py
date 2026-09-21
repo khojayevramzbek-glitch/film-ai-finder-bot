@@ -113,9 +113,30 @@ async def main():
     bot_info = await bot.get_me()
     logger.info(f"Bot faol: @{bot_info.username} ({bot_info.first_name}) [ID: {bot_info.id}]")
 
-    # Set chat menu button to Telegram Mini App
+    # Faqat /start buyrug'ini qoldirish, qolgan barcha buyruqlarni Telegram menyusidan tozalash
     try:
-        from aiogram.types import MenuButtonWebApp, WebAppInfo
+        from aiogram.types import (
+            BotCommand,
+            BotCommandScopeDefault,
+            BotCommandScopeAllPrivateChats,
+            BotCommandScopeAllGroupChats,
+            MenuButtonWebApp,
+            WebAppInfo
+        )
+        # Default va Private chatlar uchun faqat /start
+        await bot.set_my_commands(
+            [BotCommand(command="start", description="🚀 Boshlash / Start")],
+            scope=BotCommandScopeDefault()
+        )
+        await bot.set_my_commands(
+            [BotCommand(command="start", description="🚀 Boshlash / Start")],
+            scope=BotCommandScopeAllPrivateChats()
+        )
+        # Guruhlardagi / buyruqlar menyusini tozalash
+        await bot.delete_my_commands(scope=BotCommandScopeAllGroupChats())
+        logger.info("🧹 Telegram buyruqlar menyusi tozalandi: Faqat /start qoldirildi.")
+
+        # Chat menu tugmasini Telegram Mini App ga ulash
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(
                 text="📱 Boshqaruv",
@@ -124,7 +145,7 @@ async def main():
         )
         logger.info(f"📱 Telegram Menu Button Mini App ga muvaffaqiyatli ulandi: {WEBAPP_URL}")
     except Exception as e:
-        logger.warning(f"Menu button o'rnatishda xatolik: {e}")
+        logger.warning(f"Menu button va buyruqlarni o'rnatishda xatolik: {e}")
 
     try:
         await dp.start_polling(

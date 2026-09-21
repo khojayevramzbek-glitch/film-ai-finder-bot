@@ -23,24 +23,13 @@ def get_main_menu_keyboard(bot_username: str) -> InlineKeyboardMarkup:
                 )
             ],
             [
-                InlineKeyboardButton(text="🔘 Bot Holati (On/Off)", callback_data="menu_bot_status"),
-                InlineKeyboardButton(text="📋 Barcha Buyruqlar", callback_data="menu_commands"),
-            ],
-            [
-                InlineKeyboardButton(text="🛡 Himoya Tizimlari", callback_data="menu_security"),
-                InlineKeyboardButton(text="🤬 So'kinish Filtri", callback_data="menu_censor"),
-            ],
-            [
-                InlineKeyboardButton(text="📊 Guruh Statistikasi", callback_data="menu_stats"),
-                InlineKeyboardButton(text="😴 AFK / Sleep Rejimi", callback_data="menu_afk"),
-            ],
-            [
-                InlineKeyboardButton(text="📜 Qoidalar & Sozlash", callback_data="menu_rules"),
-                InlineKeyboardButton(text="👑 Bosh Admin", url="https://t.me/khojayev_ramz")
+                InlineKeyboardButton(
+                    text="👑 Bosh Admin",
+                    url="https://t.me/khojayev_ramz"
+                )
             ]
         ]
     )
-
 
 
 def get_back_keyboard() -> InlineKeyboardMarkup:
@@ -56,21 +45,20 @@ def get_back_keyboard() -> InlineKeyboardMarkup:
 def get_welcome_text(user_full_name: str) -> str:
     return (
         f"🛡 <b>Assalomu alaykum, {escape(user_full_name)}!</b>\n\n"
-        "<b>Blizkiy's bot 🔰</b> — Telegram guruhlaringizni 24/7 rejimida tartibda saqlovchi, "
+        "<b>Blizkiy Moderatsiya Boti</b> — Telegram guruhlaringizni 24/7 rejimida tartibda saqlovchi, "
         "spam va toshqinlardan himoya qiluvchi hamda qulay boshqaruvni ta'minlovchi professional robot-moderator!\n\n"
-        "✨ <b>Botning Asosiy Imkoniyatlari:</b>\n"
-        "├ ⚡️ <b>Aqlli Anti-Flood & Anti-Spam:</b> Ketma-ket yozilgan xabarlar, stiker, GIF va premium emojilar toshqinini darhol o'chiradi va cheklaydi.\n"
-        "├ 🤬 <b>So'kinish & Haqorat Filtri:</b> So'kingan a'zolarni 15 soniya mute qiladi, adminlarga esa qat'iy ogohlantirish beradi.\n"
-        "├ 🔇 <b>Kuchli Moderatsiya:</b> <code>/mute</code>, <code>/ban</code>, <code>/warn</code> — ham Reply, ham to'g'ridan-to'g'ri <code>@username</code> orqali ishlaydi!\n"
-        "├ 😴 <b>AFK / Uyqu Rejimi:</b> Adminlar band bo'lganda (<code>/sleep 1h</code>), ularni chaqirganlarga bot qachon kelishini avtomatik aytadi.\n"
-        "├ 📜 <b>Moslashuvchan Qoidalar:</b> Guruh qoidalarini saqlash va ko'rsatish (<code>/rules</code>, <code>/setrules</code>).\n"
-        "└ 📊 <b>Guruh Statistikasi:</b> 24 soatlik xabarlar va eng faol a'zolar hisobi.\n\n"
+        "⚙️ <b>Barcha sozlamalar to'liq Mini App orqali boshqariladi:</b>\n"
+        "├ 🔘 Botni yoqish / o'chirish (Master Switch)\n"
+        "├ ⏱ Jazo vaqtlari (Mute, Ban, Warn daqiqalari va soatlari)\n"
+        "├ ⚡️ Anti-Flood & Anti-Spam chegaralari (xabar va stikerlar soni/soniyasi)\n"
+        "├ 🤬 So'kinish filtri va taqiqlangan so'zlar ro'yxati\n"
+        "├ 📜 Guruh qoidalari va xush kelibsiz (welcome) matni\n"
+        "└ 📊 24 soatlik guruh faolligi va Top a'zolar statistikasi\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "🚀 <b>Botni Guruhingizga Qo'shish:</b>\n"
+        "🚀 <b>Qanday boshlash kerak?</b>\n"
         "1️⃣ Pastdagi <b>«➕ Guruhga Qo'shish»</b> tugmasini bosing va guruhingizni tanlang.\n"
         "2️⃣ Botga guruhda <b>Administrator</b> huquqlarini bering (xabarlarni o'chirish va a'zolarni cheklash).\n"
-        "3️⃣ Tayyor! Bot guruhingizni bir umr xavfsiz himoya qiladi.\n\n"
-        "<i>Batafsil ma'lumot olish uchun quyidagi tugmalardan birini tanlang:</i>"
+        "3️⃣ <b>«📱 Mini App Boshqaruv»</b> tugmasini bosing va barcha qoidalarni guruhingiz uchun qulay qilib sozlang!"
     )
 
 

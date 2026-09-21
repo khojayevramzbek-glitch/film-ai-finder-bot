@@ -76,9 +76,50 @@ def get_system_stats():
         return f"🟢 Server Holati: ONLINE\nBotlar faol ishlamoqda. ({e})"
 
 
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+import gradio as gr
+
 from group_bot.webapp_server import get_webapp_html, attach_fastapi_routes
 
-# Build Gradio Blocks (Hugging Face Spaces native runner)
+# Create FastAPI application
+app = FastAPI(title="Blizkiy Moderatsiya & FilmFinder AI")
+
+# Allow all CORS origins for Telegram WebApp
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+RESPONSE_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "*",
+    "Access-Control-Allow-Headers": "*",
+    "Content-Security-Policy": "frame-ancestors *",
+    "X-Frame-Options": "ALLOWALL"
+}
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    # Intercept "/" and "/webapp" immediately
+    if request.method == "GET" and request.url.path in ["/", "/webapp"]:
+        return HTMLResponse(content=get_webapp_html(), headers=RESPONSE_HEADERS)
+    response = await call_next(request)
+    for k, v in RESPONSE_HEADERS.items():
+        response.headers[k] = v
+    if "x-frame-options" in response.headers:
+        response.headers["x-frame-options"] = "ALLOWALL"
+    return response
+
+# Attach all Mini App API routes
+attach_fastapi_routes(app)
+
+# Build Gradio Blocks
 with gr.Blocks(
     title="Blizkiy Moderatsiya — Guruh Boshqaruv Markazi",
     css="""
@@ -87,24 +128,12 @@ with gr.Blocks(
         #component-0 { padding: 0 !important; margin: 0 !important; }
     """
 ) as demo:
-    # Full screen iframe prevents any Gradio CSS or layout interference
     gr.HTML('<iframe src="/webapp" style="width:100vw; height:100vh; border:none; position:fixed; top:0; left:0; z-index:999999; margin:0; padding:0;"></iframe>')
 
-
-# Attach Telegram Mini App routes and API endpoints to demo.app (FastAPI)
-try:
-    attach_fastapi_routes(demo.app)
-
-    @demo.app.middleware("http")
-    async def serve_webapp_for_tg(request: Request, call_next):
-        # Bosh sahifa "/" yoki "/webapp" ga so'rov kelsa darhol sof Mini App HTML ni yuborish
-        if request.method == "GET" and request.url.path in ["/", "/webapp"]:
-            return HTMLResponse(content=get_webapp_html())
-        return await call_next(request)
-except Exception as e:
-    print(f"⚠️ [Web App Warning] FastAPI routes ulashda xatolik: {e}", flush=True)
+# Mount Gradio onto FastAPI app
+app = gr.mount_gradio_app(app, demo, path="/gradio")
 
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "7860"))
-    demo.queue().launch(server_name="0.0.0.0", server_port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port)
