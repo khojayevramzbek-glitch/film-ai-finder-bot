@@ -96,7 +96,28 @@ def init_db():
                 updated_at TIMESTAMP NOT NULL
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_settings (
+                chat_id INTEGER PRIMARY KEY,
+                censor_mute_seconds INTEGER DEFAULT 15,
+                censor_action TEXT DEFAULT 'mute',
+                flood_msg_limit INTEGER DEFAULT 5,
+                flood_msg_window INTEGER DEFAULT 4,
+                flood_mute_seconds INTEGER DEFAULT 900,
+                flood_sticker_limit INTEGER DEFAULT 3,
+                flood_sticker_window INTEGER DEFAULT 4,
+                flood_sticker_mute_seconds INTEGER DEFAULT 900,
+                warn_limit INTEGER DEFAULT 3,
+                warn_action TEXT DEFAULT 'mute',
+                warn_mute_seconds INTEGER DEFAULT 86400,
+                link_filter_enabled INTEGER DEFAULT 0,
+                welcome_enabled INTEGER DEFAULT 1,
+                welcome_text TEXT DEFAULT 'Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!',
+                updated_at TIMESTAMP NOT NULL
+            );
+        """)
         conn.commit()
+
 
 
 def add_message(chat_id: int, user_id: int, full_name: str, username: str | None = None, message_id: int | None = None):
@@ -661,6 +682,87 @@ def get_all_managed_groups() -> list[dict]:
         return rows
 
 
+DEFAULT_CHAT_SETTINGS = {
+    "censor_mute_seconds": 15,
+    "censor_action": "mute",
+    "flood_msg_limit": 5,
+    "flood_msg_window": 4,
+    "flood_mute_seconds": 900,
+    "flood_sticker_limit": 3,
+    "flood_sticker_window": 4,
+    "flood_sticker_mute_seconds": 900,
+    "warn_limit": 3,
+    "warn_action": "mute",
+    "warn_mute_seconds": 86400,
+    "link_filter_enabled": 0,
+    "welcome_enabled": 1,
+    "welcome_text": "Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!"
+}
+
+
+def get_chat_full_settings(chat_id: int) -> dict:
+    """Guruhning barcha sozlamalarini (mute/ban daqiqalari, flood, warn va h.k.) olish."""
+    with get_connection() as conn:
+        cur = conn.execute("SELECT * FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = cur.fetchone()
+        if not row:
+            res = dict(DEFAULT_CHAT_SETTINGS)
+            res["chat_id"] = chat_id
+            return res
+        return dict(row)
+
+
+def update_chat_settings(chat_id: int, settings: dict):
+    """Guruh sozlamalarini yangilash."""
+    now_utc = datetime.now(timezone.utc)
+    current = get_chat_full_settings(chat_id)
+    current.update(settings)
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO chat_settings (
+                chat_id, censor_mute_seconds, censor_action,
+                flood_msg_limit, flood_msg_window, flood_mute_seconds,
+                flood_sticker_limit, flood_sticker_window, flood_sticker_mute_seconds,
+                warn_limit, warn_action, warn_mute_seconds,
+                link_filter_enabled, welcome_enabled, welcome_text, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET
+                censor_mute_seconds = excluded.censor_mute_seconds,
+                censor_action = excluded.censor_action,
+                flood_msg_limit = excluded.flood_msg_limit,
+                flood_msg_window = excluded.flood_msg_window,
+                flood_mute_seconds = excluded.flood_mute_seconds,
+                flood_sticker_limit = excluded.flood_sticker_limit,
+                flood_sticker_window = excluded.flood_sticker_window,
+                flood_sticker_mute_seconds = excluded.flood_sticker_mute_seconds,
+                warn_limit = excluded.warn_limit,
+                warn_action = excluded.warn_action,
+                warn_mute_seconds = excluded.warn_mute_seconds,
+                link_filter_enabled = excluded.link_filter_enabled,
+                welcome_enabled = excluded.welcome_enabled,
+                welcome_text = excluded.welcome_text,
+                updated_at = excluded.updated_at
+        """, (
+            chat_id,
+            int(current.get("censor_mute_seconds", 15)),
+            str(current.get("censor_action", "mute")),
+            int(current.get("flood_msg_limit", 5)),
+            int(current.get("flood_msg_window", 4)),
+            int(current.get("flood_mute_seconds", 900)),
+            int(current.get("flood_sticker_limit", 3)),
+            int(current.get("flood_sticker_window", 4)),
+            int(current.get("flood_sticker_mute_seconds", 900)),
+            int(current.get("warn_limit", 3)),
+            str(current.get("warn_action", "mute")),
+            int(current.get("warn_mute_seconds", 86400)),
+            int(current.get("link_filter_enabled", 0)),
+            int(current.get("welcome_enabled", 1)),
+            str(current.get("welcome_text", "Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!")),
+            now_utc
+        ))
+        conn.commit()
+
+
 def get_group_details(chat_id: int) -> dict:
     """Tanlangan guruhning to'liq sozlamalari, taqiqlangan so'zlari, qoidalari va statistikasini olish."""
     title = get_chat_title(chat_id)
@@ -670,6 +772,7 @@ def get_group_details(chat_id: int) -> dict:
     stats_public = is_stats_public(chat_id)
     bad_words = get_custom_bad_words(chat_id)
     rules = get_rules(chat_id) or ""
+    settings = get_chat_full_settings(chat_id)
     
     top_users, total_msgs, active_users = get_24h_stats(chat_id, limit=20)
     
@@ -682,10 +785,12 @@ def get_group_details(chat_id: int) -> dict:
         "is_stats_public": stats_public,
         "bad_words": bad_words,
         "rules": rules,
+        "settings": settings,
         "stats": {
             "total_messages": total_msgs,
             "active_users": active_users,
             "top_users": top_users
         }
     }
+
 

@@ -100,6 +100,14 @@ def attach_fastapi_routes(app: Any):
             group_db.set_rules(chat_id, rules)
             return JSONResponse({"ok": True, "rules": rules})
 
+        @app.post("/api/group/{chat_id}/settings")
+        async def fastapi_update_settings(chat_id: int, request: Request):
+            data = await request.json()
+            group_db.update_chat_settings(chat_id, data)
+            updated = group_db.get_chat_full_settings(chat_id)
+            return JSONResponse({"ok": True, "settings": updated})
+
+
         logger.info("✅ [FastAPI] Telegram Mini App (/webapp) va API marshrutlari muvaffaqiyatli ulandi!")
     except Exception as e:
         logger.error(f"❌ [FastAPI] Mini App marshrutlarini ulashda xatolik: {e}")
@@ -202,6 +210,16 @@ def attach_aiohttp_routes(app: Any):
             group_db.set_rules(chat_id, rules)
             return web.json_response({"ok": True, "rules": rules})
 
+        async def aiohttp_update_settings(request):
+            try:
+                chat_id = int(request.match_info["chat_id"])
+                data = await request.json()
+            except Exception:
+                return web.json_response({"ok": False, "error": "Invalid payload"}, status=400)
+            group_db.update_chat_settings(chat_id, data)
+            updated = group_db.get_chat_full_settings(chat_id)
+            return web.json_response({"ok": True, "settings": updated})
+
         app.router.add_get("/webapp", aiohttp_serve_webapp)
         app.router.add_get("/api/groups", aiohttp_get_groups)
         app.router.add_get("/api/group/{chat_id}", aiohttp_get_group_details)
@@ -212,6 +230,8 @@ def attach_aiohttp_routes(app: Any):
         app.router.add_post("/api/group/{chat_id}/badwords", aiohttp_add_badword)
         app.router.add_delete("/api/group/{chat_id}/badwords", aiohttp_del_badword)
         app.router.add_post("/api/group/{chat_id}/rules", aiohttp_save_rules)
+        app.router.add_post("/api/group/{chat_id}/settings", aiohttp_update_settings)
+
 
         logger.info("✅ [Aiohttp] Telegram Mini App (/webapp) va API marshrutlari muvaffaqiyatli ulandi!")
     except Exception as e:
