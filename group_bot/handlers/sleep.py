@@ -259,6 +259,13 @@ async def check_sleep_mentions(message: types.Message, bot: Bot):
     chat_id = message.chat.id
     text = (message.text or message.caption or "").strip()
 
+    try:
+        from group_bot.database import is_bot_enabled
+    except ImportError:
+        from database import is_bot_enabled
+    if not is_bot_enabled(chat_id):
+        return
+
     # 1. Agar xabar yozgan odamning o'zi uyquda bo'lsa -> avtomatik uyg'otamiz!
     active_sleep = get_user_sleep(user_id)
     if active_sleep:

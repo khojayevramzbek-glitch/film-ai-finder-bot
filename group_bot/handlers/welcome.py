@@ -9,6 +9,11 @@ async def on_user_joined(message: types.Message, bot: Bot):
     """Yangi a'zo guruhga qo'shilganda chiroyli kutib olish (Welcome)."""
     chat_title = message.chat.title or "Близкий 🫂"
 
+    try:
+        from group_bot.database import is_bot_enabled
+    except ImportError:
+        from database import is_bot_enabled
+
     for user in message.new_chat_members:
         if user.id == bot.id:
             # Botning o'zi guruhga qo'shilganda
@@ -17,7 +22,7 @@ async def on_user_joined(message: types.Message, bot: Bot):
                 "Statistika va moderatorlik to'liq ishlashi uchun menga <b>Administrator</b> huquqlarini bering.",
                 parse_mode="HTML"
             )
-        elif not user.is_bot:
+        elif not user.is_bot and is_bot_enabled(message.chat.id):
             # Yangi foydalanuvchi qo'shilganda (kreativ va samimiy)
             welcome_text = (
                 f"🫂 <b>{escape(chat_title)}</b> — yaqinlar davrasiga xush kelibsiz!\n\n"

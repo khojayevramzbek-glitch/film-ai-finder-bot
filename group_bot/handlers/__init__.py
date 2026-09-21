@@ -8,8 +8,10 @@ from .group_events import router as group_events_router
 from .sleep import router as sleep_router
 from .censor import router as censor_router
 from .stats import router as stats_router
+from .bot_control import router as bot_control_router
 
 main_router = Router()
+main_router.include_router(bot_control_router)
 main_router.include_router(common_router)
 main_router.include_router(welcome_router)
 main_router.include_router(rules_router)

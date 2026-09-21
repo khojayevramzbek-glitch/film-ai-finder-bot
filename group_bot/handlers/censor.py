@@ -18,6 +18,7 @@ try:
         remove_custom_bad_word,
         get_custom_bad_words,
         get_all_group_ids,
+        is_bot_enabled,
     )
 except ImportError:
     from database import (
@@ -27,6 +28,7 @@ except ImportError:
         remove_custom_bad_word,
         get_custom_bad_words,
         get_all_group_ids,
+        is_bot_enabled,
     )
 
 router = Router()
@@ -209,8 +211,8 @@ class CensorMiddleware(BaseMiddleware):
         chat_id = event.chat.id
         user = event.from_user
 
-        # Filtr o'chirilgan bo'lsa tekshirmaymiz
-        if not is_censor_enabled(chat_id):
+        # Bot guruhda o'chirilgan (pauza) bo'lsa yoki filtr o'chirilgan bo'lsa tekshirmaymiz
+        if not is_bot_enabled(chat_id) or not is_censor_enabled(chat_id):
             return await handler(event, data)
 
         text = event.text or event.caption or ""

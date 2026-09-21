@@ -83,6 +83,12 @@ def init_db():
                 is_public INTEGER DEFAULT 0
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_bot_status (
+                chat_id INTEGER PRIMARY KEY,
+                is_enabled INTEGER DEFAULT 1
+            );
+        """)
         conn.commit()
 
 
@@ -533,3 +539,28 @@ def get_all_group_ids() -> list[int]:
     with get_connection() as conn:
         cursor = conn.execute("SELECT DISTINCT chat_id FROM messages WHERE chat_id < 0")
         return [row["chat_id"] for row in cursor.fetchall()]
+
+
+def is_bot_enabled(chat_id: int) -> bool:
+    """Guruhda bot umumiy holati (yoqilgan/o'chirilgan) - standart True."""
+    with get_connection() as conn:
+        cur = conn.execute("SELECT is_enabled FROM chat_bot_status WHERE chat_id = ?", (chat_id,))
+        row = cur.fetchone()
+        if row is None:
+            return True
+        return bool(row["is_enabled"])
+
+
+def set_bot_status(chat_id: int, enabled: bool):
+    """Guruhda bot umumiy holatini yoqish yoki o'chirish."""
+    val = 1 if enabled else 0
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chat_bot_status (chat_id, is_enabled)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET is_enabled = ?
+            """,
+            (chat_id, val, val)
+        )
+        conn.commit()

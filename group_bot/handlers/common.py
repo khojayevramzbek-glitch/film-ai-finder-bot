@@ -17,18 +17,19 @@ def get_main_menu_keyboard(bot_username: str) -> InlineKeyboardMarkup:
                 )
             ],
             [
+                InlineKeyboardButton(text="🔘 Bot Holati (On/Off)", callback_data="menu_bot_status"),
                 InlineKeyboardButton(text="📋 Barcha Buyruqlar", callback_data="menu_commands"),
+            ],
+            [
                 InlineKeyboardButton(text="🛡 Himoya Tizimlari", callback_data="menu_security"),
-            ],
-            [
                 InlineKeyboardButton(text="🤬 So'kinish Filtri", callback_data="menu_censor"),
+            ],
+            [
                 InlineKeyboardButton(text="📊 Guruh Statistikasi", callback_data="menu_stats"),
-            ],
-            [
                 InlineKeyboardButton(text="😴 AFK / Sleep Rejimi", callback_data="menu_afk"),
-                InlineKeyboardButton(text="📜 Qoidalar & Sozlash", callback_data="menu_rules"),
             ],
             [
+                InlineKeyboardButton(text="📜 Qoidalar & Sozlash", callback_data="menu_rules"),
                 InlineKeyboardButton(text="👑 Bosh Admin", url="https://t.me/khojayev_ramz")
             ]
         ]
@@ -212,6 +213,13 @@ async def handle_menu_callbacks(call: CallbackQuery, bot: Bot):
 
     if data == "menu_commands":
         await call.message.edit_text(COMMANDS_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
+    elif data == "menu_bot_status":
+        try:
+            from group_bot.handlers.bot_control import build_bot_status_keyboard, BOT_STATUS_TEXT
+        except ImportError:
+            from handlers.bot_control import build_bot_status_keyboard, BOT_STATUS_TEXT
+        kb = await build_bot_status_keyboard(call.from_user, bot)
+        await call.message.edit_text(BOT_STATUS_TEXT, parse_mode="HTML", reply_markup=kb)
     elif data == "menu_security":
         await call.message.edit_text(SECURITY_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
     elif data == "menu_censor":

@@ -10,7 +10,10 @@ from aiogram.enums import ChatType, ChatMemberStatus
 from aiogram.types import Message, TelegramObject, ChatPermissions
 from aiogram.exceptions import TelegramBadRequest
 
-from group_bot.database import delete_flood_messages
+try:
+    from group_bot.database import delete_flood_messages, is_bot_enabled
+except ImportError:
+    from database import delete_flood_messages, is_bot_enabled
 
 # Sozlamalar:
 # 1. Stiker, GIF va Premium emoji uchun:
@@ -175,6 +178,10 @@ class AntiFloodMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         if event.chat.type not in [ChatType.GROUP, ChatType.SUPERGROUP]:
+            return await handler(event, data)
+
+        # Bot guruhda o'chirilgan (pauza) bo'lsa tekshirmaymiz
+        if not is_bot_enabled(event.chat.id):
             return await handler(event, data)
 
         bot: Bot = data["bot"]
