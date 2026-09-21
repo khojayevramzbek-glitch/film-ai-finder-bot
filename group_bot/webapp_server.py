@@ -27,23 +27,133 @@ def get_webapp_html() -> str:
 
 
 # ---------------------------------------------------------------------------
-# FastAPI Router Attach (for Gradio / demo.app in app.py)
+# FastAPI Middleware & Routes (for Gradio / demo.app in app.py)
 # ---------------------------------------------------------------------------
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware import Middleware
+from fastapi import Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.routing import Route
+
+RESPONSE_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "*",
+    "Access-Control-Allow-Headers": "*",
+    "Content-Security-Policy": "frame-ancestors *",
+    "X-Frame-Options": "ALLOWALL"
+}
+
+
+class TelegramWebAppMiddleware(BaseHTTPMiddleware):
+    """
+    Top-level ASGI middleware that intercepts requests before Gradio / Svelte router:
+    1. /webapp and /gradio_api/webapp: Returns pure Mini App HTML with full script execution.
+    2. / (root) when requested by browser/webapp: Returns pure Mini App HTML.
+    3. /api/... and /gradio_api/api/...: Dispatches group management REST APIs.
+    """
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        norm_path = path
+        if norm_path.startswith("/gradio_api"):
+            norm_path = norm_path[len("/gradio_api"):]
+            if not norm_path.startswith("/"):
+                norm_path = "/" + norm_path
+
+        # Mini App HTML serving
+        if norm_path in ("/webapp",):
+            return HTMLResponse(content=get_webapp_html(), headers=RESPONSE_HEADERS)
+
+        if norm_path == "/" and request.method == "GET":
+            accept = request.headers.get("accept", "")
+            if "text/html" in accept or "*/*" in accept:
+                return HTMLResponse(content=get_webapp_html(), headers=RESPONSE_HEADERS)
+
+        # CORS preflight
+        if request.method == "OPTIONS":
+            return JSONResponse({"ok": True}, headers=RESPONSE_HEADERS)
+
+        # API routing
+        if norm_path.startswith("/api/"):
+            try:
+                if norm_path == "/api/groups" and request.method == "GET":
+                    groups = group_db.get_all_managed_groups()
+                    return JSONResponse({"ok": True, "groups": groups}, headers=RESPONSE_HEADERS)
+
+                parts = norm_path.split("/")
+                if len(parts) >= 4 and parts[1] == "api" and parts[2] == "group":
+                    try:
+                        chat_id = int(parts[3])
+                    except ValueError:
+                        return JSONResponse({"ok": False, "error": "Invalid chat_id"}, status_code=400, headers=RESPONSE_HEADERS)
+
+                    if len(parts) == 4 and request.method == "GET":
+                        details = group_db.get_group_details(chat_id)
+                        return JSONResponse({"ok": True, "group": details}, headers=RESPONSE_HEADERS)
+
+                    action = parts[4] if len(parts) > 4 else ""
+
+                    if action == "toggle_bot" and request.method == "POST":
+                        data = await request.json()
+                        enabled = bool(data.get("enabled", True))
+                        group_db.set_bot_status(chat_id, enabled)
+                        return JSONResponse({"ok": True, "is_bot_enabled": enabled}, headers=RESPONSE_HEADERS)
+
+                    if action == "toggle_censor" and request.method == "POST":
+                        data = await request.json()
+                        enabled = bool(data.get("enabled", True))
+                        group_db.set_censor_status(chat_id, enabled)
+                        return JSONResponse({"ok": True, "is_censor_enabled": enabled}, headers=RESPONSE_HEADERS)
+
+                    if action == "toggle_stats" and request.method == "POST":
+                        data = await request.json()
+                        enabled = bool(data.get("enabled", True))
+                        group_db.set_stats_status(chat_id, enabled)
+                        return JSONResponse({"ok": True, "is_stats_enabled": enabled}, headers=RESPONSE_HEADERS)
+
+                    if action == "set_stats_public" and request.method == "POST":
+                        data = await request.json()
+                        is_public = bool(data.get("is_public", False))
+                        group_db.set_stats_public(chat_id, is_public)
+                        return JSONResponse({"ok": True, "is_stats_public": is_public}, headers=RESPONSE_HEADERS)
+
+                    if action == "badwords":
+                        if request.method == "POST":
+                            data = await request.json()
+                            word = str(data.get("word", "")).strip()
+                            if word:
+                                group_db.add_custom_bad_word(chat_id, word)
+                            bad_words = group_db.get_custom_bad_words(chat_id)
+                            return JSONResponse({"ok": True, "bad_words": bad_words}, headers=RESPONSE_HEADERS)
+                        elif request.method == "DELETE":
+                            data = await request.json()
+                            word = str(data.get("word", "")).strip()
+                            if word:
+                                group_db.remove_custom_bad_word(chat_id, word)
+                            bad_words = group_db.get_custom_bad_words(chat_id)
+                            return JSONResponse({"ok": True, "bad_words": bad_words}, headers=RESPONSE_HEADERS)
+
+                    if action == "rules" and request.method == "POST":
+                        data = await request.json()
+                        rules = str(data.get("rules", "")).strip()
+                        group_db.set_rules(chat_id, rules)
+                        return JSONResponse({"ok": True, "rules": rules}, headers=RESPONSE_HEADERS)
+
+                    if action == "settings" and request.method == "POST":
+                        data = await request.json()
+                        group_db.update_chat_settings(chat_id, data)
+                        updated = group_db.get_chat_full_settings(chat_id)
+                        return JSONResponse({"ok": True, "settings": updated}, headers=RESPONSE_HEADERS)
+
+            except Exception as e:
+                logger.exception(f"API route error: {e}")
+                return JSONResponse({"ok": False, "error": str(e)}, status_code=500, headers=RESPONSE_HEADERS)
+
+        return await call_next(request)
+
+
 def attach_fastapi_routes(app: Any):
     """FastAPI (demo.app) ga Web App va uning API marshrutlarini eng yuqori prioritetda biriktirish."""
     try:
-        from fastapi import Request
-        from fastapi.responses import HTMLResponse, JSONResponse
-        from starlette.routing import Route
-
-        RESPONSE_HEADERS = {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "*",
-            "Content-Security-Policy": "frame-ancestors *",
-            "X-Frame-Options": "ALLOWALL"
-        }
-
         def make_html_response():
             return HTMLResponse(content=get_webapp_html(), headers=RESPONSE_HEADERS)
 
@@ -126,7 +236,6 @@ def attach_fastapi_routes(app: Any):
             return make_json_response({"ok": True, "settings": updated})
 
         routes_to_add = [
-            # Standard paths
             Route("/webapp", endpoint=serve_webapp, methods=["GET"]),
             Route("/", endpoint=serve_root, methods=["GET"]),
             Route("/api/groups", endpoint=get_groups, methods=["GET"]),
@@ -140,7 +249,6 @@ def attach_fastapi_routes(app: Any):
             Route("/api/group/{chat_id}/rules", endpoint=save_rules, methods=["POST"]),
             Route("/api/group/{chat_id}/settings", endpoint=update_settings, methods=["POST"]),
 
-            # Gradio 5 internal subpaths (/gradio_api/*)
             Route("/gradio_api/webapp", endpoint=serve_webapp, methods=["GET"]),
             Route("/gradio_api/api/groups", endpoint=get_groups, methods=["GET"]),
             Route("/gradio_api/api/group/{chat_id}", endpoint=get_group_details, methods=["GET"]),
@@ -154,7 +262,6 @@ def attach_fastapi_routes(app: Any):
             Route("/gradio_api/api/group/{chat_id}/settings", endpoint=update_settings, methods=["POST"]),
         ]
 
-        # Starlette router routes ro'yxatining boshiga qo'shish (Gradio catch-all dan oldin)
         for r in reversed(routes_to_add):
             app.router.routes.insert(0, r)
 

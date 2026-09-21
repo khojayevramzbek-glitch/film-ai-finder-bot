@@ -78,9 +78,10 @@ def get_system_stats():
         return f"🟢 Server Holati: ONLINE\nBotlar faol ishlamoqda. ({e})"
 
 
-from group_bot.webapp_server import get_webapp_html, attach_fastapi_routes
+from starlette.middleware import Middleware
+from group_bot.webapp_server import TelegramWebAppMiddleware, get_webapp_html, attach_fastapi_routes
 
-# Build Gradio Blocks (Hugging Face Spaces native runner)
+# Build Gradio Blocks (Hugging Face Spaces ZeroGPU runner)
 with gr.Blocks(
     title="Blizkiy Moderatsiya — Guruh Boshqaruv Markazi",
     css="""
@@ -89,9 +90,6 @@ with gr.Blocks(
         #component-0 { padding: 0 !important; margin: 0 !important; }
     """
 ) as demo:
-    # Render Mini App directly into the page (no iframe)
-    gr.HTML(get_webapp_html())
-
     # ZeroGPU hook
     init_btn = gr.Button("gpu_init", visible=False)
     init_out = gr.Textbox(visible=False)
@@ -99,22 +97,18 @@ with gr.Blocks(
     demo.load(fn=dummy_gpu, inputs=[], outputs=[init_out])
 
 
-# Attach to demo.app
-try:
-    attach_fastapi_routes(demo.app)
-except Exception:
-    pass
-
-
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "7860"))
     res = demo.queue().launch(
         server_name="0.0.0.0",
         server_port=port,
-        prevent_thread_lock=True
+        prevent_thread_lock=True,
+        app_kwargs={
+            "middleware": [Middleware(TelegramWebAppMiddleware)]
+        }
     )
 
-    # Attach routes to the active FastAPI server app
+    # Attach routes to the active FastAPI server app as additional fallback
     if hasattr(demo, "server") and hasattr(demo.server, "app"):
         attach_fastapi_routes(demo.server.app)
 

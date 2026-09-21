@@ -1524,13 +1524,27 @@
       document.getElementById('inputFloodCustomVal').value = '';
     });
 
-    // Helper to send API requests trying /gradio_api first then fallback to /
+    // Validation helper
+    function requireCurrentChat() {
+      if (!currentChatId) {
+        showToast("Avval ➕ tugmasi orqali botni guruhingizga qo'shing va tanlang!", "⚠️");
+        haptic('warning');
+        return false;
+      }
+      return true;
+    }
+
+    // Helper to send API requests trying direct path first, then /gradio_api
     async function apiFetch(path, options = {}) {
+      try {
+        const res = await fetch(path, options);
+        if (res.ok) return res;
+      } catch (e) {}
       try {
         const res = await fetch('/gradio_api' + path, options);
         if (res.ok) return res;
       } catch (e) {}
-      return await fetch(path, options);
+      throw new Error("Network request failed");
     }
 
     // Render Groups Dropdown
@@ -1539,14 +1553,15 @@
       select.innerHTML = '';
 
       if (groupsList.length === 0) {
-        select.innerHTML = '<option value="">Hech qanday guruh topilmadi</option>';
+        select.innerHTML = '<option value="">⚠️ Guruh topilmadi — Avval ➕ tugmasi orqali botni guruhingizga qo\'shing!</option>';
+        currentChatId = null;
         return;
       }
 
       groupsList.forEach(g => {
         const opt = document.createElement('option');
         opt.value = g.chat_id;
-        opt.textContent = `${g.title} (${g.msg_count_24h} xabar/24h)`;
+        opt.textContent = `${g.title} (${g.msg_count_24h || 0} xabar/24h)`;
         select.appendChild(opt);
       });
 
@@ -1720,8 +1735,11 @@
 
     // Toggle Handlers
     document.getElementById('toggleBotStatus').addEventListener('change', async (e) => {
+      if (!requireCurrentChat()) {
+        e.target.checked = !e.target.checked;
+        return;
+      }
       haptic('medium');
-      if (!currentChatId) return;
       const enabled = e.target.checked;
       try {
         await apiFetch(`/api/group/${currentChatId}/toggle_bot`, {
@@ -1736,8 +1754,11 @@
     });
 
     document.getElementById('toggleCensor').addEventListener('change', async (e) => {
+      if (!requireCurrentChat()) {
+        e.target.checked = !e.target.checked;
+        return;
+      }
       haptic('light');
-      if (!currentChatId) return;
       const enabled = e.target.checked;
       try {
         await apiFetch(`/api/group/${currentChatId}/toggle_censor`, {
@@ -1752,22 +1773,31 @@
     });
 
     document.getElementById('toggleLinkFilter').addEventListener('change', async (e) => {
+      if (!requireCurrentChat()) {
+        e.target.checked = !e.target.checked;
+        return;
+      }
       haptic('light');
-      if (!currentChatId) return;
       const enabled = e.target.checked ? 1 : 0;
       await savePartialSetting({ link_filter_enabled: enabled }, "Reklama filtri saqlandi!");
     });
 
     document.getElementById('toggleWelcome').addEventListener('change', async (e) => {
+      if (!requireCurrentChat()) {
+        e.target.checked = !e.target.checked;
+        return;
+      }
       haptic('light');
-      if (!currentChatId) return;
       const enabled = e.target.checked ? 1 : 0;
       await savePartialSetting({ welcome_enabled: enabled }, "Salomlashish sozlamasi saqlandi!");
     });
 
     document.getElementById('toggleStats').addEventListener('change', async (e) => {
+      if (!requireCurrentChat()) {
+        e.target.checked = !e.target.checked;
+        return;
+      }
       haptic('light');
-      if (!currentChatId) return;
       const enabled = e.target.checked;
       try {
         await apiFetch(`/api/group/${currentChatId}/toggle_stats`, {
@@ -1782,8 +1812,11 @@
     });
 
     document.getElementById('toggleStatsPublic').addEventListener('change', async (e) => {
+      if (!requireCurrentChat()) {
+        e.target.checked = !e.target.checked;
+        return;
+      }
       haptic('light');
-      if (!currentChatId) return;
       const is_public = e.target.checked;
       try {
         await apiFetch(`/api/group/${currentChatId}/set_stats_public`, {
@@ -1799,13 +1832,20 @@
 
     // Helper to save settings
     async function savePartialSetting(settingsObj, successMsg) {
+      if (!requireCurrentChat()) return;
       try {
-        await apiFetch(`/api/group/${currentChatId}/settings`, {
+        const res = await apiFetch(`/api/group/${currentChatId}/settings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(settingsObj)
         });
-        showToast(successMsg);
+        const data = await res.json();
+        if (data.ok) {
+          showToast(successMsg, "✅");
+          haptic('success');
+        } else {
+          showToast("Xatolik yuz berdi", "❌");
+        }
       } catch (err) {
         showToast("Saqlashda xatolik", "❌");
       }
@@ -1813,8 +1853,8 @@
 
     // Save Punishments & Times
     document.getElementById('btnSavePunishments').addEventListener('click', async () => {
+      if (!requireCurrentChat()) return;
       haptic('success');
-      if (!currentChatId) return;
 
       const action = document.getElementById('selectCensorAction').value;
       const customCensorVal = parseInt(document.getElementById('inputCensorCustomVal').value, 10);
@@ -1845,8 +1885,8 @@
 
     // Save Flood Limits
     document.getElementById('btnSaveFloodLimits').addEventListener('click', async () => {
+      if (!requireCurrentChat()) return;
       haptic('success');
-      if (!currentChatId) return;
 
       const msgLimit = parseInt(document.getElementById('selectFloodMsgLimit').value, 10);
       const msgWindow = parseInt(document.getElementById('selectFloodMsgWindow').value, 10);
@@ -1863,8 +1903,8 @@
 
     // Add Bad Word
     document.getElementById('btnAddBadWord').addEventListener('click', async () => {
+      if (!requireCurrentChat()) return;
       haptic('medium');
-      if (!currentChatId) return;
       const input = document.getElementById('inputNewBadWord');
       const word = input.value.trim();
       if (!word) return;
@@ -1893,8 +1933,8 @@
 
     // Remove Bad Word
     window.removeBadWord = async function(word) {
+      if (!requireCurrentChat()) return;
       haptic('light');
-      if (!currentChatId) return;
       try {
         const res = await apiFetch(`/api/group/${currentChatId}/badwords`, {
           method: 'DELETE',
@@ -1911,17 +1951,16 @@
 
     // Refresh Stats Button
     document.getElementById('btnRefreshStats').addEventListener('click', () => {
+      if (!requireCurrentChat()) return;
       haptic('light');
-      if (currentChatId) {
-        loadGroupDetails(currentChatId);
-        showToast("Statistika yangilandi!", "🔄");
-      }
+      loadGroupDetails(currentChatId);
+      showToast("Statistika yangilandi!", "🔄");
     });
 
     // Save Rules Button
     document.getElementById('btnSaveRules').addEventListener('click', async () => {
+      if (!requireCurrentChat()) return;
       haptic('success');
-      if (!currentChatId) return;
       const rules_text = document.getElementById('textareaRules').value;
       try {
         await apiFetch(`/api/group/${currentChatId}/rules`, {
@@ -1937,8 +1976,8 @@
 
     // Save Welcome Text Button
     document.getElementById('btnSaveWelcome').addEventListener('click', async () => {
+      if (!requireCurrentChat()) return;
       haptic('success');
-      if (!currentChatId) return;
       const welcome_text = document.getElementById('textareaWelcome').value;
       await savePartialSetting({ welcome_text }, "Salomlashish matni saqlandi!");
     });
