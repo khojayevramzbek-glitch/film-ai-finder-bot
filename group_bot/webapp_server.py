@@ -20,10 +20,11 @@ def get_webapp_html() -> str:
 # FastAPI Router Attach (for Gradio / demo.app in app.py)
 # ---------------------------------------------------------------------------
 def attach_fastapi_routes(app: Any):
-    """FastAPI ga Web App va uning API marshrutlarini biriktirish."""
+    """FastAPI (demo.app) ga Web App va uning API marshrutlarini eng yuqori prioritetda biriktirish."""
     try:
         from fastapi import Request
         from fastapi.responses import HTMLResponse, JSONResponse
+        from starlette.routing import Route
 
         RESPONSE_HEADERS = {
             "Access-Control-Allow-Origin": "*",
@@ -39,54 +40,51 @@ def attach_fastapi_routes(app: Any):
         def make_json_response(data: dict, status_code: int = 200):
             return JSONResponse(content=data, status_code=status_code, headers=RESPONSE_HEADERS)
 
-        @app.get("/webapp", response_class=HTMLResponse)
-        async def fastapi_serve_webapp():
+        async def serve_webapp(request: Request):
             return make_html_response()
 
-        @app.get("/", response_class=HTMLResponse)
-        async def fastapi_serve_root():
+        async def serve_root(request: Request):
             return make_html_response()
 
-        @app.get("/api/groups")
-        async def fastapi_get_groups():
+        async def get_groups(request: Request):
             groups = group_db.get_all_managed_groups()
             return make_json_response({"ok": True, "groups": groups})
 
-        @app.get("/api/group/{chat_id}")
-        async def fastapi_get_group_details(chat_id: int):
+        async def get_group_details(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
             details = group_db.get_group_details(chat_id)
             return make_json_response({"ok": True, "group": details})
 
-        @app.post("/api/group/{chat_id}/toggle_bot")
-        async def fastapi_toggle_bot(chat_id: int, request: Request):
+        async def toggle_bot(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
             data = await request.json()
             enabled = bool(data.get("enabled", True))
             group_db.set_bot_status(chat_id, enabled)
             return make_json_response({"ok": True, "is_bot_enabled": enabled})
 
-        @app.post("/api/group/{chat_id}/toggle_censor")
-        async def fastapi_toggle_censor(chat_id: int, request: Request):
+        async def toggle_censor(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
             data = await request.json()
             enabled = bool(data.get("enabled", True))
             group_db.set_censor_status(chat_id, enabled)
             return make_json_response({"ok": True, "is_censor_enabled": enabled})
 
-        @app.post("/api/group/{chat_id}/toggle_stats")
-        async def fastapi_toggle_stats(chat_id: int, request: Request):
+        async def toggle_stats(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
             data = await request.json()
             enabled = bool(data.get("enabled", True))
             group_db.set_stats_status(chat_id, enabled)
             return make_json_response({"ok": True, "is_stats_enabled": enabled})
 
-        @app.post("/api/group/{chat_id}/set_stats_public")
-        async def fastapi_set_stats_public(chat_id: int, request: Request):
+        async def set_stats_public(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
             data = await request.json()
             is_public = bool(data.get("is_public", False))
             group_db.set_stats_public(chat_id, is_public)
             return make_json_response({"ok": True, "is_stats_public": is_public})
 
-        @app.post("/api/group/{chat_id}/badwords")
-        async def fastapi_add_badword(chat_id: int, request: Request):
+        async def add_badword(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
             data = await request.json()
             word = str(data.get("word", "")).strip()
             if word:
@@ -94,8 +92,8 @@ def attach_fastapi_routes(app: Any):
             bad_words = group_db.get_custom_bad_words(chat_id)
             return make_json_response({"ok": True, "bad_words": bad_words})
 
-        @app.delete("/api/group/{chat_id}/badwords")
-        async def fastapi_del_badword(chat_id: int, request: Request):
+        async def del_badword(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
             data = await request.json()
             word = str(data.get("word", "")).strip()
             if word:
@@ -103,21 +101,40 @@ def attach_fastapi_routes(app: Any):
             bad_words = group_db.get_custom_bad_words(chat_id)
             return make_json_response({"ok": True, "bad_words": bad_words})
 
-        @app.post("/api/group/{chat_id}/rules")
-        async def fastapi_save_rules(chat_id: int, request: Request):
+        async def save_rules(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
             data = await request.json()
             rules = str(data.get("rules", "")).strip()
             group_db.set_rules(chat_id, rules)
             return make_json_response({"ok": True, "rules": rules})
 
-        @app.post("/api/group/{chat_id}/settings")
-        async def fastapi_update_settings(chat_id: int, request: Request):
+        async def update_settings(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
             data = await request.json()
             group_db.update_chat_settings(chat_id, data)
             updated = group_db.get_chat_full_settings(chat_id)
             return make_json_response({"ok": True, "settings": updated})
 
-        logger.info("✅ [FastAPI] Telegram Mini App (/webapp) va API marshrutlari muvaffaqiyatli ulandi!")
+        routes_to_add = [
+            Route("/webapp", endpoint=serve_webapp, methods=["GET"]),
+            Route("/", endpoint=serve_root, methods=["GET"]),
+            Route("/api/groups", endpoint=get_groups, methods=["GET"]),
+            Route("/api/group/{chat_id}", endpoint=get_group_details, methods=["GET"]),
+            Route("/api/group/{chat_id}/toggle_bot", endpoint=toggle_bot, methods=["POST"]),
+            Route("/api/group/{chat_id}/toggle_censor", endpoint=toggle_censor, methods=["POST"]),
+            Route("/api/group/{chat_id}/toggle_stats", endpoint=toggle_stats, methods=["POST"]),
+            Route("/api/group/{chat_id}/set_stats_public", endpoint=set_stats_public, methods=["POST"]),
+            Route("/api/group/{chat_id}/badwords", endpoint=add_badword, methods=["POST"]),
+            Route("/api/group/{chat_id}/badwords", endpoint=del_badword, methods=["DELETE"]),
+            Route("/api/group/{chat_id}/rules", endpoint=save_rules, methods=["POST"]),
+            Route("/api/group/{chat_id}/settings", endpoint=update_settings, methods=["POST"]),
+        ]
+
+        # Starlette router routes ro'yxatining boshiga qo'shish (Gradio catch-all dan oldin)
+        for r in reversed(routes_to_add):
+            app.router.routes.insert(0, r)
+
+        logger.info("✅ [FastAPI] Telegram Mini App (/webapp) va API marshrutlari muvaffaqiyatli ulandi (prioritet: 0)!")
     except Exception as e:
         logger.error(f"❌ [FastAPI] Mini App marshrutlarini ulashda xatolik: {e}")
 
