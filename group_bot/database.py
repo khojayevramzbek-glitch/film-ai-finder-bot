@@ -97,6 +97,14 @@ def init_db():
             );
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS prank_users (
+                chat_id INTEGER NOT NULL,
+                username TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (chat_id, username)
+            );
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_settings (
                 chat_id INTEGER PRIMARY KEY,
                 censor_mute_seconds INTEGER DEFAULT 15,
@@ -727,9 +735,9 @@ DEFAULT_CHAT_SETTINGS = {
     "flood_sticker_limit": 3,
     "flood_sticker_window": 4,
     "flood_sticker_mute_seconds": 900,
-    "warn_limit": 3,
-    "warn_action": "mute",
-    "warn_mute_seconds": 86400,
+    "warn_limit": 10,
+    "warn_action": "smart",
+    "warn_mute_seconds": 3600,
     "link_filter_enabled": 0,
     "welcome_enabled": 1,
     "welcome_text": "Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!"
@@ -836,6 +844,7 @@ def get_group_details(chat_id: int) -> dict:
     settings = get_chat_full_settings(chat_id)
     
     top_users, total_msgs, active_users = get_24h_stats(chat_id, limit=20)
+    prank_users = get_prank_users(chat_id)
     
     return {
         "chat_id": chat_id,
@@ -847,11 +856,63 @@ def get_group_details(chat_id: int) -> dict:
         "bad_words": bad_words,
         "rules": rules,
         "settings": settings,
+        "prank_users": prank_users,
         "stats": {
             "total_messages": total_msgs,
             "active_users": active_users,
             "top_users": top_users
         }
     }
+
+
+def add_prank_user(chat_id: int, username: str) -> tuple[bool, str]:
+    """Hazil rejimi (Ghost mode) uchun username qo'shish (ko'pi bilan 5 ta)."""
+    clean_username = username.lstrip("@").strip().lower()
+    if not clean_username:
+        return False, "Username kiritilmadi!"
+    
+    with get_connection() as conn:
+        cur = conn.execute("SELECT count(*) as cnt FROM prank_users WHERE chat_id = ?", (chat_id,))
+        count = cur.fetchone()["cnt"]
+        if count >= 5:
+            return False, "Maksimal 5 ta foydalanuvchi kiritish mumkin!"
+        
+        cur = conn.execute("SELECT 1 FROM prank_users WHERE chat_id = ? AND username = ?", (chat_id, clean_username))
+        if cur.fetchone():
+            return False, f"@{clean_username} allaqachon ro'yxatda bor!"
+            
+        conn.execute(
+            "INSERT INTO prank_users (chat_id, username) VALUES (?, ?)",
+            (chat_id, clean_username)
+        )
+        conn.commit()
+        return True, f"@{clean_username} Hazil rejimiga qo'shildi!"
+
+
+def remove_prank_user(chat_id: int, username: str) -> bool:
+    """Hazil rejimidan usernameni o'chirish."""
+    clean_username = username.lstrip("@").strip().lower()
+    with get_connection() as conn:
+        conn.execute("DELETE FROM prank_users WHERE chat_id = ? AND username = ?", (chat_id, clean_username))
+        conn.commit()
+        return True
+
+
+def get_prank_users(chat_id: int) -> list[str]:
+    """Guruhdagi barcha hazil rejimidagi username'larni olish."""
+    with get_connection() as conn:
+        cur = conn.execute("SELECT username FROM prank_users WHERE chat_id = ? ORDER BY created_at ASC", (chat_id,))
+        return [row["username"] for row in cur.fetchall()]
+
+
+def is_prank_user(chat_id: int, username: str | None) -> bool:
+    """Foydalanuvchi hazil rejimidami tekshirish."""
+    if not username:
+        return False
+    clean_username = username.lstrip("@").strip().lower()
+    with get_connection() as conn:
+        cur = conn.execute("SELECT 1 FROM prank_users WHERE chat_id = ? AND username = ?", (chat_id, clean_username))
+        return cur.fetchone() is not None
+
 
 

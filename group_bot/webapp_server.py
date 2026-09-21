@@ -144,6 +144,24 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
                         updated = group_db.get_chat_full_settings(chat_id)
                         return JSONResponse({"ok": True, "settings": updated}, headers=RESPONSE_HEADERS)
 
+                    if action == "prank_users":
+                        if request.method == "GET":
+                            users = group_db.get_prank_users(chat_id)
+                            return JSONResponse({"ok": True, "prank_users": users}, headers=RESPONSE_HEADERS)
+                        elif request.method == "POST":
+                            data = await request.json()
+                            username = str(data.get("username", "")).strip()
+                            ok, msg = group_db.add_prank_user(chat_id, username)
+                            users = group_db.get_prank_users(chat_id)
+                            return JSONResponse({"ok": ok, "message": msg, "prank_users": users}, status_code=200 if ok else 400, headers=RESPONSE_HEADERS)
+                        elif request.method == "DELETE":
+                            data = await request.json()
+                            username = str(data.get("username", "")).strip()
+                            group_db.remove_prank_user(chat_id, username)
+                            users = group_db.get_prank_users(chat_id)
+                            return JSONResponse({"ok": True, "prank_users": users}, headers=RESPONSE_HEADERS)
+
+
             except Exception as e:
                 logger.exception(f"API route error: {e}")
                 return JSONResponse({"ok": False, "error": str(e)}, status_code=500, headers=RESPONSE_HEADERS)
@@ -235,6 +253,27 @@ def attach_fastapi_routes(app: Any):
             updated = group_db.get_chat_full_settings(chat_id)
             return make_json_response({"ok": True, "settings": updated})
 
+        async def get_prank_users(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
+            users = group_db.get_prank_users(chat_id)
+            return make_json_response({"ok": True, "prank_users": users})
+
+        async def add_prank_user(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
+            data = await request.json()
+            username = str(data.get("username", "")).strip()
+            ok, msg = group_db.add_prank_user(chat_id, username)
+            users = group_db.get_prank_users(chat_id)
+            return make_json_response({"ok": ok, "message": msg, "prank_users": users}, status_code=200 if ok else 400)
+
+        async def del_prank_user(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
+            data = await request.json()
+            username = str(data.get("username", "")).strip()
+            group_db.remove_prank_user(chat_id, username)
+            users = group_db.get_prank_users(chat_id)
+            return make_json_response({"ok": True, "prank_users": users})
+
         routes_to_add = [
             Route("/webapp", endpoint=serve_webapp, methods=["GET"]),
             Route("/", endpoint=serve_root, methods=["GET"]),
@@ -248,6 +287,9 @@ def attach_fastapi_routes(app: Any):
             Route("/api/group/{chat_id}/badwords", endpoint=del_badword, methods=["DELETE"]),
             Route("/api/group/{chat_id}/rules", endpoint=save_rules, methods=["POST"]),
             Route("/api/group/{chat_id}/settings", endpoint=update_settings, methods=["POST"]),
+            Route("/api/group/{chat_id}/prank_users", endpoint=get_prank_users, methods=["GET"]),
+            Route("/api/group/{chat_id}/prank_users", endpoint=add_prank_user, methods=["POST"]),
+            Route("/api/group/{chat_id}/prank_users", endpoint=del_prank_user, methods=["DELETE"]),
 
             Route("/gradio_api/webapp", endpoint=serve_webapp, methods=["GET"]),
             Route("/gradio_api/api/groups", endpoint=get_groups, methods=["GET"]),
@@ -260,6 +302,9 @@ def attach_fastapi_routes(app: Any):
             Route("/gradio_api/api/group/{chat_id}/badwords", endpoint=del_badword, methods=["DELETE"]),
             Route("/gradio_api/api/group/{chat_id}/rules", endpoint=save_rules, methods=["POST"]),
             Route("/gradio_api/api/group/{chat_id}/settings", endpoint=update_settings, methods=["POST"]),
+            Route("/gradio_api/api/group/{chat_id}/prank_users", endpoint=get_prank_users, methods=["GET"]),
+            Route("/gradio_api/api/group/{chat_id}/prank_users", endpoint=add_prank_user, methods=["POST"]),
+            Route("/gradio_api/api/group/{chat_id}/prank_users", endpoint=del_prank_user, methods=["DELETE"]),
         ]
 
         for r in reversed(routes_to_add):
@@ -377,6 +422,36 @@ def attach_aiohttp_routes(app: Any):
             updated = group_db.get_chat_full_settings(chat_id)
             return web.json_response({"ok": True, "settings": updated})
 
+        async def aiohttp_get_prank_users(request):
+            try:
+                chat_id = int(request.match_info["chat_id"])
+            except ValueError:
+                return web.json_response({"ok": False, "error": "Invalid chat_id"}, status=400)
+            users = group_db.get_prank_users(chat_id)
+            return web.json_response({"ok": True, "prank_users": users})
+
+        async def aiohttp_add_prank_user(request):
+            try:
+                chat_id = int(request.match_info["chat_id"])
+                data = await request.json()
+            except Exception:
+                return web.json_response({"ok": False, "error": "Invalid payload"}, status=400)
+            username = str(data.get("username", "")).strip()
+            ok, msg = group_db.add_prank_user(chat_id, username)
+            users = group_db.get_prank_users(chat_id)
+            return web.json_response({"ok": ok, "message": msg, "prank_users": users}, status=200 if ok else 400)
+
+        async def aiohttp_del_prank_user(request):
+            try:
+                chat_id = int(request.match_info["chat_id"])
+                data = await request.json()
+            except Exception:
+                return web.json_response({"ok": False, "error": "Invalid payload"}, status=400)
+            username = str(data.get("username", "")).strip()
+            group_db.remove_prank_user(chat_id, username)
+            users = group_db.get_prank_users(chat_id)
+            return web.json_response({"ok": True, "prank_users": users})
+
         app.router.add_get("/webapp", aiohttp_serve_webapp)
         app.router.add_get("/api/groups", aiohttp_get_groups)
         app.router.add_get("/api/group/{chat_id}", aiohttp_get_group_details)
@@ -388,6 +463,10 @@ def attach_aiohttp_routes(app: Any):
         app.router.add_delete("/api/group/{chat_id}/badwords", aiohttp_del_badword)
         app.router.add_post("/api/group/{chat_id}/rules", aiohttp_save_rules)
         app.router.add_post("/api/group/{chat_id}/settings", aiohttp_update_settings)
+        app.router.add_get("/api/group/{chat_id}/prank_users", aiohttp_get_prank_users)
+        app.router.add_post("/api/group/{chat_id}/prank_users", aiohttp_add_prank_user)
+        app.router.add_delete("/api/group/{chat_id}/prank_users", aiohttp_del_prank_user)
+
 
 
         logger.info("✅ [Aiohttp] Telegram Mini App (/webapp) va API marshrutlari muvaffaqiyatli ulandi!")

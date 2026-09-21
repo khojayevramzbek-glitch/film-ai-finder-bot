@@ -1130,6 +1130,9 @@
       <button class="desktop-nav-item" data-tab="tab-badwords">
         <span>🤬 Taqiqlangan So'zlar</span>
       </button>
+      <button class="desktop-nav-item" data-tab="tab-prank">
+        <span>🎭 Hazil uchun</span>
+      </button>
       <button class="desktop-nav-item" data-tab="tab-stats">
         <span>📊 Statistika</span>
       </button>
@@ -1409,16 +1412,17 @@
           <div>
             <label class="field-label">Nechta Ogohlantirishda Jazo:</label>
             <select id="selectWarnLimit" class="field-select" style="width: 100%;">
-              <option value="3">3 ta ogohlantirishda jazo (Standart)</option>
+              <option value="10" selected>10 ta ogohlantirishda jazo (Tavsiya etiladi)</option>
               <option value="5">5 ta ogohlantirishda jazo</option>
-              <option value="10">10 ta ogohlantirishda jazo</option>
+              <option value="3">3 ta ogohlantirishda jazo</option>
             </select>
           </div>
 
           <div>
             <label class="field-label">Chegara To'lganda Qo'llanadigan Jazo:</label>
             <select id="selectWarnAction" class="field-select" style="width: 100%;">
-              <option value="mute">Mute (1 kun yozishni cheklash)</option>
+              <option value="smart" selected>Aqlli: Oddiy a'zoga 1s mute / Adminga lavozimdan olish</option>
+              <option value="mute">Mute (1 soat yozishni cheklash)</option>
               <option value="mute_7d">Mute (7 kun yozishni cheklash)</option>
               <option value="ban">Ban (Guruhdan chiqarish va bloklash)</option>
             </select>
@@ -1516,6 +1520,33 @@
         <div class="custom-row" style="margin-top: 14px;">
           <input type="text" id="inputNewBadWord" class="text-input" style="flex: 1;" placeholder="Yangi taqiqlangan so'zni yozing...">
           <button class="btn-copy" id="btnAddBadWord" style="background: var(--accent-blue); color: #000; padding: 12px 22px; font-weight: 800;">+ Qo'shish</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- TAB 4.5: HAZIL UCHUN (PRANK / GHOST MODE) -->
+    <!-- =================================================================== -->
+    <div id="tab-prank" class="tab-pane">
+      <div class="glass-card">
+        <div class="card-header">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>🎭 Hazil uchun (Ghost Rejimi)</h2>
+            <span id="prankCountBadge" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 800;">0/5</span>
+          </div>
+          <p>Ushbu ro'yxatga kiritilgan foydalanuvchilar (maksimal 5 ta username) guruhda nima yozsa yoki qanday stiker, GIF, rasm yuborsa bot zudlik bilan o'chirib tashlaydi. Hatto foydalanuvchi guruh admini bo'lsa ham!</p>
+        </div>
+
+        <div class="tags-container" id="prankUsersContainer">
+          <span style="font-size: 12px; color: var(--text-muted);">Hozircha hech kim kiritilmagan</span>
+        </div>
+
+        <div class="custom-row" style="margin-top: 14px;">
+          <input type="text" id="inputNewPrankUser" class="text-input" style="flex: 1;" placeholder="Username yozing (masalan: @username)...">
+          <button class="btn-copy" id="btnAddPrankUser" style="background: #ef4444; color: #fff; padding: 12px 22px; font-weight: 800;">➕ Qo'shish</button>
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
+          💡 Eslatma: Faqat shu guruhdagi a'zolarning username'ini kiriting. Maksimal 5 ta username kiritish mumkin.
         </div>
       </div>
     </div>
@@ -1673,6 +1704,10 @@
     <button class="nav-item" data-tab="tab-badwords">
       <span class="nav-icon">🤬</span>
       <span>So'zlar</span>
+    </button>
+    <button class="nav-item" data-tab="tab-prank">
+      <span class="nav-icon">🎭</span>
+      <span>Hazil</span>
     </button>
     <button class="nav-item" data-tab="tab-stats">
       <span class="nav-icon">📊</span>
@@ -2139,8 +2174,8 @@
         updateCensorDisplay(currentSettings.censor_mute_seconds || 15);
         updateFloodDisplay(currentSettings.flood_mute_seconds || 900);
 
-        document.getElementById('selectWarnLimit').value = String(currentSettings.warn_limit || 3);
-        document.getElementById('selectWarnAction').value = currentSettings.warn_action || 'mute';
+        document.getElementById('selectWarnLimit').value = String(currentSettings.warn_limit || 10);
+        document.getElementById('selectWarnAction').value = currentSettings.warn_action || 'smart';
 
         // Update Flood Tab
         document.getElementById('selectFloodMsgLimit').value = String(currentSettings.flood_msg_limit || 5);
@@ -2154,6 +2189,9 @@
 
         // Render Bad Words
         renderBadWords(g.bad_words || []);
+
+        // Render Prank Users
+        renderPrankUsers(g.prank_users || []);
 
         // Render Leaderboard
         renderLeaderboard(g.stats?.top_users || []);
@@ -2179,6 +2217,31 @@
         const chip = document.createElement('div');
         chip.className = 'tag-chip';
         chip.innerHTML = `<span>${escapeHtml(w)}</span><button onclick="removeBadWord('${escapeHtml(w)}')">&times;</button>`;
+        container.appendChild(chip);
+      });
+    }
+
+    // Render Prank Users Chips
+    function renderPrankUsers(users) {
+      const container = document.getElementById('prankUsersContainer');
+      const badge = document.getElementById('prankCountBadge');
+      if (!container) return;
+      container.innerHTML = '';
+      const list = users || [];
+      if (badge) {
+        badge.textContent = `${list.length}/5`;
+        badge.style.background = list.length >= 5 ? "rgba(239, 68, 68, 0.4)" : "rgba(239, 68, 68, 0.2)";
+      }
+      if (list.length === 0) {
+        container.innerHTML = '<span style="font-size: 12px; color: var(--text-muted);">Hozircha hech kim kiritilmagan</span>';
+        return;
+      }
+      list.forEach(u => {
+        const chip = document.createElement('div');
+        chip.className = 'tag-chip';
+        chip.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+        chip.style.background = 'rgba(239, 68, 68, 0.12)';
+        chip.innerHTML = `<span>@${escapeHtml(u)}</span><button onclick="removePrankUser('${escapeHtml(u)}')">&times;</button>`;
         container.appendChild(chip);
       });
     }
@@ -2427,6 +2490,59 @@
         showToast("O'chirishda xatolik", "❌");
       }
     };
+
+    // Add Prank User
+    document.getElementById('btnAddPrankUser').addEventListener('click', async () => {
+      if (!requireCurrentChat()) return;
+      haptic('medium');
+      const input = document.getElementById('inputNewPrankUser');
+      const username = input.value.trim();
+      if (!username) return;
+
+      try {
+        const res = await apiFetch(`/api/group/${currentChatId}/prank_users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          input.value = '';
+          renderPrankUsers(data.prank_users);
+          showToast(data.message || "Hazil rejimiga qo'shildi! 🎭", "🎭");
+        } else {
+          showToast(data.message || data.error || "Qo'shishda xatolik", "⚠️");
+        }
+      } catch (err) {
+        showToast("Qo'shishda xatolik", "❌");
+      }
+    });
+
+    // Handle Enter key on Prank User Input
+    document.getElementById('inputNewPrankUser').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('btnAddPrankUser').click();
+      }
+    });
+
+    // Remove Prank User
+    window.removePrankUser = async function(username) {
+      if (!requireCurrentChat()) return;
+      haptic('light');
+      try {
+        const res = await apiFetch(`/api/group/${currentChatId}/prank_users`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username })
+        });
+        const data = await res.json();
+        renderPrankUsers(data.prank_users);
+        showToast("Foydalanuvchi o'chirildi!");
+      } catch (err) {
+        showToast("O'chirishda xatolik", "❌");
+      }
+    };
+
 
     // Refresh Stats Button
     document.getElementById('btnRefreshStats').addEventListener('click', () => {

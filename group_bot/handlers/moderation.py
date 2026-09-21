@@ -305,54 +305,111 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
             await message.reply(err, parse_mode="HTML")
             return
 
-        if target_user.id == bot.id or await is_admin_or_allowed(message.chat.id, target_user, bot):
-            await message.reply("❌ Admin yoki botga ogohlantirish berib bo'lmaydi!")
+        if target_user.id == bot.id:
+            await message.reply("❌ Botga ogohlantirish berib bo'lmaydi!")
             return
 
+        if target_user.username and target_user.username.lower() in ALLOWED_USERNAMES:
+            await message.reply("❌ Bot egasiga ogohlantirish berib bo'lmaydi!")
+            return
+
+        try:
+            target_member = await bot.get_chat_member(message.chat.id, target_user.id)
+        except Exception:
+            target_member = None
+
+        if target_member and target_member.status == ChatMemberStatus.CREATOR:
+            await message.reply("❌ Guruh egasi (Creator)ga ogohlantirish berib bo'lmaydi!")
+            return
+
+        is_target_admin = bool(target_member and target_member.status == ChatMemberStatus.ADMINISTRATOR)
+
         settings = get_chat_full_settings(message.chat.id)
-        warn_limit = int(settings.get("warn_limit", 3))
-        warn_action = settings.get("warn_action", "mute")
-        warn_mute_sec = int(settings.get("warn_mute_seconds", 86400))
+        warn_limit = int(settings.get("warn_limit", 10))
+        warn_action = settings.get("warn_action", "smart")
+        warn_mute_sec = int(settings.get("warn_mute_seconds", 3600))
         if warn_action == "mute_7d":
             warn_mute_sec = 604800
         elif warn_action == "mute":
-            warn_mute_sec = 86400
+            warn_mute_sec = 3600
 
         new_count = add_warn(message.chat.id, target_user.id)
         u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
+        role_label = "Admin" if is_target_admin else "Foydalanuvchi"
 
         if new_count >= warn_limit:
             reset_warns(message.chat.id, target_user.id)
-            if warn_action == "ban":
+            if is_target_admin:
+                # 10 ta warn olgan admin adminlikdan olinsin
                 try:
-                    await bot.ban_chat_member(chat_id=message.chat.id, user_id=target_user.id)
-                    await message.answer(
-                        f"🚫 Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} {warn_limit} ta ogohlantirish oldi va guruhdan chiqarildi (Ban)!",
-                        parse_mode="HTML"
-                    )
-                except TelegramBadRequest as e:
-                    await message.reply(f"⚠️ Xatolik: {e.message}")
-            else:
-                until_date = datetime.now(timezone.utc) + timedelta(seconds=warn_mute_sec)
-                try:
-                    permissions = ChatPermissions(can_send_messages=False)
-                    await bot.restrict_chat_member(
+                    await bot.promote_chat_member(
                         chat_id=message.chat.id,
                         user_id=target_user.id,
-                        permissions=permissions,
-                        until_date=until_date
+                        is_anonymous=False,
+                        can_manage_chat=False,
+                        can_post_messages=False,
+                        can_edit_messages=False,
+                        can_delete_messages=False,
+                        can_post_stories=False,
+                        can_edit_stories=False,
+                        can_delete_stories=False,
+                        can_manage_video_chats=False,
+                        can_restrict_members=False,
+                        can_promote_members=False,
+                        can_change_info=False,
+                        can_invite_users=False,
+                        can_pin_messages=False,
+                        can_manage_topics=False
                     )
-                    dur_str = format_duration(warn_mute_sec)
                     await message.answer(
-                        f"⚠️ Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} {warn_limit} ta ogohlantirish oldi va <b>{dur_str}ga</b> yozishdan cheklandi!",
+                        f"🚨 Admin <b>{escape(target_user.full_name)}</b>{u_tag} {warn_limit} ta ogohlantirish oldi va <b>adminlik lavozimidan olindi</b>!",
                         parse_mode="HTML"
                     )
                 except TelegramBadRequest as e:
-                    await message.reply(f"⚠️ Xatolik: {e.message}")
+                    await message.answer(
+                        f"🚨 Admin <b>{escape(target_user.full_name)}</b>{u_tag} {warn_limit} ta ogohlantirish oldi!\n"
+                        f"⚠️ Bot uni lavozimdan ololmadi ({e.message}). Guruh egasi ushbu adminni o'zi lavozimidan olishi zarur.",
+                        parse_mode="HTML"
+                    )
+            else:
+                # 10 ta warn olgan oddiy foydalanuvchi 1 soat mute olsin
+                if warn_action == "ban":
+                    try:
+                        await bot.ban_chat_member(chat_id=message.chat.id, user_id=target_user.id)
+                        await message.answer(
+                            f"🚫 Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} {warn_limit} ta ogohlantirish oldi va guruhdan chiqarildi (Ban)!",
+                            parse_mode="HTML"
+                        )
+                    except TelegramBadRequest as e:
+                        await message.reply(f"⚠️ Xatolik: {e.message}")
+                else:
+                    until_date = datetime.now(timezone.utc) + timedelta(seconds=warn_mute_sec)
+                    try:
+                        permissions = ChatPermissions(
+                            can_send_messages=False,
+                            can_send_photos=False,
+                            can_send_videos=False,
+                            can_send_other_messages=False,
+                            can_add_web_page_previews=False
+                        )
+                        await bot.restrict_chat_member(
+                            chat_id=message.chat.id,
+                            user_id=target_user.id,
+                            permissions=permissions,
+                            until_date=until_date
+                        )
+                        dur_str = format_duration(warn_mute_sec)
+                        await message.answer(
+                            f"⚠️ Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} {warn_limit} ta ogohlantirish oldi va <b>{dur_str}ga</b> yozishdan cheklandi (Mute)!",
+                            parse_mode="HTML"
+                        )
+                    except TelegramBadRequest as e:
+                        await message.reply(f"⚠️ Xatolik: {e.message}")
         else:
+            action_desc = "adminlik lavozimidan olinadi." if is_target_admin else f"{format_duration(warn_mute_sec)}ga mute qilinadi."
             await message.answer(
-                f"⚠️ Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} ga ogohlantirish berildi! ({new_count}/{warn_limit})\n"
-                f"<i>{warn_limit} ta ogohlantirishdan so'ng jazo qo'llanadi.</i>",
+                f"⚠️ {role_label} <b>{escape(target_user.full_name)}</b>{u_tag} ga ogohlantirish berildi! ({new_count}/{warn_limit})\n"
+                f"<i>{warn_limit} ta ogohlantirish to'planganda {action_desc}</i>",
                 parse_mode="HTML"
             )
         return
@@ -365,7 +422,7 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
             return
 
         settings = get_chat_full_settings(message.chat.id)
-        warn_limit = int(settings.get("warn_limit", 3))
+        warn_limit = int(settings.get("warn_limit", 10))
 
         rem_count = remove_warn(message.chat.id, target_user.id)
         u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""

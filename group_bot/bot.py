@@ -14,7 +14,10 @@ from aiogram.types import Message, TelegramObject
 from aiogram.client.default import DefaultBotProperties
 
 from group_bot.config import BOT_TOKEN
-from group_bot.database import init_db, add_message, cleanup_old_messages, is_bot_enabled, save_chat_title
+from group_bot.database import (
+    init_db, add_message, cleanup_old_messages, is_bot_enabled,
+    save_chat_title, is_prank_user, delete_message_record
+)
 from group_bot.handlers import main_router
 from group_bot.handlers.antiflood import AntiFloodMiddleware
 from group_bot.handlers.censor import CensorMiddleware
@@ -78,6 +81,34 @@ class BotStatusEnforcerMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
+class PrankModeMiddleware(BaseMiddleware):
+    """
+    Hazil rejimi (Ghost / Prank Mode):
+    Guruhdagi belgilangan a'zolar (maksimal 5 ta username) nima yozsa yoki
+    qanday stiker, GIF, rasm, video, audio, ovozli xabar yuborsa, bot darhol
+    o'chirib tashlaydi. Hatto foydalanuvchi guruh admini bo'lsa ham!
+    """
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        if isinstance(event, Message) and event.chat:
+            if event.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
+                chat_id = event.chat.id
+                if event.from_user and event.from_user.username:
+                    if is_prank_user(chat_id, event.from_user.username):
+                        try:
+                            await event.delete()
+                            delete_message_record(chat_id, event.message_id)
+                        except Exception:
+                            pass
+                        # Xabar o'chirildi, boshqa ishlov beruvchilarga o'tkazilmaydi
+                        return
+        return await handler(event, data)
+
+
 async def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -97,10 +128,12 @@ async def main():
     )
 
     dp = Dispatcher()
-    # Har bir xabarni hisobga oluvchi middleware qo'shish (statistika buzilmasligi uchun)
-    dp.message.outer_middleware(MessageTrackerMiddleware())
     # Bot umumiy holati: Agar bot o'chirilgan bo'lsa, guruhdagi barcha xabarlar va harakatlarni to'xtatadi
     dp.message.outer_middleware(BotStatusEnforcerMiddleware())
+    # Hazil rejimi (Prank mode): ro'yxatdagi 5 ta a'zo nima yozsa bot darhol o'chiradi (admin bo'lsa ham)
+    dp.message.outer_middleware(PrankModeMiddleware())
+    # Har bir xabarni hisobga oluvchi middleware qo'shish (statistika buzilmasligi uchun)
+    dp.message.outer_middleware(MessageTrackerMiddleware())
     # So'kinish va haqorat filtri (Censor) - barcha xabarlardan oldin tekshiradi
     dp.message.outer_middleware(CensorMiddleware())
     # Qoida 2 bo'yicha Anti-Flood middleware (barcha xabar va stikerlarni tekshirish uchun outer_middleware)
