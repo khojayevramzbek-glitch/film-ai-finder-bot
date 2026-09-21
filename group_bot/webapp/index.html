@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Blizkiy Bot — Guruh Boshqaruv Markazi</title>
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-secondary: #131c2e;
+      --bg-card: rgba(25, 36, 58, 0.7);
+      --bg-card-hover: rgba(36, 51, 82, 0.85);
+      --accent-blue: #38bdf8;
+      --accent-indigo: #6366f1;
+      --accent-green: #10b981;
+      --accent-red: #f43f5e;
+      --accent-amber: #f59e0b;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --shadow-glow: 0 0 25px rgba(56, 189, 248, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at top right, #172554, #0b0f19 60%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding-bottom: 90px;
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+
+    /* Top App Bar */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      background: rgba(11, 15, 25, 0.8);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #38bdf8, #6366f1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
+    }
+
+    .brand-info h1 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .brand-info p {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      border-radius: 30px;
+      padding: 4px 10px 4px 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .user-avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #f59e0b, #f43f5e);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    /* Container */
+    .container {
+      max-width: 650px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* Add To Group Hero Banner */
+    .hero-card {
+      background: linear-gradient(135deg, rgba(30, 58, 138, 0.6), rgba(15, 23, 42, 0.9));
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--shadow-glow);
+      margin-bottom: 20px;
+    }
+
+    .hero-card::before {
+      content: '';
+      position: absolute;
+      top: -40px;
+      right: -40px;
+      width: 140px;
+      height: 140px;
+      background: radial-gradient(circle, rgba(56, 189, 248, 0.35), transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hero-desc {
+      font-size: 13px;
+      color: #cbd5e1;
+      margin-bottom: 16px;
+      line-height: 1.4;
+    }
+
+    .btn-add-group {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: #ffffff;
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 14px 20px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+      transition: all 0.2s ease;
+    }
+
+    .btn-add-group:active {
+      transform: scale(0.98);
+      filter: brightness(1.1);
+    }
+
+    /* Group Selector Section */
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-secondary);
+      margin: 18px 0 10px 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .group-selector-wrap {
+      position: relative;
+      margin-bottom: 20px;
+    }
+
+    .group-select {
+      width: 100%;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      font-size: 15px;
+      font-weight: 600;
+      appearance: none;
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .group-select:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .group-selector-arrow {
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    /* Glass Cards */
+    .glass-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      margin-bottom: 14px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    /* Switch Rows */
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 8px 0;
+    }
+
+    .switch-row:not(:last-child) {
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 12px;
+      padding-bottom: 14px;
+    }
+
+    .switch-info h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .switch-info p {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 3px;
+    }
+
+    /* Modern Toggle Switch */
+    .toggle {
+      position: relative;
+      display: inline-block;
+      width: 52px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #334155;
+      border-radius: 34px;
+      transition: 0.3s;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      border-radius: 50%;
+      transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    }
+
+    input:checked + .slider {
+      background: linear-gradient(135deg, #10b981, #059669);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(24px);
+    }
+
+    /* Stat Badges Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .stat-badge {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+    }
+
+    .stat-badge .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .stat-badge .stat-value {
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+      margin-top: 4px;
+    }
+
+    /* Bad Words Tags */
+    .tags-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+      min-height: 40px;
+    }
+
+    .tag-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(244, 63, 94, 0.15);
+      border: 1px solid rgba(244, 63, 94, 0.35);
+      color: #fda4af;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .tag-chip button {
+      background: none;
+      border: none;
+      color: #fda4af;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .text-input {
+      flex: 1;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .text-input:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .btn-action {
+      background: var(--accent-blue);
+      color: #0b0f19;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 12px 18px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: filter 0.2s;
+    }
+
+    .btn-action:active {
+      filter: brightness(0.9);
+    }
+
+    /* Leaderboard List */
+    .leaderboard-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .user-rank-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+    }
+
+    .rank-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .rank-medal {
+      font-size: 18px;
+      width: 28px;
+      text-align: center;
+      font-weight: 800;
+      color: var(--text-secondary);
+    }
+
+    .rank-user-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .rank-username {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .rank-count {
+      text-align: right;
+    }
+
+    .rank-msgs {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--accent-blue);
+    }
+
+    .rank-unit {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    /* Rules Textarea */
+    .rules-textarea {
+      width: 100%;
+      min-height: 140px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      color: #fff;
+      font-size: 14px;
+      line-height: 1.5;
+      font-family: inherit;
+      resize: vertical;
+      outline: none;
+      margin-bottom: 12px;
+    }
+
+    .rules-textarea:focus {
+      border-color: var(--accent-blue);
+    }
+
+    /* Cheat Sheet Cards */
+    .cmd-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .cmd-code {
+      font-family: monospace;
+      color: var(--accent-blue);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .cmd-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .btn-copy {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .btn-copy:active {
+      background: var(--accent-blue);
+      color: #000;
+    }
+
+    /* Bottom Navigation Bar */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 50;
+      background: rgba(11, 15, 25, 0.92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-around;
+      padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      transition: color 0.2s;
+    }
+
+    .nav-item.active {
+      color: var(--accent-blue);
+    }
+
+    .nav-icon {
+      font-size: 20px;
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 95px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #1e293b;
+      color: #fff;
+      border: 1px solid var(--accent-blue);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      border-radius: 30px;
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s ease;
+      z-index: 100;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .tab-pane {
+      display: none;
+    }
+
+    .tab-pane.active {
+      display: block;
+      animation: fadeIn 0.25s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .badge-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 12px;
+    }
+    .badge-status.on {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+    }
+    .badge-status.off {
+      background: rgba(244, 63, 94, 0.15);
+      color: #fb7185;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top App Bar -->
+  <header class="topbar">
+    <div class="brand-box">
+      <div class="brand-logo">🔰</div>
+      <div class="brand-info">
+        <h1>Blizkiy Moderatsiya</h1>
+        <p>Guruh Boshqaruv Markazi</p>
+      </div>
+    </div>
+    <div class="user-pill" id="userPill">
+      <div class="user-avatar" id="userAvatar">U</div>
+      <span id="userName">Foydalanuvchi</span>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- ➕ Guruhga Qo'shish Hero Card -->
+    <div class="hero-card">
+      <div class="hero-title">
+        <span>🚀 Botni Guruhingizga Qo'shing</span>
+      </div>
+      <p class="hero-desc">
+        Guruhni toshqin (flood), so'kinish va kiber-hujumlardan 24/7 himoya qilish uchun botni birgina bosish bilan qo'shing va admin huquqini bering!
+      </p>
+      <button class="btn-add-group" id="btnAddGroup">
+        <span>➕ Guruhingizga Qo'shish</span>
+      </button>
+    </div>
+
+    <!-- Active Group Selector -->
+    <div class="section-title">
+      <span>⚙️ Boshqarilayotgan Guruh</span>
+    </div>
+    <div class="group-selector-wrap">
+      <select id="groupSelect" class="group-select">
+        <option value="">Guruhlar yuklanmoqda...</option>
+      </select>
+      <div class="group-selector-arrow">▼</div>
+    </div>
+
+    <!-- TAB 1: ASOSIY BOSHQARUV (DASHBOARD) -->
+    <div id="tab-dashboard" class="tab-pane active">
+      
+      <!-- Bot Master Status Card -->
+      <div class="glass-card">
+        <div class="switch-row">
+          <div class="switch-info">
+            <h3>🔘 Bot Umumiy Holati</h3>
+            <p>O'chirilganda bot guruhda barcha buyruq va xabarlarga sukut saqlaydi</p>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggleBotStatus">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="switch-row">
+          <div class="switch-info">
+            <h3>🤬 So'kinish Filtri (Censor)</h3>
+            <p>Haqoratli so'z yozgan a'zolarni avtomatik mute qiladi</p>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggleCensor">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="switch-row">
+          <div class="switch-info">
+            <h3>📊 Guruh Statistikasi (Stata)</h3>
+            <p>24 soatlik xabarlar va eng faol a'zolar reytingini yuritish</p>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggleStats">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="switch-row" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
+          <div class="switch-info">
+            <h3>👥 Statani Ommaga Ko'rsatish</h3>
+            <p>Yoqilgan bo'lsa barcha a'zolar, aks holda faqat adminlar ko'radi</p>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggleStatsPublic">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Quick Metrics -->
+      <div class="section-title">
+        <span>📈 24 Soatlik Ko'rsatkichlar</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-badge">
+          <div class="stat-label">Jami Xabarlar (24h)</div>
+          <div class="stat-value" id="badgeTotalMsgs">0 ta</div>
+        </div>
+        <div class="stat-badge">
+          <div class="stat-label">Faol A'zolar (24h)</div>
+          <div class="stat-value" id="badgeActiveUsers">0 kishi</div>
+        </div>
+      </div>
+
+      <!-- Anti-Flood Summary -->
+      <div class="glass-card">
+        <div class="switch-info" style="margin-bottom: 12px;">
+          <h3>🛡 Avtomatik Anti-Flood Himoyasi</h3>
+          <p>Toshqin va spamga qarshi avtomatik cheklovlar faol holatda:</p>
+        </div>
+        <div style="font-size: 13px; color: #cbd5e1; display: flex; flex-direction: column; gap: 8px;">
+          <div>⚡️ <b>Oddiy Xabarlar:</b> 4 soniyada 5 ta xabar → 15 min mute</div>
+          <div>🖼 <b>Stiker & GIF:</b> 4 soniyada 3 ta stiker → 15 min mute</div>
+          <div>✂️ <b>Bo'lib Yozish:</b> 3 soniyada 4 ta kalta so'z → 15 min mute</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TAB 2: TSENZURA VA TAQIQLANGAN SO'ZLAR -->
+    <div id="tab-censor" class="tab-pane">
+      <div class="glass-card">
+        <div class="switch-info">
+          <h3>🚫 Maxsus Taqiqlangan So'zlar</h3>
+          <p>Guruhingiz uchun o'zingiz kiritgan qo'shimcha so'zlar ro'yxati:</p>
+        </div>
+
+        <div class="tags-container" id="badwordsContainer">
+          <span style="font-size: 12px; color: var(--text-muted);">Maxsus so'zlar kiritilmagan</span>
+        </div>
+
+        <div class="input-row">
+          <input type="text" id="inputNewBadWord" class="text-input" placeholder="Yangi taqiqlangan so'z...">
+          <button class="btn-action" id="btnAddBadWord">+ Qo'shish</button>
+        </div>
+      </div>
+
+      <div class="glass-card">
+        <div class="switch-info">
+          <h3>⚠️ Qoidabuzarlik Jazolari</h3>
+          <p style="margin-top: 6px;">
+            A'zolar haqoratli so'z yozganda bot ularning xabarini darhol o'chiradi va <b>15 soniya</b> yozishni cheklaydi (mute).<br><br>
+            Adminlar so'kinganda esa guruhda ogohlantirish xabari chiqariladi.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: STATISTIKA VA TOP A'ZOLAR -->
+    <div id="tab-stats" class="tab-pane">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div class="section-title" style="margin: 0;">
+          <span>🏆 Top Faol A'zolar (24 Soat)</span>
+        </div>
+        <button class="btn-copy" id="btnRefreshStats">🔄 Yangilash</button>
+      </div>
+
+      <div class="leaderboard-list" id="leaderboardList">
+        <div class="glass-card" style="text-align: center; color: var(--text-muted);">
+          Statistika yuklanmoqda...
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: QOIDALAR TAHRIRI -->
+    <div id="tab-rules" class="tab-pane">
+      <div class="glass-card">
+        <div class="switch-info" style="margin-bottom: 12px;">
+          <h3>📜 Guruh Qoidalarini Sozlash</h3>
+          <p>Guruhda <code>/rules</code> yozilganda a'zolarga aynan shu qoidalar ko'rsatiladi:</p>
+        </div>
+
+        <textarea id="textareaRules" class="rules-textarea" placeholder="Guruh qoidalarini bu yerga yozing..."></textarea>
+        
+        <button class="btn-add-group" id="btnSaveRules" style="background: linear-gradient(135deg, #10b981, #059669);">
+          <span>💾 Qoidalarni Saqlash</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB 5: BUYRUQLAR YO'RIQNOMASI -->
+    <div id="tab-commands" class="tab-pane">
+      <div class="section-title">
+        <span>👮‍♂️ Admin Buyruqlari</span>
+      </div>
+
+      <div class="cmd-card">
+        <div>
+          <div class="cmd-code">/mute @user 15m</div>
+          <div class="cmd-desc">Foydalanuvchini vaqtincha cheklash (15m, 2h, 1d)</div>
+        </div>
+        <button class="btn-copy" onclick="copyCommand('/mute @user 15m')">Nusxalash</button>
+      </div>
+
+      <div class="cmd-card">
+        <div>
+          <div class="cmd-code">/unmute @user</div>
+          <div class="cmd-desc">Yozish cheklovini bekor qilish</div>
+        </div>
+        <button class="btn-copy" onclick="copyCommand('/unmute @user')">Nusxalash</button>
+      </div>
+
+      <div class="cmd-card">
+        <div>
+          <div class="cmd-code">/ban @user</div>
+          <div class="cmd-desc">Foydalanuvchini guruhdan haydash va bloklash</div>
+        </div>
+        <button class="btn-copy" onclick="copyCommand('/ban @user')">Nusxalash</button>
+      </div>
+
+      <div class="cmd-card">
+        <div>
+          <div class="cmd-code">/warn @user [sabab]</div>
+          <div class="cmd-desc">Ogohlantirish berish (3 tasida 1 kun mute)</div>
+        </div>
+        <button class="btn-copy" onclick="copyCommand('/warn @user')">Nusxalash</button>
+      </div>
+
+      <div class="cmd-card">
+        <div>
+          <div class="cmd-code">/sleep 1h [sabab]</div>
+          <div class="cmd-desc">Adminlar uchun AFK / Bandlik rejimi</div>
+        </div>
+        <button class="btn-copy" onclick="copyCommand('/sleep 1h Bandman')">Nusxalash</button>
+      </div>
+
+      <div class="cmd-card">
+        <div>
+          <div class="cmd-code">stata</div>
+          <div class="cmd-desc">Guruh a'zolarining 24 soatlik faollik reytingi</div>
+        </div>
+        <button class="btn-copy" onclick="copyCommand('stata')">Nusxalash</button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom Navigation Bar -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-tab="tab-dashboard">
+      <span class="nav-icon">🏠</span>
+      <span>Boshqaruv</span>
+    </button>
+    <button class="nav-item" data-tab="tab-censor">
+      <span class="nav-icon">🤬</span>
+      <span>Tsenzura</span>
+    </button>
+    <button class="nav-item" data-tab="tab-stats">
+      <span class="nav-icon">📊</span>
+      <span>Statistika</span>
+    </button>
+    <button class="nav-item" data-tab="tab-rules">
+      <span class="nav-icon">📜</span>
+      <span>Qoidalar</span>
+    </button>
+    <button class="nav-item" data-tab="tab-commands">
+      <span class="nav-icon">📋</span>
+      <span>Buyruqlar</span>
+    </button>
+  </nav>
+
+  <!-- Toast Notification Box -->
+  <div id="toast" class="toast">
+    <span id="toastIcon">✅</span>
+    <span id="toastMsg">Amal bajarildi</span>
+  </div>
+
+  <script>
+    // Initialize Telegram WebApp
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      try {
+        tg.ready();
+        tg.expand();
+        tg.enableClosingConfirmation();
+      } catch (e) {
+        console.warn("Telegram WebApp init:", e);
+      }
+    }
+
+    // Set User Profile from Telegram
+    const tgUser = tg?.initDataUnsafe?.user;
+    if (tgUser) {
+      document.getElementById('userName').textContent = tgUser.first_name || tgUser.username || "Admin";
+      const initial = (tgUser.first_name || tgUser.username || "A").charAt(0).toUpperCase();
+      document.getElementById('userAvatar').textContent = initial;
+    }
+
+    // Haptic Feedback Helper
+    function haptic(type = 'light') {
+      try {
+        if (tg?.HapticFeedback) {
+          if (type === 'success' || type === 'error' || type === 'warning') {
+            tg.HapticFeedback.notificationOccurred(type);
+          } else {
+            tg.HapticFeedback.impactOccurred(type);
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Toast Notification Helper
+    function showToast(msg, icon = '✅') {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMsg').textContent = msg;
+      document.getElementById('toastIcon').textContent = icon;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2600);
+    }
+
+    // Copy to clipboard
+    function copyCommand(cmd) {
+      haptic('light');
+      navigator.clipboard.writeText(cmd).then(() => {
+        showToast("Nusxalandi: " + cmd, "📋");
+      }).catch(() => {
+        showToast("Nusxa olindi", "📋");
+      });
+    }
+
+    // Tab Navigation
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        haptic('light');
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        
+        btn.classList.add('active');
+        const tabId = btn.getAttribute('data-tab');
+        document.getElementById(tabId).classList.add('active');
+      });
+    });
+
+    // Add To Group Button
+    document.getElementById('btnAddGroup').addEventListener('click', () => {
+      haptic('medium');
+      const addUrl = "https://t.me/oken_sherda_bot?startgroup=true";
+      if (tg?.openTelegramLink) {
+        tg.openTelegramLink(addUrl);
+      } else {
+        window.open(addUrl, '_blank');
+      }
+    });
+
+    // State Variables
+    let currentChatId = null;
+    let groupsList = [];
+
+    // Parse URL query parameter for pre-selected chat_id
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialChatId = urlParams.get('chat_id');
+
+    // Fetch Groups List
+    async function loadGroups() {
+      try {
+        const res = await fetch('/api/groups');
+        const data = await res.json();
+        groupsList = data.groups || [];
+        
+        const select = document.getElementById('groupSelect');
+        select.innerHTML = '';
+
+        if (groupsList.length === 0) {
+          select.innerHTML = '<option value="">Hech qanday guruh topilmadi</option>';
+          return;
+        }
+
+        groupsList.forEach(g => {
+          const opt = document.createElement('option');
+          opt.value = g.chat_id;
+          opt.textContent = `${g.title} (${g.msg_count_24h} xabar/24h)`;
+          select.appendChild(opt);
+        });
+
+        // Select initial chat_id if matched
+        if (initialChatId && groupsList.some(g => String(g.chat_id) === String(initialChatId))) {
+          select.value = initialChatId;
+        }
+
+        currentChatId = select.value;
+        if (currentChatId) {
+          loadGroupDetails(currentChatId);
+        }
+      } catch (err) {
+        console.error("Guruhlarni yuklashda xatolik:", err);
+      }
+    }
+
+    // Handle Group Select Change
+    document.getElementById('groupSelect').addEventListener('change', (e) => {
+      haptic('light');
+      currentChatId = e.target.value;
+      if (currentChatId) {
+        loadGroupDetails(currentChatId);
+      }
+    });
+
+    // Fetch Selected Group Details
+    async function loadGroupDetails(chatId) {
+      try {
+        const res = await fetch(`/api/group/${chatId}`);
+        const data = await res.json();
+        if (!data.group) return;
+
+        const g = data.group;
+        
+        // Update Toggles
+        document.getElementById('toggleBotStatus').checked = !!g.is_bot_enabled;
+        document.getElementById('toggleCensor').checked = !!g.is_censor_enabled;
+        document.getElementById('toggleStats').checked = !!g.is_stats_enabled;
+        document.getElementById('toggleStatsPublic').checked = !!g.is_stats_public;
+
+        // Update Quick Metrics
+        document.getElementById('badgeTotalMsgs').textContent = (g.stats?.total_messages || 0) + " ta";
+        document.getElementById('badgeActiveUsers').textContent = (g.stats?.active_users || 0) + " kishi";
+
+        // Render Bad Words
+        renderBadWords(g.bad_words || []);
+
+        // Render Leaderboard
+        renderLeaderboard(g.stats?.top_users || []);
+
+        // Render Rules
+        document.getElementById('textareaRules').value = g.rules || "";
+
+      } catch (err) {
+        console.error("Guruh tafsilotlarini yuklashda xatolik:", err);
+      }
+    }
+
+    // Render Bad Words Chips
+    function renderBadWords(words) {
+      const container = document.getElementById('badwordsContainer');
+      container.innerHTML = '';
+      if (!words || words.length === 0) {
+        container.innerHTML = '<span style="font-size: 12px; color: var(--text-muted);">Maxsus taqiqlangan so\'zlar kiritilmagan</span>';
+        return;
+      }
+      words.forEach(w => {
+        const chip = document.createElement('div');
+        chip.className = 'tag-chip';
+        chip.innerHTML = `<span>${escapeHtml(w)}</span><button onclick="removeBadWord('${escapeHtml(w)}')">&times;</button>`;
+        container.appendChild(chip);
+      });
+    }
+
+    // Render Leaderboard List
+    function renderLeaderboard(topUsers) {
+      const list = document.getElementById('leaderboardList');
+      list.innerHTML = '';
+      if (!topUsers || topUsers.length === 0) {
+        list.innerHTML = '<div class="glass-card" style="text-align: center; color: var(--text-muted);">So\'nggi 24 soatda faollik yo\'q</div>';
+        return;
+      }
+
+      const medals = ['🥇', '🥈', '🥉'];
+      topUsers.forEach((u, idx) => {
+        const row = document.createElement('div');
+        row.className = 'user-rank-row';
+        const medalOrNum = idx < 3 ? medals[idx] : `#${idx + 1}`;
+        const uname = u.username ? `@${escapeHtml(u.username)}` : `ID: ${u.user_id}`;
+        
+        row.innerHTML = `
+          <div class="rank-info">
+            <div class="rank-medal">${medalOrNum}</div>
+            <div>
+              <div class="rank-user-name">${escapeHtml(u.full_name || 'Foydalanuvchi')}</div>
+              <div class="rank-username">${uname}</div>
+            </div>
+          </div>
+          <div class="rank-count">
+            <div class="rank-msgs">${u.msg_count}</div>
+            <div class="rank-unit">xabar</div>
+          </div>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    // Escape HTML helper
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Toggle Handlers
+    document.getElementById('toggleBotStatus').addEventListener('change', async (e) => {
+      haptic('medium');
+      if (!currentChatId) return;
+      const enabled = e.target.checked;
+      try {
+        await fetch(`/api/group/${currentChatId}/toggle_bot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled })
+        });
+        showToast(enabled ? "Bot guruhingizda yoqildi!" : "Bot guruhingizda o'chirildi!", enabled ? "🟢" : "🔴");
+      } catch (err) {
+        showToast("Xatolik yuz berdi", "❌");
+      }
+    });
+
+    document.getElementById('toggleCensor').addEventListener('change', async (e) => {
+      haptic('light');
+      if (!currentChatId) return;
+      const enabled = e.target.checked;
+      try {
+        await fetch(`/api/group/${currentChatId}/toggle_censor`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled })
+        });
+        showToast(enabled ? "So'kinish filtri yoqildi" : "So'kinish filtri o'chirildi");
+      } catch (err) {
+        showToast("Xatolik yuz berdi", "❌");
+      }
+    });
+
+    document.getElementById('toggleStats').addEventListener('change', async (e) => {
+      haptic('light');
+      if (!currentChatId) return;
+      const enabled = e.target.checked;
+      try {
+        await fetch(`/api/group/${currentChatId}/toggle_stats`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled })
+        });
+        showToast(enabled ? "Guruh statistikasi yoqildi" : "Guruh statistikasi o'chirildi");
+      } catch (err) {
+        showToast("Xatolik yuz berdi", "❌");
+      }
+    });
+
+    document.getElementById('toggleStatsPublic').addEventListener('change', async (e) => {
+      haptic('light');
+      if (!currentChatId) return;
+      const is_public = e.target.checked;
+      try {
+        await fetch(`/api/group/${currentChatId}/set_stats_public`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_public })
+        });
+        showToast(is_public ? "Stata barcha a'zolarga ko'rinadi" : "Stata faqat adminlarga ko'rinadi");
+      } catch (err) {
+        showToast("Xatolik yuz berdi", "❌");
+      }
+    });
+
+    // Add Bad Word
+    document.getElementById('btnAddBadWord').addEventListener('click', async () => {
+      haptic('medium');
+      if (!currentChatId) return;
+      const input = document.getElementById('inputNewBadWord');
+      const word = input.value.trim();
+      if (!word) return;
+
+      try {
+        const res = await fetch(`/api/group/${currentChatId}/badwords`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ word })
+        });
+        const data = await res.json();
+        input.value = '';
+        renderBadWords(data.bad_words);
+        showToast("Taqiqlangan so'z qo'shildi!");
+      } catch (err) {
+        showToast("Qo'shishda xatolik", "❌");
+      }
+    });
+
+    // Remove Bad Word
+    window.removeBadWord = async function(word) {
+      haptic('light');
+      if (!currentChatId) return;
+      try {
+        const res = await fetch(`/api/group/${currentChatId}/badwords`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ word })
+        });
+        const data = await res.json();
+        renderBadWords(data.bad_words);
+        showToast("So'z ro'yxatdan o'chirildi!");
+      } catch (err) {
+        showToast("O'chirishda xatolik", "❌");
+      }
+    };
+
+    // Refresh Stats Button
+    document.getElementById('btnRefreshStats').addEventListener('click', () => {
+      haptic('light');
+      if (currentChatId) {
+        loadGroupDetails(currentChatId);
+        showToast("Statistika yangilandi!", "🔄");
+      }
+    });
+
+    // Save Rules Button
+    document.getElementById('btnSaveRules').addEventListener('click', async () => {
+      haptic('success');
+      if (!currentChatId) return;
+      const rules_text = document.getElementById('textareaRules').value;
+      try {
+        await fetch(`/api/group/${currentChatId}/rules`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rules: rules_text })
+        });
+        showToast("Guruh qoidalari saqlandi!", "💾");
+      } catch (err) {
+        showToast("Saqlashda xatolik", "❌");
+      }
+    });
+
+    // Initialize on load
+    loadGroups();
+  </script>
+</body>
+</html>

@@ -81,12 +81,20 @@ with gr.Blocks(title="Multi-Bot AI Cloud Cluster (16 GB)") as demo:
         "Barcha Telegram botlaringiz Hugging Face Spaces bulutida **16 GB RAM** bilan 24/7 rejimda muvaffaqiyatli ishlamoqda!\n\n"
         "👉 **Kino Qidiruv Boti:** [@FilmAiFinderbot](https://t.me/FilmAiFinderbot)\n"
         "👉 **Admin Boti:** [@filmfinder_admin_bot](https://t.me/filmfinder_admin_bot)\n"
-        "👉 **Guruh Moderatsiya Boti:** [@oken_sherda_bot](https://t.me/oken_sherda_bot)"
+        "👉 **Guruh Moderatsiya Boti:** [@oken_sherda_bot](https://t.me/oken_sherda_bot)\n"
+        "📱 **Guruh Boshqaruv Mini App:** [Boshqaruv Paneli (Web App)](/webapp)"
     )
     status_box = gr.Textbox(value=get_system_stats, label="📊 Jonli Server va Botlar Ko'rsatkichi", lines=6)
     refresh_btn = gr.Button("🔄 Yangilash / Refresh", variant="primary")
     refresh_btn.click(fn=get_system_stats, outputs=status_box)
 
+try:
+    from group_bot.webapp_server import attach_fastapi_routes
+    attach_fastapi_routes(demo.app)
+except Exception as e:
+    print(f"⚠️ [Web App Warning] FastAPI routes ulashda xatolik: {e}", flush=True)
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "7860"))
     demo.queue().launch(server_name="0.0.0.0", server_port=port)
+

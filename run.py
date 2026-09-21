@@ -73,16 +73,23 @@ async def health_check_handler(request):
 
 
 async def start_web_server(port: int):
-    """Starts a minimal HTTP web server for Render health checks."""
+    """Starts a minimal HTTP web server for Render health checks and Web App."""
     app = web.Application()
     app.router.add_get("/", health_check_handler)
     app.router.add_get("/health", health_check_handler)
     
+    try:
+        from group_bot.webapp_server import attach_aiohttp_routes
+        attach_aiohttp_routes(app)
+    except Exception as e:
+        logger.warning(f"[Web App Warning] Aiohttp routes ulashda xatolik: {e}")
+
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info(f"🌐 Cloud Health-Check Web Server ishga tushdi (Port: {port})")
+    logger.info(f"🌐 Cloud Health-Check & Web App Server ishga tushdi (Port: {port})")
+
 
 
 async def main():

@@ -14,10 +14,12 @@ from aiogram.types import Message, TelegramObject
 from aiogram.client.default import DefaultBotProperties
 
 from group_bot.config import BOT_TOKEN
-from group_bot.database import init_db, add_message, cleanup_old_messages, is_bot_enabled
+from group_bot.database import init_db, add_message, cleanup_old_messages, is_bot_enabled, save_chat_title
 from group_bot.handlers import main_router
 from group_bot.handlers.antiflood import AntiFloodMiddleware
 from group_bot.handlers.censor import CensorMiddleware
+
+WEBAPP_URL = "https://uchunrisk-film-ai-finder-bot.hf.space/webapp"
 
 
 class MessageTrackerMiddleware(BaseMiddleware):
@@ -40,7 +42,11 @@ class MessageTrackerMiddleware(BaseMiddleware):
                 username=event.from_user.username,
                 message_id=event.message_id
             )
+            # Guruh nomini saqlab borish
+            if event.chat and event.chat.title:
+                save_chat_title(event.chat.id, event.chat.title)
         return await handler(event, data)
+
 
 
 class BotStatusEnforcerMiddleware(BaseMiddleware):
@@ -107,8 +113,22 @@ async def main():
     bot_info = await bot.get_me()
     logger.info(f"Bot faol: @{bot_info.username} ({bot_info.first_name}) [ID: {bot_info.id}]")
 
+    # Set chat menu button to Telegram Mini App
+    try:
+        from aiogram.types import MenuButtonWebApp, WebAppInfo
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text="📱 Boshqaruv",
+                web_app=WebAppInfo(url=WEBAPP_URL)
+            )
+        )
+        logger.info(f"📱 Telegram Menu Button Mini App ga muvaffaqiyatli ulandi: {WEBAPP_URL}")
+    except Exception as e:
+        logger.warning(f"Menu button o'rnatishda xatolik: {e}")
+
     try:
         await dp.start_polling(
+
             bot,
             allowed_updates=["message", "chat_member", "my_chat_member", "callback_query"],
             handle_signals=False

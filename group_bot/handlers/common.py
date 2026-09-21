@@ -1,10 +1,12 @@
 from aiogram import Router, types, Bot, F
 from aiogram.filters import Command
 from aiogram.enums import ChatType
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, WebAppInfo
 from html import escape
 
 router = Router()
+
+WEBAPP_URL = "https://uchunrisk-film-ai-finder-bot.hf.space/webapp"
 
 
 def get_main_menu_keyboard(bot_username: str) -> InlineKeyboardMarkup:
@@ -14,6 +16,10 @@ def get_main_menu_keyboard(bot_username: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="➕ Guruhga Qo'shish",
                     url=f"https://t.me/{bot_username}?startgroup=true"
+                ),
+                InlineKeyboardButton(
+                    text="📱 Mini App Boshqaruv",
+                    web_app=WebAppInfo(url=WEBAPP_URL)
                 )
             ],
             [
@@ -34,6 +40,7 @@ def get_main_menu_keyboard(bot_username: str) -> InlineKeyboardMarkup:
             ]
         ]
     )
+
 
 
 def get_back_keyboard() -> InlineKeyboardMarkup:
@@ -266,3 +273,61 @@ async def cmd_info(message: types.Message):
         f"<b>Sizning ID:</b> <code>{message.from_user.id}</code>"
     )
     await message.reply(info_text, parse_mode="HTML")
+
+
+@router.message(Command("settings", "panel", "webapp"))
+async def cmd_settings(message: types.Message, bot: Bot):
+    bot_info = await bot.get_me()
+    bot_username = bot_info.username or "oken_sherda_bot"
+
+    if message.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
+        chat_id = message.chat.id
+        chat_title = message.chat.title or "Guruh"
+        group_webapp_url = f"{WEBAPP_URL}?chat_id={chat_id}"
+
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=f"⚙️ «{chat_title}» Sozlamalari (Mini App)",
+                        web_app=WebAppInfo(url=group_webapp_url)
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="➕ Boshqa Guruhga Qo'shish",
+                        url=f"https://t.me/{bot_username}?startgroup=true"
+                    )
+                ]
+            ]
+        )
+        await message.reply(
+            f"📱 <b>«{escape(chat_title)}» guruhini qulay boshqarish paneli:</b>\n\n"
+            "Pastdagi tugmani bosing va Mini App orqali bot holati, so'kinish filtri, guruh statistikasi va qoidalarni o'zingizga moslang!",
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+    else:
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📱 Mini App Boshqaruv Markazi",
+                        web_app=WebAppInfo(url=WEBAPP_URL)
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="➕ Botni Guruhga Qo'shish",
+                        url=f"https://t.me/{bot_username}?startgroup=true"
+                    )
+                ]
+            ]
+        )
+        await message.answer(
+            "📱 <b>Blizkiy Bot — Mini App Boshqaruv Markazi:</b>\n\n"
+            "Guruhlaringizni to'liq qulaylikda boshqarish, botni yoqish/o'chirish, tsenzura va statistika sozlamalarini o'zgartirish uchun Mini App'ni oching:",
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+

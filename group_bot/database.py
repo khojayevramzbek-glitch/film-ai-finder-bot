@@ -89,6 +89,13 @@ def init_db():
                 is_enabled INTEGER DEFAULT 1
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chats (
+                chat_id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                updated_at TIMESTAMP NOT NULL
+            );
+        """)
         conn.commit()
 
 
@@ -564,3 +571,121 @@ def set_bot_status(chat_id: int, enabled: bool):
             (chat_id, val, val)
         )
         conn.commit()
+
+
+def get_rules(chat_id: int) -> str | None:
+    """Guruh qoidalarini bazadan olish."""
+    with get_connection() as conn:
+        cur = conn.execute("SELECT rules_text FROM chat_rules WHERE chat_id = ?", (chat_id,))
+        row = cur.fetchone()
+        return row["rules_text"] if row else None
+
+
+def set_rules(chat_id: int, rules_text: str):
+    """Guruh qoidalarini bazaga saqlash."""
+    now_utc = datetime.now(timezone.utc)
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chat_rules (chat_id, rules_text, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET rules_text = ?, updated_at = ?
+            """,
+            (chat_id, rules_text, now_utc, rules_text, now_utc)
+        )
+        conn.commit()
+
+
+def save_chat_title(chat_id: int, title: str):
+    """Guruh nomi va chat_id sini bazaga saqlash yoki yangilash."""
+    if not title:
+        return
+    now_utc = datetime.now(timezone.utc)
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chats (chat_id, title, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET title = ?, updated_at = ?
+            """,
+            (chat_id, title, now_utc, title, now_utc)
+        )
+        conn.commit()
+
+
+def get_chat_title(chat_id: int) -> str:
+    """Guruh nomini olish."""
+    with get_connection() as conn:
+        cur = conn.execute("SELECT title FROM chats WHERE chat_id = ?", (chat_id,))
+        row = cur.fetchone()
+        return row["title"] if row and row["title"] else f"Guruh {chat_id}"
+
+
+def get_all_managed_groups() -> list[dict]:
+    """Mini App uchun barcha faol guruhlar va ularning asosiy sozlamalarini olish."""
+    cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+    with get_connection() as conn:
+        cur = conn.execute("""
+            SELECT 
+                c.chat_id,
+                COALESCE(c.title, 'Guruh ' || c.chat_id) AS title,
+                COALESCE(b.is_enabled, 1) AS is_bot_enabled,
+                COALESCE(cs.is_enabled, 1) AS is_censor_enabled,
+                COALESCE(st.is_enabled, 1) AS is_stats_enabled,
+                COALESCE(st.is_public, 0) AS is_stats_public,
+                (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.chat_id AND m.created_at >= ?) AS msg_count_24h
+            FROM chats c
+            LEFT JOIN chat_bot_status b ON c.chat_id = b.chat_id
+            LEFT JOIN chat_censor_settings cs ON c.chat_id = cs.chat_id
+            LEFT JOIN chat_stats_settings st ON c.chat_id = st.chat_id
+            WHERE c.chat_id < 0
+            ORDER BY msg_count_24h DESC, c.updated_at DESC
+        """, (cutoff_24h,))
+        rows = [dict(r) for r in cur.fetchall()]
+        
+        # Agar chats jadvalida bo'lmagan, lekin messages da bor guruhlar bo'lsa
+        existing_ids = {r["chat_id"] for r in rows}
+        cur2 = conn.execute("SELECT DISTINCT chat_id FROM messages WHERE chat_id < 0")
+        for r2 in cur2.fetchall():
+            cid = r2["chat_id"]
+            if cid not in existing_ids:
+                rows.append({
+                    "chat_id": cid,
+                    "title": f"Guruh {cid}",
+                    "is_bot_enabled": is_bot_enabled(cid),
+                    "is_censor_enabled": is_censor_enabled(cid),
+                    "is_stats_enabled": is_stats_enabled(cid),
+                    "is_stats_public": is_stats_public(cid),
+                    "msg_count_24h": 0
+                })
+        return rows
+
+
+def get_group_details(chat_id: int) -> dict:
+    """Tanlangan guruhning to'liq sozlamalari, taqiqlangan so'zlari, qoidalari va statistikasini olish."""
+    title = get_chat_title(chat_id)
+    bot_enabled = is_bot_enabled(chat_id)
+    censor_enabled = is_censor_enabled(chat_id)
+    stats_enabled = is_stats_enabled(chat_id)
+    stats_public = is_stats_public(chat_id)
+    bad_words = get_custom_bad_words(chat_id)
+    rules = get_rules(chat_id) or ""
+    
+    top_users, total_msgs, active_users = get_24h_stats(chat_id, limit=20)
+    
+    return {
+        "chat_id": chat_id,
+        "title": title,
+        "is_bot_enabled": bot_enabled,
+        "is_censor_enabled": censor_enabled,
+        "is_stats_enabled": stats_enabled,
+        "is_stats_public": stats_public,
+        "bad_words": bad_words,
+        "rules": rules,
+        "stats": {
+            "total_messages": total_msgs,
+            "active_users": active_users,
+            "top_users": top_users
+        }
+    }
+
