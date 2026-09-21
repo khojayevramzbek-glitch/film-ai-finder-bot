@@ -859,6 +859,240 @@
       color: #fff;
       margin-top: 4px;
     }
+
+    /* Groups Cards Grid */
+    .groups-cards-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      margin-top: 10px;
+    }
+
+    @media (min-width: 768px) {
+      .groups-cards-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+    }
+
+    .group-item-card {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 14px;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .group-item-card:hover {
+      border-color: rgba(56, 189, 248, 0.4);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    .group-item-card.selected {
+      border-color: var(--accent-blue);
+      background: rgba(14, 34, 61, 0.85);
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+    }
+
+    .group-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .group-card-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #0284c7, #6366f1);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 800;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+    }
+
+    .group-card-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .group-card-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .group-card-id {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      font-family: monospace;
+    }
+
+    .group-card-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .group-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+    }
+
+    .group-badge.active {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.35);
+      color: #6ee7b7;
+    }
+
+    .group-badge.inactive {
+      background: rgba(244, 63, 94, 0.15);
+      border-color: rgba(244, 63, 94, 0.35);
+      color: #fda4af;
+    }
+
+    .btn-select-group {
+      width: 100%;
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: #ffffff;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.3);
+    }
+
+    .btn-select-group:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    .btn-select-group:active {
+      transform: scale(0.98);
+    }
+
+    /* Empty State */
+    .groups-empty-state {
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .groups-empty-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .groups-empty-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .groups-empty-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      max-width: 440px;
+      margin: 0 auto 20px;
+      line-height: 1.6;
+    }
+
+    /* Active Group Banner */
+    .active-group-banner {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .active-group-banner-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .active-group-banner-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #0284c7, #6366f1);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .active-group-banner-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .active-group-banner-sub {
+      font-size: 11px;
+      color: var(--accent-blue);
+    }
+
+    .btn-switch-group {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .btn-switch-group:hover {
+      background: var(--accent-blue);
+      color: #000;
+    }
   </style>
 </head>
 <body>
@@ -881,7 +1115,10 @@
   <!-- Desktop Top Navigation Bar (PC) -->
   <div class="desktop-nav-wrap">
     <nav class="desktop-nav">
-      <button class="desktop-nav-item active" data-tab="tab-general">
+      <button class="desktop-nav-item active" data-tab="tab-groups">
+        <span>👥 Qo'shilgan Guruhlar</span>
+      </button>
+      <button class="desktop-nav-item" data-tab="tab-general">
         <span>🎛 Asosiy Boshqaruv</span>
       </button>
       <button class="desktop-nav-item" data-tab="tab-punishments">
@@ -926,9 +1163,23 @@
       </div>
     </div>
 
-    <!-- Active Group Selector -->
+    <!-- Active Group Banner -->
+    <div class="active-group-banner" id="activeGroupBanner">
+      <div class="active-group-banner-info">
+        <div class="active-group-banner-avatar" id="activeGroupBannerAvatar">G</div>
+        <div>
+          <div class="active-group-banner-title" id="activeGroupBannerName">Guruh yuklanmoqda...</div>
+          <div class="active-group-banner-sub">Sozlamalar shu guruhga qo'llanadi</div>
+        </div>
+      </div>
+      <button class="btn-switch-group" id="btnSwitchToGroupsTab">
+        👥 Guruhlar Ro'yxati
+      </button>
+    </div>
+
+    <!-- Active Group Selector Dropdown -->
     <div class="section-title">
-      <span>⚙️ Sozlanayotgan Guruh</span>
+      <span>⚙️ Tanlangan Guruh (Tezkor tanlash)</span>
     </div>
     <div class="group-selector-wrap">
       <select id="groupSelect" class="group-select">
@@ -938,9 +1189,31 @@
     </div>
 
     <!-- =================================================================== -->
+    <!-- TAB 0: QO'SHILGAN GURUHLAR (MY GROUPS LIST) -->
+    <!-- =================================================================== -->
+    <div id="tab-groups" class="tab-pane active">
+      <div class="glass-card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h2>👥 Qo'shilgan Guruhlar Ro'yxati</h2>
+            <p>Bot qo'shilgan guruhlaringiz ro'yxati. Kerakli guruhni tanlang va barcha qoidalarni (mute, ban, anti-flood) unga moslang:</p>
+          </div>
+          <button class="btn-copy" id="btnRefreshGroups" style="background: var(--accent-blue); color: #000; font-weight: 800; padding: 10px 18px;">
+            🔄 Yangilash
+          </button>
+        </div>
+
+        <!-- Dynamic Groups Grid / Cards List -->
+        <div id="groupsCardsContainer" class="groups-cards-grid">
+          <!-- Populated dynamically by JavaScript -->
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
     <!-- TAB 1: ASOSIY TEZKOR SWITCHLAR (GENERAL) -->
     <!-- =================================================================== -->
-    <div id="tab-general" class="tab-pane active">
+    <div id="tab-general" class="tab-pane">
       <div class="glass-card">
         <div class="card-header">
           <h2>🎛 Asosiy Boshqaruv Qalampiri</h2>
@@ -1363,7 +1636,11 @@
 
   <!-- Mobile Bottom Navigation Bar (Phone) -->
   <nav class="bottom-nav">
-    <button class="nav-item active" data-tab="tab-general">
+    <button class="nav-item active" data-tab="tab-groups">
+      <span class="nav-icon">👥</span>
+      <span>Guruhlar</span>
+    </button>
+    <button class="nav-item" data-tab="tab-general">
       <span class="nav-icon">🎛</span>
       <span>Asosiy</span>
     </button>
@@ -1547,6 +1824,106 @@
       throw new Error("Network request failed");
     }
 
+    // Update Active Group Banner
+    function updateActiveGroupBanner() {
+      const bannerName = document.getElementById('activeGroupBannerName');
+      const bannerAvatar = document.getElementById('activeGroupBannerAvatar');
+      if (!bannerName) return;
+
+      if (!currentChatId || !groupsList || groupsList.length === 0) {
+        bannerName.textContent = "Guruh tanlanmagan";
+        if (bannerAvatar) bannerAvatar.textContent = "⚠️";
+        return;
+      }
+
+      const found = groupsList.find(g => String(g.chat_id) === String(currentChatId));
+      if (found) {
+        bannerName.textContent = found.title;
+        if (bannerAvatar) bannerAvatar.textContent = (found.title || 'G').charAt(0).toUpperCase();
+      } else {
+        bannerName.textContent = `Guruh ${currentChatId}`;
+        if (bannerAvatar) bannerAvatar.textContent = "G";
+      }
+    }
+
+    // Render Groups Cards in "Qo'shilgan Guruhlar" tab
+    function renderGroupsCards() {
+      const container = document.getElementById('groupsCardsContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (!groupsList || groupsList.length === 0) {
+        container.innerHTML = `
+          <div class="groups-empty-state">
+            <div class="groups-empty-icon">👥</div>
+            <div class="groups-empty-title">Hozircha hech qanday guruh qo'shilmagan</div>
+            <p class="groups-empty-desc">
+              Botni o'z guruhingizga qo'shing va administrator huquqini bering.
+              Shunda guruhingiz bu yerda paydo bo'ladi va barcha qoidalarni 100% o'zingizga moslaysiz!
+            </p>
+            <button class="btn-add-group" onclick="document.getElementById('btnAddGroup').click()" style="max-width: 320px; margin: 0 auto;">
+              <span>➕ Botni Guruhingizga Qo'shish</span>
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      groupsList.forEach(g => {
+        const isSelected = String(g.chat_id) === String(currentChatId);
+        const initial = (g.title || 'G').charAt(0).toUpperCase();
+        const card = document.createElement('div');
+        card.className = `group-item-card ${isSelected ? 'selected' : ''}`;
+        card.innerHTML = `
+          <div>
+            <div class="group-card-header">
+              <div class="group-card-avatar">${escapeHtml(initial)}</div>
+              <div class="group-card-info">
+                <div class="group-card-title">${escapeHtml(g.title || 'Guruh')}</div>
+                <div class="group-card-id">ID: ${g.chat_id}</div>
+              </div>
+            </div>
+
+            <div class="group-card-badges">
+              <span class="group-badge ${g.is_bot_enabled ? 'active' : 'inactive'}">
+                ${g.is_bot_enabled ? '🟢 Bot Faol' : '🔴 Bot O\'chirilgan'}
+              </span>
+              <span class="group-badge ${g.is_censor_enabled ? 'active' : ''}">
+                ${g.is_censor_enabled ? '🤬 So\'kinish: Faol' : '🤬 So\'kinish: O\'chiq'}
+              </span>
+              <span class="group-badge">
+                💬 ${g.msg_count_24h || 0} xabar / 24h
+              </span>
+            </div>
+          </div>
+
+          <button class="btn-select-group" onclick="selectAndManageGroup('${g.chat_id}')">
+            <span>⚙️ Guruhni Sozlash (Mute, Ban, Qoidalar) &rarr;</span>
+          </button>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // Select Group and Switch to Management
+    window.selectAndManageGroup = function(chatId) {
+      haptic('medium');
+      currentChatId = chatId;
+      
+      const select = document.getElementById('groupSelect');
+      if (select) select.value = chatId;
+
+      updateActiveGroupBanner();
+      loadGroupDetails(chatId);
+      renderGroupsCards();
+
+      switchTab('tab-general');
+
+      const found = groupsList.find(g => String(g.chat_id) === String(chatId));
+      const title = found ? found.title : `Guruh ${chatId}`;
+      showToast(`"${title}" sozlamalariga o'tildi!`, "⚙️");
+    };
+
     // Render Groups Dropdown
     function renderGroupsDropdown() {
       const select = document.getElementById('groupSelect');
@@ -1555,6 +1932,7 @@
       if (groupsList.length === 0) {
         select.innerHTML = '<option value="">⚠️ Guruh topilmadi — Avval ➕ tugmasi orqali botni guruhingizga qo\'shing!</option>';
         currentChatId = null;
+        updateActiveGroupBanner();
         return;
       }
 
@@ -1571,6 +1949,7 @@
       }
 
       currentChatId = select.value;
+      updateActiveGroupBanner();
       if (currentChatId) {
         loadGroupDetails(currentChatId);
       }
@@ -1581,6 +1960,7 @@
       if (window.__INITIAL_GROUPS__ && Array.isArray(window.__INITIAL_GROUPS__) && window.__INITIAL_GROUPS__.length > 0) {
         groupsList = window.__INITIAL_GROUPS__;
         renderGroupsDropdown();
+        renderGroupsCards();
       }
 
       try {
@@ -1589,6 +1969,7 @@
         if (data.groups && data.groups.length > 0) {
           groupsList = data.groups;
           renderGroupsDropdown();
+          renderGroupsCards();
         }
       } catch (err) {
         console.error("Guruhlarni yuklashda xatolik:", err);
@@ -1599,9 +1980,25 @@
     document.getElementById('groupSelect').addEventListener('change', (e) => {
       haptic('light');
       currentChatId = e.target.value;
+      updateActiveGroupBanner();
+      renderGroupsCards();
       if (currentChatId) {
         loadGroupDetails(currentChatId);
       }
+    });
+
+    // Button: Switch to Groups Tab from Banner
+    document.getElementById('btnSwitchToGroupsTab').addEventListener('click', () => {
+      haptic('light');
+      switchTab('tab-groups');
+    });
+
+    // Button: Refresh Groups List
+    document.getElementById('btnRefreshGroups').addEventListener('click', async () => {
+      haptic('medium');
+      showToast("Guruhlar ro'yxati yangilanmoqda...", "🔄");
+      await loadGroups();
+      showToast("Guruhlar yangilandi!", "✅");
     });
 
     // Fetch Selected Group Details
@@ -1983,7 +2380,14 @@
     });
 
     // Initialize on load
-    loadGroups();
+    loadGroups().then(() => {
+      const targetTab = urlParams.get('tab');
+      if (targetTab === 'groups' || (!initialChatId && groupsList.length > 0)) {
+        switchTab('tab-groups');
+      } else if (initialChatId) {
+        switchTab('tab-general');
+      }
+    });
   </script>
 </body>
 </html>

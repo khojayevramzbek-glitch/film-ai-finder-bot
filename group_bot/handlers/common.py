@@ -18,11 +18,15 @@ def get_main_menu_keyboard(bot_username: str) -> InlineKeyboardMarkup:
                     url=f"https://t.me/{bot_username}?startgroup=true"
                 ),
                 InlineKeyboardButton(
-                    text="📱 Mini App Boshqaruv",
-                    web_app=WebAppInfo(url=WEBAPP_URL)
+                    text="👥 Qo'shilgan Guruhlar",
+                    web_app=WebAppInfo(url=f"{WEBAPP_URL}?tab=groups")
                 )
             ],
             [
+                InlineKeyboardButton(
+                    text="📱 Mini App Boshqaruv",
+                    web_app=WebAppInfo(url=WEBAPP_URL)
+                ),
                 InlineKeyboardButton(
                     text="👑 Bosh Admin",
                     url="https://t.me/khojayev_ramz"
