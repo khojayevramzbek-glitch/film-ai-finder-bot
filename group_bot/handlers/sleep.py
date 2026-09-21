@@ -72,7 +72,7 @@ def parse_sleep_args(args_text: str) -> tuple[int | None, str | None]:
 
     text = args_text.strip()
     pattern = re.compile(
-        r'\b(\d+(?:\.\d+)?)\s*(h|m|d|s|soat|daqiqa|kun|ч|м|д|с|hour|hours|min|minute|minutes)?\b',
+        r'\b(\d+(?:\.\d+)?)\s*(h|m|d|s|w|mo|y|soat|daqiqa|kun|hafta|oy|yil|ч|м|д|с|hour|hours|min|minute|minutes|week|weeks|month|months|year|years)?\b',
         re.IGNORECASE
     )
     match = pattern.search(text)
@@ -84,14 +84,20 @@ def parse_sleep_args(args_text: str) -> tuple[int | None, str | None]:
 
     if not unit:
         seconds = int(num * 3600)  # Standart: soat
-    elif unit in ("h", "soat", "ч", "hour", "hours"):
-        seconds = int(num * 3600)
+    elif unit in ("s", "с", "sec", "second", "seconds", "soniya", "sekund"):
+        seconds = int(num)
     elif unit in ("m", "daqiqa", "м", "min", "minute", "minutes"):
         seconds = int(num * 60)
+    elif unit in ("h", "soat", "ч", "hour", "hours"):
+        seconds = int(num * 3600)
     elif unit in ("d", "kun", "д", "day", "days"):
         seconds = int(num * 86400)
-    elif unit in ("s", "с", "sec", "second", "seconds"):
-        seconds = int(num)
+    elif unit in ("w", "wk", "hafta", "week", "weeks", "нед"):
+        seconds = int(num * 604800)
+    elif unit in ("mo", "oy", "month", "months", "мес"):
+        seconds = int(num * 2592000)
+    elif unit in ("y", "yr", "yil", "year", "years", "г", "год"):
+        seconds = int(num * 31536000)
     else:
         seconds = int(num * 3600)
 

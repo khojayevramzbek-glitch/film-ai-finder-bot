@@ -1,4 +1,5 @@
 import re
+import asyncio
 from datetime import datetime, timedelta, timezone
 from html import escape
 from aiogram import Router, types, Bot
@@ -35,21 +36,68 @@ async def is_admin_or_allowed(chat_id: int, user: types.User | TargetUser, bot: 
         return False
 
 
-def parse_time(time_str: str) -> timedelta | None:
-    """Vaqt satrini (masalan: 10m, 2h, 1d) timedelta ga aylantiradi."""
-    match = re.match(r"^(\d+)([smhd])$", time_str.strip().lower())
+TIME_REGEX = re.compile(
+    r"^(\d+)\s*(s|sec|sek|sekund|soniya|с|сек|секунд|"
+    r"m|min|daq|daqiqa|м|мин|минут|минута|"
+    r"h|hr|soat|hour|hours|ч|час|часа|часов|"
+    r"d|kun|day|days|д|день|дня|дней|"
+    r"w|wk|hafta|week|weeks|нед|неделя|недели|недель|"
+    r"mo|moth|month|months|oy|мес|месяц|месяца|месяцев|"
+    r"y|yr|year|years|yil|г|год|года|лет)$",
+    re.IGNORECASE
+)
+
+
+def parse_time(time_str: str) -> tuple[timedelta, int, str] | None:
+    """
+    Vaqt satrini (masalan: 10s, 5m, 2h, 1d, 1w, 1mo, 1y) timedelta,
+    jami soniyalar va chiroyli o'zbekcha matnga aylantiradi.
+    """
+    if not time_str:
+        return None
+    match = TIME_REGEX.match(time_str.strip().lower())
     if not match:
         return None
-    val, unit = int(match.group(1)), match.group(2)
-    if unit == "s":
-        return timedelta(seconds=val)
-    elif unit == "m":
-        return timedelta(minutes=val)
-    elif unit == "h":
-        return timedelta(hours=val)
-    elif unit == "d":
-        return timedelta(days=val)
-    return None
+
+    val = int(match.group(1))
+    unit = match.group(2).lower()
+
+    if unit in ("s", "sec", "sek", "sekund", "soniya", "с", "сек", "секунд"):
+        seconds = val
+    elif unit in ("m", "min", "daq", "daqiqa", "м", "мин", "минут", "минуta"):
+        seconds = val * 60
+    elif unit in ("h", "hr", "soat", "hour", "hours", "ч", "час", "часа", "часов"):
+        seconds = val * 3600
+    elif unit in ("d", "kun", "day", "days", "д", "день", "дня", "дней"):
+        seconds = val * 86400
+    elif unit in ("w", "wk", "hafta", "week", "weeks", "нед", "неделя", "недели", "недель"):
+        seconds = val * 604800
+    elif unit in ("mo", "moth", "month", "months", "oy", "мес", "месяц", "месяца", "месяцев"):
+        seconds = val * 2592000
+    elif unit in ("y", "yr", "year", "years", "yil", "г", "год", "года", "лет"):
+        seconds = val * 31536000
+    else:
+        return None
+
+    duration = timedelta(seconds=seconds)
+    duration_text = format_duration(seconds)
+    return (duration, seconds, duration_text)
+
+
+async def unmute_after(bot: Bot, chat_id: int, user_id: int, delay: int):
+    """Qisqa muddatli (30 soniyadan kam) mute uchun taymer."""
+    await asyncio.sleep(delay)
+    try:
+        permissions = ChatPermissions(
+            can_send_messages=True,
+            can_send_photos=True,
+            can_send_videos=True,
+            can_send_other_messages=True,
+            can_add_web_page_previews=True
+        )
+        await bot.restrict_chat_member(chat_id=chat_id, user_id=user_id, permissions=permissions)
+    except Exception:
+        pass
 
 
 # Buyruqlar regexlari (Lotin va Kirill alifbosida)
@@ -170,16 +218,30 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
         settings = get_chat_full_settings(message.chat.id)
         default_mute_sec = int(settings.get("flood_mute_seconds", 900))
         duration = timedelta(seconds=default_mute_sec)
+        total_seconds = default_mute_sec
         duration_text = format_duration(default_mute_sec)
 
+        found_time = False
+        # 1. Bitta argument bo'yicha qidirish (masalan: 10s, 5m, 2h, 1d, 1w, 1mo, 1y)
         for arg in rem_args:
             parsed = parse_time(arg)
             if parsed:
-                duration = parsed
-                duration_text = arg
+                duration, total_seconds, duration_text = parsed
+                found_time = True
                 break
 
-        until_date = datetime.now(timezone.utc) + duration
+        # 2. Ketma-ket 2 ta argument bo'yicha qidirish (masalan: "10" "s", "1" "hafta", "2" "oy", "1" "yil")
+        if not found_time and len(rem_args) >= 2:
+            for i in range(len(rem_args) - 1):
+                parsed = parse_time(rem_args[i] + rem_args[i + 1])
+                if parsed:
+                    duration, total_seconds, duration_text = parsed
+                    found_time = True
+                    break
+
+        # Telegram API: agar 30 soniyadan kam bo'lsa, Telegram "umrbod mute" deb qabul qiladi.
+        # Shuning uchun kamida 35s beramiz va asyncio taymer bilan muddat tugashi bilan ochamiz.
+        until_date = datetime.now(timezone.utc) + timedelta(seconds=max(total_seconds, 35))
 
         try:
             permissions = ChatPermissions(
@@ -195,9 +257,12 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
                 permissions=permissions,
                 until_date=until_date
             )
+            if total_seconds < 35:
+                asyncio.create_task(unmute_after(bot, message.chat.id, target_user.id, delay=total_seconds))
+
             u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
             await message.answer(
-                f"🔇 Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} {duration_text} ga yozishdan cheklandi.",
+                f"🔇 Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} <b>{duration_text}ga</b> yozishdan cheklandi (Mute).",
                 parse_mode="HTML"
             )
         except TelegramBadRequest as e:
