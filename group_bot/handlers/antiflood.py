@@ -11,9 +11,9 @@ from aiogram.types import Message, TelegramObject, ChatPermissions
 from aiogram.exceptions import TelegramBadRequest
 
 try:
-    from group_bot.database import delete_flood_messages, is_bot_enabled
+    from group_bot.database import delete_flood_messages, is_bot_enabled, get_chat_full_settings, format_duration
 except ImportError:
-    from database import delete_flood_messages, is_bot_enabled
+    from database import delete_flood_messages, is_bot_enabled, get_chat_full_settings, format_duration
 
 # Sozlamalar:
 # 1. Stiker, GIF va Premium emoji uchun:
@@ -133,7 +133,9 @@ async def handle_flood_action(
         return
 
     # 4. Agar ODDIY a'zo bo'lsa: Mute berish
-    until_date = datetime.now(timezone.utc) + duration
+    seconds = int(duration.total_seconds())
+    dur_text = format_duration(seconds)
+    until_date = datetime.now(timezone.utc) + timedelta(seconds=max(seconds, 35))
     try:
         permissions = ChatPermissions(
             can_send_messages=False,
@@ -149,12 +151,25 @@ async def handle_flood_action(
             until_date=until_date
         )
 
-        seconds = int(duration.total_seconds())
-        dur_text = "1 daqiqaga" if seconds >= 60 else "30 soniyaga"
+        if seconds < 35:
+            async def unmute_after(b: Bot, c_id: int, u_id: int, delay: int):
+                await asyncio.sleep(delay)
+                try:
+                    p = ChatPermissions(
+                        can_send_messages=True,
+                        can_send_photos=True,
+                        can_send_videos=True,
+                        can_send_other_messages=True,
+                        can_add_web_page_previews=True
+                    )
+                    await b.restrict_chat_member(chat_id=c_id, user_id=u_id, permissions=p)
+                except Exception:
+                    pass
+            asyncio.create_task(unmute_after(bot, event.chat.id, event.from_user.id, delay=seconds))
 
         await bot.send_message(
             chat_id=event.chat.id,
-            text=f"⚠️ <b>{escape(event.from_user.full_name)}</b>, {reason} uchun <b>{dur_text} mute</b> qilindingiz va flood xabarlaringiz o'chirildi!",
+            text=f"⚠️ <b>{escape(event.from_user.full_name)}</b>, {reason} uchun <b>{dur_text}ga mute</b> qilindingiz va flood xabarlaringiz o'chirildi!",
             parse_mode="HTML"
         )
     except TelegramBadRequest:
@@ -164,7 +179,7 @@ async def handle_flood_action(
 class AntiFloodMiddleware(BaseMiddleware):
     """
     Qoida 2 bo'yicha Anti-Flood:
-    - Oddiy a'zolar: xabarlar o'chiriladi, statadan o'chadi va mute beriladi.
+    - Oddiy a'zolar: xabarlar o'chiriladi, statadan o'chadi va mute beriladi (Mini App sozlamalariga ko'ra).
     - Adminlar: xabarlar o'chiriladi, statadan o'chadi va @wdablyu nomidan ogohlantirish beriladi.
     - Owner (@wdablyu): to'liq daxlsiz.
     """
@@ -193,14 +208,22 @@ class AntiFloodMiddleware(BaseMiddleware):
 
         is_admin_user = await is_telegram_admin(event.chat.id, user.id, bot)
 
+        settings = get_chat_full_settings(event.chat.id)
+        flood_sec = int(settings.get("flood_mute_seconds", 900))
+        flood_duration = timedelta(seconds=flood_sec)
+
+        media_limit = int(settings.get("flood_sticker_limit", 3))
+        media_window = float(settings.get("flood_sticker_window", 4))
+
+        msg_limit = int(settings.get("flood_msg_limit", 5))
+        msg_window = float(settings.get("flood_msg_window", 4))
+
         now = time.time()
         key = (event.chat.id, user.id)
 
         # 1. Stiker, GIF, Premium Emoji tekshiruvi:
-        # a) Tezkor flood: 4s ichida 2 ta
-        # b) Sekin flood: 60s ichida 4 ta
         if is_media_or_emoji(event):
-            history = [(t, m_id) for (t, m_id) in _media_history[key] if now - t <= MEDIA_WINDOW]
+            history = [(t, m_id) for (t, m_id) in _media_history[key] if now - t <= media_window]
             history.append((now, event.message_id))
             _media_history[key] = history
 
@@ -208,8 +231,8 @@ class AntiFloodMiddleware(BaseMiddleware):
             long_history.append((now, event.message_id))
             _media_long_history[key] = long_history
 
-            # Tezkor (2 ta) yoki Sekin (1 daqiqada 4 ta) stiker flood aniqlansa:
-            if len(history) >= MEDIA_LIMIT or len(long_history) >= MEDIA_LONG_LIMIT:
+            # Tezkor (media_limit ta) yoki Sekin (1 daqiqada 4 ta) stiker flood aniqlansa:
+            if len(history) >= media_limit or len(long_history) >= MEDIA_LONG_LIMIT:
                 msg_ids = list(set([m_id for (_, m_id) in history] + [m_id for (_, m_id) in long_history]))
                 _media_history[key] = []
                 _media_long_history[key] = []
@@ -222,7 +245,7 @@ class AntiFloodMiddleware(BaseMiddleware):
                     bot,
                     is_admin_user=is_admin_user,
                     msg_ids=msg_ids,
-                    duration=timedelta(minutes=1),
+                    duration=flood_duration,
                     reason="me'yordan ortiq stiker yoki GIF yuborganingiz"
                 )
                 return
@@ -245,7 +268,7 @@ class AntiFloodMiddleware(BaseMiddleware):
                     bot,
                     is_admin_user=is_admin_user,
                     msg_ids=msg_ids,
-                    duration=timedelta(minutes=1),
+                    duration=flood_duration,
                     reason="ketma-ket '/' belgisi bilan xabarlar yuborganingiz"
                 )
                 return
@@ -266,13 +289,13 @@ class AntiFloodMiddleware(BaseMiddleware):
                     bot,
                     is_admin_user=is_admin_user,
                     msg_ids=[event.message_id],
-                    duration=timedelta(seconds=35),
+                    duration=flood_duration,
                     reason="ko'p qatorli matn bilan flood qilganingiz"
                 )
                 return
 
-            # a) Tezkor flood: 5s ichida 4 ta xabar
-            history = [(t, m_id) for (t, m_id) in _text_history[key] if now - t <= TEXT_WINDOW]
+            # a) Tezkor flood: msg_window ichida msg_limit ta xabar
+            history = [(t, m_id) for (t, m_id) in _text_history[key] if now - t <= msg_window]
             history.append((now, event.message_id))
             _text_history[key] = history
 
@@ -287,7 +310,7 @@ class AntiFloodMiddleware(BaseMiddleware):
             _piece_slow_history[key] = piece_slow
 
             is_piece_flood = len(piece_fast) >= PIECE_FAST_LIMIT or len(piece_slow) >= PIECE_SLOW_LIMIT
-            is_fast_flood = len(history) >= TEXT_LIMIT
+            is_fast_flood = len(history) >= msg_limit
 
             if is_fast_flood or is_piece_flood:
                 all_flood_ids = list(set(
@@ -307,7 +330,7 @@ class AntiFloodMiddleware(BaseMiddleware):
                     bot,
                     is_admin_user=is_admin_user,
                     msg_ids=all_flood_ids,
-                    duration=timedelta(seconds=35),
+                    duration=flood_duration,
                     reason=reason
                 )
                 return

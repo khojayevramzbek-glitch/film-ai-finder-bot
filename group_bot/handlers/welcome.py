@@ -10,9 +10,9 @@ async def on_user_joined(message: types.Message, bot: Bot):
     chat_title = message.chat.title or "Близкий 🫂"
 
     try:
-        from group_bot.database import is_bot_enabled
+        from group_bot.database import is_bot_enabled, get_chat_full_settings
     except ImportError:
-        from database import is_bot_enabled
+        from database import is_bot_enabled, get_chat_full_settings
 
     for user in message.new_chat_members:
         if user.id == bot.id:
@@ -23,10 +23,10 @@ async def on_user_joined(message: types.Message, bot: Bot):
                 parse_mode="HTML"
             )
         elif not user.is_bot and is_bot_enabled(message.chat.id):
-            # Yangi foydalanuvchi qo'shilganda (kreativ va samimiy)
-            welcome_text = (
-                f"🫂 <b>{escape(chat_title)}</b> — yaqinlar davrasiga xush kelibsiz!\n\n"
-                f"Xush ko‘rdik, <b>{escape(user.full_name)}</b> 👋\n"
-                "Bu yerda zerikish yo‘q — davramizga qo‘shiling va doimo <b>aktiv bo‘ling!</b> ⚡️"
-            )
+            settings = get_chat_full_settings(message.chat.id)
+            if not settings.get("welcome_enabled", 1):
+                continue
+
+            template = settings.get("welcome_text", "Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!")
+            welcome_text = template.replace("{name}", f"<b>{escape(user.full_name)}</b>")
             await message.answer(welcome_text, parse_mode="HTML")

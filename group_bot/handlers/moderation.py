@@ -165,9 +165,11 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
             await message.reply("❌ Admin yoki botni cheklab bo'lmaydi!")
             return
 
-        # Vaqtni aniqlash (qolgan argumentlar orasidan yoki standart 15m)
-        duration = timedelta(minutes=15)
-        duration_text = "15m"
+        # Vaqtni aniqlash (qolgan argumentlar orasidan yoki guruh sozlamasidagi vaqt)
+        settings = get_chat_full_settings(message.chat.id)
+        default_mute_sec = int(settings.get("flood_mute_seconds", 900))
+        duration = timedelta(seconds=default_mute_sec)
+        duration_text = format_duration(default_mute_sec)
 
         for arg in rem_args:
             parsed = parse_time(arg)
@@ -241,30 +243,50 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
             await message.reply("❌ Admin yoki botga ogohlantirish berib bo'lmaydi!")
             return
 
+        settings = get_chat_full_settings(message.chat.id)
+        warn_limit = int(settings.get("warn_limit", 3))
+        warn_action = settings.get("warn_action", "mute")
+        warn_mute_sec = int(settings.get("warn_mute_seconds", 86400))
+        if warn_action == "mute_7d":
+            warn_mute_sec = 604800
+        elif warn_action == "mute":
+            warn_mute_sec = 86400
+
         new_count = add_warn(message.chat.id, target_user.id)
         u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
 
-        if new_count >= 3:
+        if new_count >= warn_limit:
             reset_warns(message.chat.id, target_user.id)
-            until_date = datetime.now(timezone.utc) + timedelta(hours=24)
-            try:
-                permissions = ChatPermissions(can_send_messages=False)
-                await bot.restrict_chat_member(
-                    chat_id=message.chat.id,
-                    user_id=target_user.id,
-                    permissions=permissions,
-                    until_date=until_date
-                )
-                await message.answer(
-                    f"⚠️ Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} 3 ta ogohlantirish oldi va <b>24 soatga</b> yozishdan cheklandi!",
-                    parse_mode="HTML"
-                )
-            except TelegramBadRequest as e:
-                await message.reply(f"⚠️ Xatolik: {e.message}")
+            if warn_action == "ban":
+                try:
+                    await bot.ban_chat_member(chat_id=message.chat.id, user_id=target_user.id)
+                    await message.answer(
+                        f"🚫 Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} {warn_limit} ta ogohlantirish oldi va guruhdan chiqarildi (Ban)!",
+                        parse_mode="HTML"
+                    )
+                except TelegramBadRequest as e:
+                    await message.reply(f"⚠️ Xatolik: {e.message}")
+            else:
+                until_date = datetime.now(timezone.utc) + timedelta(seconds=warn_mute_sec)
+                try:
+                    permissions = ChatPermissions(can_send_messages=False)
+                    await bot.restrict_chat_member(
+                        chat_id=message.chat.id,
+                        user_id=target_user.id,
+                        permissions=permissions,
+                        until_date=until_date
+                    )
+                    dur_str = format_duration(warn_mute_sec)
+                    await message.answer(
+                        f"⚠️ Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} {warn_limit} ta ogohlantirish oldi va <b>{dur_str}ga</b> yozishdan cheklandi!",
+                        parse_mode="HTML"
+                    )
+                except TelegramBadRequest as e:
+                    await message.reply(f"⚠️ Xatolik: {e.message}")
         else:
             await message.answer(
-                f"⚠️ Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} ga ogohlantirish berildi! ({new_count}/3)\n"
-                "<i>3 ta ogohlantirishdan so'ng 24 soatga cheklanadi.</i>",
+                f"⚠️ Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} ga ogohlantirish berildi! ({new_count}/{warn_limit})\n"
+                f"<i>{warn_limit} ta ogohlantirishdan so'ng jazo qo'llanadi.</i>",
                 parse_mode="HTML"
             )
         return
@@ -276,10 +298,13 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
             await message.reply(err, parse_mode="HTML")
             return
 
+        settings = get_chat_full_settings(message.chat.id)
+        warn_limit = int(settings.get("warn_limit", 3))
+
         rem_count = remove_warn(message.chat.id, target_user.id)
         u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
         await message.answer(
-            f"✅ <b>{escape(target_user.full_name)}</b>{u_tag} dan 1 ta ogohlantirish olib tashlandi. (Qoldi: {rem_count}/3)",
+            f"✅ <b>{escape(target_user.full_name)}</b>{u_tag} dan 1 ta ogohlantirish olib tashlandi. (Qoldi: {rem_count}/{warn_limit})",
             parse_mode="HTML"
         )
         return

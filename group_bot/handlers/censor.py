@@ -19,6 +19,10 @@ try:
         get_custom_bad_words,
         get_all_group_ids,
         is_bot_enabled,
+        get_chat_full_settings,
+        add_warn,
+        reset_warns,
+        format_duration,
     )
 except ImportError:
     from database import (
@@ -29,6 +33,10 @@ except ImportError:
         get_custom_bad_words,
         get_all_group_ids,
         is_bot_enabled,
+        get_chat_full_settings,
+        add_warn,
+        reset_warns,
+        format_duration,
     )
 
 router = Router()
@@ -211,8 +219,45 @@ class CensorMiddleware(BaseMiddleware):
         chat_id = event.chat.id
         user = event.from_user
 
-        # Bot guruhda o'chirilgan (pauza) bo'lsa yoki filtr o'chirilgan bo'lsa tekshirmaymiz
-        if not is_bot_enabled(chat_id) or not is_censor_enabled(chat_id):
+        # Bot guruhda o'chirilgan (pauza) bo'lsa tekshirmaymiz
+        if not is_bot_enabled(chat_id):
+            return await handler(event, data)
+
+        bot: Bot = data.get("bot") or event.bot
+        settings = get_chat_full_settings(chat_id)
+
+        # 1. Havolalar (reklama) filtri tekshiruvi
+        if settings.get("link_filter_enabled", 0):
+            is_admin_check = await is_telegram_admin(chat_id, user.id, bot)
+            if not is_admin_check and (not user.username or user.username.lower() not in ALLOWED_BOT_OWNERS) and user.id not in ALLOWED_BOT_OWNER_IDS:
+                has_link = False
+                entities = event.entities or event.caption_entities or []
+                for ent in entities:
+                    if ent.type in ("url", "text_link"):
+                        has_link = True
+                        break
+                text_raw = event.text or event.caption or ""
+                if not has_link and re.search(r'(https?://|t\.me/|telegram\.me/|@[a-zA-Z0-9_]{4,})', text_raw, re.IGNORECASE):
+                    has_link = True
+
+                if has_link:
+                    try:
+                        await bot.delete_message(chat_id=chat_id, message_id=event.message_id)
+                    except Exception:
+                        pass
+                    try:
+                        warn_msg = await bot.send_message(
+                            chat_id=chat_id,
+                            text=f"⚠️ <b>{escape(user.full_name)}</b>, guruhda reklama va havolalar tarqatish taqiqlangan!",
+                            parse_mode="HTML"
+                        )
+                        asyncio.create_task(delete_message_later(bot, chat_id, warn_msg.message_id, delay=15))
+                    except Exception:
+                        pass
+                    return
+
+        # Guruhda so'kinish filtri o'chirilgan bo'lsa tekshirmaymiz
+        if not is_censor_enabled(chat_id):
             return await handler(event, data)
 
         text = event.text or event.caption or ""
@@ -224,15 +269,13 @@ class CensorMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         # Haqorat aniqlandi!
-        bot: Bot = data.get("bot") or event.bot
-
         # 1. Haqoratli xabarni zudlik bilan o'chirish
         try:
             await bot.delete_message(chat_id=chat_id, message_id=event.message_id)
         except Exception:
             pass
 
-        # 2. Xatti-harakat: Admin bo'lsa ogohlantirish, oddiy a'zo bo'lsa 15 soniya mute
+        # 2. Xatti-harakat: Admin bo'lsa ogohlantirish, oddiy a'zo bo'lsa sozlamalarga ko'ra jazo
         is_admin = await is_telegram_admin(chat_id, user.id, bot)
         if is_admin:
             try:
@@ -246,37 +289,97 @@ class CensorMiddleware(BaseMiddleware):
             except Exception:
                 pass
         else:
-            # Telegram Bot API: until_date < 30s bo'lsa cheksiz (forever) deb hisoblaydi.
-            # Shuning uchun Telegramga 35s xavfsizlik muddati beramiz va bot 15s dan so'ng avtomatik yechadi!
-            until_date = datetime.now(timezone.utc) + timedelta(seconds=35)
-            try:
-                permissions = ChatPermissions(
-                    can_send_messages=False,
-                    can_send_photos=False,
-                    can_send_videos=False,
-                    can_send_other_messages=False,
-                    can_add_web_page_previews=False
-                )
-                await bot.restrict_chat_member(
-                    chat_id=chat_id,
-                    user_id=user.id,
-                    permissions=permissions,
-                    until_date=until_date
-                )
-                # 15 soniyadan so'ng avtomatik yozishni tiklash
-                asyncio.create_task(unmute_after(bot, chat_id, user.id, delay=15))
+            censor_action = settings.get("censor_action", "mute")
+            censor_sec = int(settings.get("censor_mute_seconds", 15))
 
-                warn_msg = await bot.send_message(
-                    chat_id=chat_id,
-                    text=f"⚠️ <b>{escape(user.full_name)}</b>, guruhda so'kinish va haqorat qat'iyan taqiqlangan!\n"
-                         f"<i>Siz 15 soniyaga yozishdan cheklandingiz (Mute).</i>",
-                    parse_mode="HTML"
-                )
-                asyncio.create_task(delete_message_later(bot, chat_id, warn_msg.message_id, delay=15))
-            except TelegramBadRequest:
-                pass
-            except Exception:
-                pass
+            if censor_action == "delete":
+                try:
+                    warn_msg = await bot.send_message(
+                        chat_id=chat_id,
+                        text=f"⚠️ <b>{escape(user.full_name)}</b>, guruhda so'kinish taqiqlangan! Xabaringiz o'chirildi.",
+                        parse_mode="HTML"
+                    )
+                    asyncio.create_task(delete_message_later(bot, chat_id, warn_msg.message_id, delay=15))
+                except Exception:
+                    pass
+            elif censor_action == "warn":
+                warn_limit = int(settings.get("warn_limit", 3))
+                warn_action = settings.get("warn_action", "mute")
+                new_count = add_warn(chat_id, user.id)
+
+                if new_count >= warn_limit:
+                    reset_warns(chat_id, user.id)
+                    if warn_action == "ban":
+                        try:
+                            await bot.ban_chat_member(chat_id=chat_id, user_id=user.id)
+                            warn_msg = await bot.send_message(
+                                chat_id=chat_id,
+                                text=f"🚫 <b>{escape(user.full_name)}</b> {warn_limit} ta ogohlantirish oldi va guruhdan chiqarildi (Ban)!",
+                                parse_mode="HTML"
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        warn_mute_sec = 604800 if warn_action == "mute_7d" else 86400
+                        until_date = datetime.now(timezone.utc) + timedelta(seconds=warn_mute_sec)
+                        try:
+                            permissions = ChatPermissions(can_send_messages=False)
+                            await bot.restrict_chat_member(
+                                chat_id=chat_id,
+                                user_id=user.id,
+                                permissions=permissions,
+                                until_date=until_date
+                            )
+                            dur_str = format_duration(warn_mute_sec)
+                            warn_msg = await bot.send_message(
+                                chat_id=chat_id,
+                                text=f"⚠️ <b>{escape(user.full_name)}</b> {warn_limit} ta ogohlantirish oldi va <b>{dur_str}ga</b> yozishdan cheklandi (Mute)!",
+                                parse_mode="HTML"
+                            )
+                        except Exception:
+                            pass
+                else:
+                    try:
+                        warn_msg = await bot.send_message(
+                            chat_id=chat_id,
+                            text=f"⚠️ <b>{escape(user.full_name)}</b>, so'kinganingiz uchun ogohlantirish berildi! ({new_count}/{warn_limit})\n<i>{warn_limit} ta ogohlantirishdan so'ng cheklanasiz.</i>",
+                            parse_mode="HTML"
+                        )
+                        asyncio.create_task(delete_message_later(bot, chat_id, warn_msg.message_id, delay=15))
+                    except Exception:
+                        pass
+            else:
+                # censor_action == "mute"
+                dur_str = format_duration(censor_sec)
+                until_date = datetime.now(timezone.utc) + timedelta(seconds=max(censor_sec, 35))
+                try:
+                    permissions = ChatPermissions(
+                        can_send_messages=False,
+                        can_send_photos=False,
+                        can_send_videos=False,
+                        can_send_other_messages=False,
+                        can_add_web_page_previews=False
+                    )
+                    await bot.restrict_chat_member(
+                        chat_id=chat_id,
+                        user_id=user.id,
+                        permissions=permissions,
+                        until_date=until_date
+                    )
+                    if censor_sec < 35:
+                        asyncio.create_task(unmute_after(bot, chat_id, user.id, delay=censor_sec))
+
+                    warn_msg = await bot.send_message(
+                        chat_id=chat_id,
+                        text=f"⚠️ <b>{escape(user.full_name)}</b>, guruhda so'kinish va haqorat qat'iyan taqiqlangan!\n"
+                             f"<i>Siz <b>{dur_str}ga</b> yozishdan cheklandingiz (Mute).</i>",
+                        parse_mode="HTML"
+                    )
+                    asyncio.create_task(delete_message_later(bot, chat_id, warn_msg.message_id, delay=15))
+                except TelegramBadRequest:
+                    pass
+                except Exception:
+                    pass
 
         # Xabar haqoratli bo'lgani sababli keyingi handlerlarga o'tkazmaymiz
         return

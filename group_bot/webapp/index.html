@@ -1339,16 +1339,8 @@
             <button class="preset-btn" data-sec="3600">1 soat</button>
             <button class="preset-btn" data-sec="86400">1 kun</button>
           </div>
-
-          <div class="field-label" style="font-size: 12px; color: var(--text-muted);">Yoki ixtiyoriy daqiqa/soatni o'zingiz kiriting:</div>
-          <div class="custom-row">
-            <input type="number" id="inputCensorCustomVal" class="number-input" style="width: 110px;" placeholder="15">
-            <select id="selectCensorCustomUnit" class="field-select" style="flex: 1;">
-              <option value="1">Soniya (sekund)</option>
-              <option value="60">Daqiqa (minut)</option>
-              <option value="3600">Soat</option>
-              <option value="86400">Kun</option>
-            </select>
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+            Tanlangan vaqt guruhda so'kingan a'zoga aniq qo'llanadi.
           </div>
         </div>
 
@@ -1361,21 +1353,15 @@
 
           <label class="field-label">Toshqin Uchun Mute Vaqti:</label>
           <div class="preset-group" id="floodMutePresets">
+            <button class="preset-btn" data-sec="60">1 daq</button>
             <button class="preset-btn" data-sec="300">5 daq</button>
             <button class="preset-btn" data-sec="900">15 daq</button>
             <button class="preset-btn" data-sec="3600">1 soat</button>
             <button class="preset-btn" data-sec="86400">1 kun</button>
             <button class="preset-btn" data-sec="604800">7 kun</button>
           </div>
-
-          <div class="field-label" style="font-size: 12px; color: var(--text-muted);">Yoki ixtiyoriy kiritiladigan vaqt:</div>
-          <div class="custom-row">
-            <input type="number" id="inputFloodCustomVal" class="number-input" style="width: 110px;" placeholder="15">
-            <select id="selectFloodCustomUnit" class="field-select" style="flex: 1;">
-              <option value="60">Daqiqa (minut)</option>
-              <option value="3600">Soat</option>
-              <option value="86400">Kun</option>
-            </select>
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+            Ketma-ket yozuvchi va spam qiluvchi a'zolarga shu vaqt davomida mute beriladi.
           </div>
         </div>
       </div>
@@ -1793,12 +1779,10 @@
 
     setupPresetButtons('censorMutePresets', (sec) => {
       activeCensorSeconds = sec;
-      document.getElementById('inputCensorCustomVal').value = '';
     });
 
     setupPresetButtons('floodMutePresets', (sec) => {
       activeFloodSeconds = sec;
-      document.getElementById('inputFloodCustomVal').value = '';
     });
 
     // Validation helper
@@ -2067,10 +2051,8 @@
         }
       });
       if (!matched) {
-        if (containerId === 'censorMutePresets') {
-          document.getElementById('inputCensorCustomVal').value = sec;
-          document.getElementById('selectCensorCustomUnit').value = "1";
-        }
+        const firstBtn = container.querySelector('.preset-btn');
+        if (firstBtn) firstBtn.classList.add('active');
       }
     }
 
@@ -2254,19 +2236,8 @@
       haptic('success');
 
       const action = document.getElementById('selectCensorAction').value;
-      const customCensorVal = parseInt(document.getElementById('inputCensorCustomVal').value, 10);
-      const customCensorUnit = parseInt(document.getElementById('selectCensorCustomUnit').value, 10);
-      let censorSec = activeCensorSeconds;
-      if (!isNaN(customCensorVal) && customCensorVal > 0) {
-        censorSec = customCensorVal * customCensorUnit;
-      }
-
-      const customFloodVal = parseInt(document.getElementById('inputFloodCustomVal').value, 10);
-      const customFloodUnit = parseInt(document.getElementById('selectFloodCustomUnit').value, 10);
-      let floodSec = activeFloodSeconds;
-      if (!isNaN(customFloodVal) && customFloodVal > 0) {
-        floodSec = customFloodVal * customFloodUnit;
-      }
+      const censorSec = activeCensorSeconds || 15;
+      const floodSec = activeFloodSeconds || 900;
 
       const warnLimit = parseInt(document.getElementById('selectWarnLimit').value, 10);
       const warnAction = document.getElementById('selectWarnAction').value;

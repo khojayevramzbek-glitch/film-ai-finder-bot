@@ -700,6 +700,22 @@ DEFAULT_CHAT_SETTINGS = {
 }
 
 
+def format_duration(seconds: int) -> str:
+    """Vaqtni soniyalardan inson tushunadigan o'zbekcha matnga aylantirish."""
+    sec = int(seconds)
+    if sec < 60:
+        return f"{sec} soniya"
+    elif sec < 3600:
+        mins = sec // 60
+        return f"{mins} daqiqa"
+    elif sec < 86400:
+        hrs = sec // 3600
+        return f"{hrs} soat"
+    else:
+        days = sec // 86400
+        return f"{days} kun"
+
+
 def get_chat_full_settings(chat_id: int) -> dict:
     """Guruhning barcha sozlamalarini (mute/ban daqiqalari, flood, warn va h.k.) olish."""
     with get_connection() as conn:
