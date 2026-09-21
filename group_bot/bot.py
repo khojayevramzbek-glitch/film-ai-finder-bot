@@ -9,12 +9,12 @@ if str(GROUP_BOT_DIR) not in sys.path:
     sys.path.insert(0, str(GROUP_BOT_DIR))
 
 from aiogram import Bot, Dispatcher, BaseMiddleware
-from aiogram.enums import ParseMode
+from aiogram.enums import ParseMode, ChatType
 from aiogram.types import Message, TelegramObject
 from aiogram.client.default import DefaultBotProperties
 
 from group_bot.config import BOT_TOKEN
-from group_bot.database import init_db, add_message, cleanup_old_messages
+from group_bot.database import init_db, add_message, cleanup_old_messages, is_bot_enabled
 from group_bot.handlers import main_router
 from group_bot.handlers.antiflood import AntiFloodMiddleware
 from group_bot.handlers.censor import CensorMiddleware
@@ -43,6 +43,35 @@ class MessageTrackerMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
+class BotStatusEnforcerMiddleware(BaseMiddleware):
+    """
+    Agar bot guruhda o'chirilgan (is_bot_enabled == False) bo'lsa:
+    Faqat botni qayta yoqish buyruqlariga ruxsat beradi (/bot on, bot on, /blizkiy on, blizkiy on).
+    Boshqa BARCHA xabarlar, buyruqlar va hodisalar uchun bot guruhda MUTLAQO TO'XTATILADI
+    (hech qanday xabar yubormaydi, o'chirmaydi, mute qilmaydi, e'tibor bermaydi).
+    """
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        if isinstance(event, Message) and event.chat:
+            if event.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
+                chat_id = event.chat.id
+                if not is_bot_enabled(chat_id):
+                    text = (event.text or event.caption or "").strip().lower()
+                    # Faqat botni qayta yoqish buyrug'iga ruxsat beriladi
+                    if any(text.startswith(cmd) for cmd in [
+                        "/bot on", "bot on", "/blizkiy on", "blizkiy on",
+                        "/bot yoq", "bot yoq", "/blizkiy yoq", "blizkiy yoq"
+                    ]):
+                        return await handler(event, data)
+                    # Qolgan barcha holatlarda bot guruhda to'liq to'xtaydi (hech qanday ishlash bo'lmaydi)
+                    return
+        return await handler(event, data)
+
+
 async def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -62,8 +91,10 @@ async def main():
     )
 
     dp = Dispatcher()
-    # Har bir xabarni hisobga oluvchi middleware qo'shish
+    # Har bir xabarni hisobga oluvchi middleware qo'shish (statistika buzilmasligi uchun)
     dp.message.outer_middleware(MessageTrackerMiddleware())
+    # Bot umumiy holati: Agar bot o'chirilgan bo'lsa, guruhdagi barcha xabarlar va harakatlarni to'xtatadi
+    dp.message.outer_middleware(BotStatusEnforcerMiddleware())
     # So'kinish va haqorat filtri (Censor) - barcha xabarlardan oldin tekshiradi
     dp.message.outer_middleware(CensorMiddleware())
     # Qoida 2 bo'yicha Anti-Flood middleware (barcha xabar va stikerlarni tekshirish uchun outer_middleware)
