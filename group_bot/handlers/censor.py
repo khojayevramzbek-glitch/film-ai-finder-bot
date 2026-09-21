@@ -23,6 +23,7 @@ try:
         add_warn,
         reset_warns,
         format_duration,
+        delete_message_record,
     )
 except ImportError:
     from database import (
@@ -37,6 +38,7 @@ except ImportError:
         add_warn,
         reset_warns,
         format_duration,
+        delete_message_record,
     )
 
 router = Router()
@@ -145,7 +147,7 @@ def is_profane(text: str, custom_words: list[str] = None) -> bool:
         condensed_keywords.extend([normalize_text(cw) for cw in custom_words if cw])
 
     for kw in condensed_keywords:
-        if kw and kw in condensed:
+        if kw and len(kw) >= 3 and kw in condensed:
             return True
 
     return False
@@ -198,7 +200,7 @@ class CensorMiddleware(BaseMiddleware):
     So'kinish aniqlansa:
     - Xabar darhol o'chiriladi.
     - Admin bo'lsa: qat'iy ogohlantiriladi.
-    - Oddiy a'zo bo'lsa: 15 soniyaga mute qilinadi.
+    - Oddiy a'zo bo'lsa: sozlamalarga ko'ra jazo qo'llanadi.
     - Xabar boshqa handlerlarga o'tkazilmaydi.
     """
     async def __call__(
@@ -245,6 +247,7 @@ class CensorMiddleware(BaseMiddleware):
                         await bot.delete_message(chat_id=chat_id, message_id=event.message_id)
                     except Exception:
                         pass
+                    delete_message_record(chat_id, event.message_id)
                     try:
                         warn_msg = await bot.send_message(
                             chat_id=chat_id,
@@ -274,6 +277,7 @@ class CensorMiddleware(BaseMiddleware):
             await bot.delete_message(chat_id=chat_id, message_id=event.message_id)
         except Exception:
             pass
+        delete_message_record(chat_id, event.message_id)
 
         # 2. Xatti-harakat: Admin bo'lsa ogohlantirish, oddiy a'zo bo'lsa sozlamalarga ko'ra jazo
         is_admin = await is_telegram_admin(chat_id, user.id, bot)

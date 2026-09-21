@@ -3,12 +3,7 @@ from html import escape
 from aiogram import Router, types, F, Bot
 from aiogram.enums import ChatType
 from aiogram.exceptions import TelegramBadRequest
-from .admin_commands import is_admin
-
 router = Router()
-
-
-
 
 STATA_CLEANUP_REGEX = re.compile(
     r"^\s*(/?[sс][tт][aа][tт][aа]?|[sс][tт][aа][tт][sс]?)\b",
@@ -30,13 +25,19 @@ async def on_my_chat_member(event: types.ChatMemberUpdated, bot: Bot):
     """Bot guruhga qo'shilganda yoki huquqlari o'zgarganda guruhni bazaga saqlash."""
     chat = event.chat
     if chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
-        from group_bot.database import save_chat_title
+        from group_bot.database import save_chat_title, set_bot_status
         from group_bot.bot import WEBAPP_URL
 
         save_chat_title(chat.id, chat.title or f"Guruh {chat.id}")
 
         new_status = event.new_chat_member.status
         old_status = event.old_chat_member.status
+
+        if new_status in ("left", "kicked"):
+            set_bot_status(chat.id, False)
+        elif new_status in ("member", "administrator"):
+            set_bot_status(chat.id, True)
+
         if new_status in ("member", "administrator") and old_status in ("left", "kicked"):
             try:
                 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo

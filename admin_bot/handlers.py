@@ -3,6 +3,7 @@ import re
 import csv
 import html
 import time
+import uuid
 import asyncio
 import logging
 import platform
@@ -10,7 +11,7 @@ import psutil
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from bot.config import ADMIN_USERNAMES, GEMINI_API_KEYS, TMDB_API_KEYS, BOT_TOKEN, GEMINI_MODEL
+from bot.config import ADMIN_USERNAMES, GEMINI_API_KEYS, TMDB_API_KEYS, BOT_TOKEN, GEMINI_MODEL, DOWNLOAD_DIR
 from bot.services.db import (
     DB_PATH,
     get_stats,
@@ -481,16 +482,65 @@ async def cb_start_broadcast(callback: CallbackQuery, state: FSMContext):
 @router.message(Command("cancel"), StateFilter(AdminStates))
 async def cmd_cancel_broadcast(message: Message, state: FSMContext):
     """Cancels ongoing broadcast or inspector setup."""
+    data = await state.get_data()
+    temp_file = data.get("temp_file_path")
+    if temp_file and os.path.exists(temp_file):
+        try:
+            os.unlink(temp_file)
+        except Exception:
+            pass
     await state.clear()
     await message.answer("❌ Amaliyot bekor qilindi.", reply_markup=get_admin_main_keyboard())
 
 
 @router.message(StateFilter(AdminStates.waiting_for_broadcast_msg))
-async def handle_broadcast_message_input(message: Message, state: FSMContext):
+async def handle_broadcast_message_input(message: Message, state: FSMContext, bot: Bot):
     """Receives broadcast message and opens options (Add Button, Test Send, Broadcast)."""
+    media_type = "text"
+    text_content = message.text or message.caption or ""
+    temp_file_path = ""
+
+    try:
+        if message.photo:
+            media_type = "photo"
+            p = DOWNLOAD_DIR / f"bc_{uuid.uuid4().hex[:8]}.jpg"
+            await bot.download(message.photo[-1], destination=p)
+            temp_file_path = str(p)
+        elif message.video:
+            media_type = "video"
+            p = DOWNLOAD_DIR / f"bc_{uuid.uuid4().hex[:8]}.mp4"
+            await bot.download(message.video, destination=p)
+            temp_file_path = str(p)
+        elif message.animation:
+            media_type = "animation"
+            p = DOWNLOAD_DIR / f"bc_{uuid.uuid4().hex[:8]}.mp4"
+            await bot.download(message.animation, destination=p)
+            temp_file_path = str(p)
+        elif message.document:
+            media_type = "document"
+            ext = Path(message.document.file_name or "file.bin").suffix
+            p = DOWNLOAD_DIR / f"bc_{uuid.uuid4().hex[:8]}{ext}"
+            await bot.download(message.document, destination=p)
+            temp_file_path = str(p)
+        elif message.audio:
+            media_type = "audio"
+            p = DOWNLOAD_DIR / f"bc_{uuid.uuid4().hex[:8]}.mp3"
+            await bot.download(message.audio, destination=p)
+            temp_file_path = str(p)
+        elif message.voice:
+            media_type = "voice"
+            p = DOWNLOAD_DIR / f"bc_{uuid.uuid4().hex[:8]}.ogg"
+            await bot.download(message.voice, destination=p)
+            temp_file_path = str(p)
+    except Exception as dl_err:
+        logger.warning(f"[Broadcast Media Download Warning] {dl_err}")
+
     await state.update_data(
         chat_id=message.chat.id,
         message_id=message.message_id,
+        media_type=media_type,
+        text_content=text_content,
+        temp_file_path=temp_file_path,
         button_text="",
         button_url=""
     )
@@ -601,6 +651,13 @@ async def cb_test_send_broadcast(callback: CallbackQuery, state: FSMContext, bot
 @router.callback_query(F.data == "adm:cancel_broadcast", StateFilter(AdminStates.confirm_broadcast))
 async def cb_cancel_broadcast_btn(callback: CallbackQuery, state: FSMContext):
     """Cancels broadcast setup."""
+    data = await state.get_data()
+    temp_file = data.get("temp_file_path")
+    if temp_file and os.path.exists(temp_file):
+        try:
+            os.unlink(temp_file)
+        except Exception:
+            pass
     await state.clear()
     await callback.message.edit_text("❌ Xabar tarqatish bekor qilindi.", reply_markup=get_admin_main_keyboard())
     await callback.answer()
@@ -612,6 +669,9 @@ async def cb_execute_broadcast(callback: CallbackQuery, state: FSMContext, bot: 
     data = await state.get_data()
     from_chat_id = data.get("chat_id")
     msg_id = data.get("message_id")
+    media_type = data.get("media_type", "text")
+    text_content = data.get("text_content", "")
+    temp_file_path = data.get("temp_file_path", "")
     btn_text = data.get("button_text")
     btn_url = data.get("button_url")
 
@@ -626,6 +686,11 @@ async def cb_execute_broadcast(callback: CallbackQuery, state: FSMContext, bot: 
     total_users = len(active_users)
 
     if total_users == 0:
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except Exception:
+                pass
         await callback.message.edit_text("⚠️ Bazada faol foydalanuvchilar mavjud emas.", reply_markup=get_admin_main_keyboard())
         return
 
@@ -636,35 +701,121 @@ async def cb_execute_broadcast(callback: CallbackQuery, state: FSMContext, bot: 
         parse_mode="HTML"
     )
 
+    use_main_bot = bool(BOT_TOKEN and BOT_TOKEN != bot.token)
+    from aiogram import Bot as SearchBot
+    sender_bot = SearchBot(token=BOT_TOKEN) if use_main_bot else bot
+
     success_cnt = 0
     blocked_cnt = 0
+    cached_file_id = None
 
-    for idx, user_id in enumerate(active_users, 1):
-        try:
-            await bot.copy_message(
-                chat_id=user_id,
-                from_chat_id=from_chat_id,
-                message_id=msg_id,
-                reply_markup=reply_markup
-            )
-            success_cnt += 1
-        except Exception:
-            blocked_cnt += 1
-
-        if idx % 25 == 0 or idx == total_users:
-            pct = (idx / total_users) * 100
-            p_bar = make_progress_bar(pct)
+    try:
+        for idx, user_id in enumerate(active_users, 1):
             try:
-                await progress_msg.edit_text(
-                    f"🚀 <b>Xabar tarqatilmoqda... ({idx}/{total_users})</b>\n\n"
-                    f"<code>[{p_bar}] {pct:.1f}%</code>\n"
-                    f"✅ Yuborildi: <code>{success_cnt} ta</code>\n"
-                    f"🚫 Bloklagan: <code>{blocked_cnt} ta</code>",
-                    parse_mode="HTML"
-                )
+                if not use_main_bot:
+                    await bot.copy_message(
+                        chat_id=user_id,
+                        from_chat_id=from_chat_id,
+                        message_id=msg_id,
+                        reply_markup=reply_markup
+                    )
+                else:
+                    # Broadcasting via main bot to main bot's registered users
+                    if media_type == "photo" and temp_file_path:
+                        file_input = cached_file_id or FSInputFile(temp_file_path)
+                        sent_m = await sender_bot.send_photo(
+                            chat_id=user_id,
+                            photo=file_input,
+                            caption=text_content or None,
+                            reply_markup=reply_markup
+                        )
+                        if not cached_file_id and sent_m.photo:
+                            cached_file_id = sent_m.photo[-1].file_id
+                    elif media_type == "video" and temp_file_path:
+                        file_input = cached_file_id or FSInputFile(temp_file_path)
+                        sent_m = await sender_bot.send_video(
+                            chat_id=user_id,
+                            video=file_input,
+                            caption=text_content or None,
+                            reply_markup=reply_markup
+                        )
+                        if not cached_file_id and sent_m.video:
+                            cached_file_id = sent_m.video.file_id
+                    elif media_type == "animation" and temp_file_path:
+                        file_input = cached_file_id or FSInputFile(temp_file_path)
+                        sent_m = await sender_bot.send_animation(
+                            chat_id=user_id,
+                            animation=file_input,
+                            caption=text_content or None,
+                            reply_markup=reply_markup
+                        )
+                        if not cached_file_id and sent_m.animation:
+                            cached_file_id = sent_m.animation.file_id
+                    elif media_type == "document" and temp_file_path:
+                        file_input = cached_file_id or FSInputFile(temp_file_path)
+                        sent_m = await sender_bot.send_document(
+                            chat_id=user_id,
+                            document=file_input,
+                            caption=text_content or None,
+                            reply_markup=reply_markup
+                        )
+                        if not cached_file_id and sent_m.document:
+                            cached_file_id = sent_m.document.file_id
+                    elif media_type == "audio" and temp_file_path:
+                        file_input = cached_file_id or FSInputFile(temp_file_path)
+                        sent_m = await sender_bot.send_audio(
+                            chat_id=user_id,
+                            audio=file_input,
+                            caption=text_content or None,
+                            reply_markup=reply_markup
+                        )
+                        if not cached_file_id and sent_m.audio:
+                            cached_file_id = sent_m.audio.file_id
+                    elif media_type == "voice" and temp_file_path:
+                        file_input = cached_file_id or FSInputFile(temp_file_path)
+                        sent_m = await sender_bot.send_voice(
+                            chat_id=user_id,
+                            voice=file_input,
+                            caption=text_content or None,
+                            reply_markup=reply_markup
+                        )
+                        if not cached_file_id and sent_m.voice:
+                            cached_file_id = sent_m.voice.file_id
+                    else:
+                        await sender_bot.send_message(
+                            chat_id=user_id,
+                            text=text_content or "(Bo'sh xabar)",
+                            reply_markup=reply_markup
+                        )
+
+                success_cnt += 1
+            except Exception as send_err:
+                logger.debug(f"[Broadcast User {user_id} Skipped]: {send_err}")
+                blocked_cnt += 1
+
+            if idx % 25 == 0 or idx == total_users:
+                pct = (idx / total_users) * 100
+                p_bar = make_progress_bar(pct)
+                try:
+                    await progress_msg.edit_text(
+                        f"🚀 <b>Xabar tarqatilmoqda... ({idx}/{total_users})</b>\n\n"
+                        f"<code>[{p_bar}] {pct:.1f}%</code>\n"
+                        f"✅ Yuborildi: <code>{success_cnt} ta</code>\n"
+                        f"🚫 Bloklagan: <code>{blocked_cnt} ta</code>",
+                        parse_mode="HTML"
+                    )
+                except Exception:
+                    pass
+            await asyncio.sleep(0.04)
+
+    finally:
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
             except Exception:
                 pass
-        await asyncio.sleep(0.05)
+        if use_main_bot:
+            await sender_bot.session.close()
 
     summary_text = (
         "✅ <b>XABAR TARQATISH YAKUNLANDI!</b>\n"

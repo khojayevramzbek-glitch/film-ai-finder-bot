@@ -153,21 +153,29 @@ async def check_stata_command(message: types.Message, bot: Bot):
 
     # =========================================================================
     # 2. GURUHDA (GROUP / SUPERGROUP)
-    # Faqat guruh egasi (Creator) va Bot egasi (@khojayev_ramz) da ishlaydi!
-    # Boshqa hech kimda ishlamaydi (bot jim turadi).
     # =========================================================================
     chat_id = message.chat.id
     user_id = user.id if user else 0
 
+    try:
+        from group_bot.database import is_stats_public, set_stats_public
+    except ImportError:
+        from database import is_stats_public, set_stats_public
+
     is_owner = is_bot_owner(user)
     is_creator = await is_group_creator(chat_id, user_id, bot)
+    is_admin = is_owner or is_creator
+    if not is_admin:
+        try:
+            member = await bot.get_chat_member(chat_id, user_id)
+            is_admin = member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]
+        except Exception:
+            is_admin = False
 
-    # Ruxsat berilmagan bo'lsa -> mutlaqo jim turadi
-    if not (is_owner or is_creator):
-        return
-
-    # 2.1. SOZLAMALAR: /stata on yoki /stata off
-    if subcmd in ["on", "off"]:
+    # 2.1. SOZLAMALAR: /stata on, /stata off, /stata public, /stata admin
+    if subcmd in ["on", "off", "public", "admin"]:
+        if not is_admin:
+            return
         if subcmd == "on":
             set_stats_status(chat_id, True)
             await message.reply("✅ <b>Guruh statistikasi (Stata) YOQILDI!</b>", parse_mode="HTML")
@@ -176,13 +184,27 @@ async def check_stata_command(message: types.Message, bot: Bot):
             set_stats_status(chat_id, False)
             await message.reply("⚠️ <b>Guruh statistikasi (Stata) O'CHIRILDI.</b>", parse_mode="HTML")
             return
+        elif subcmd == "public":
+            set_stats_public(chat_id, True)
+            await message.reply("✅ <b>Statistika barcha a'zolar uchun ochiq qilindi!</b>", parse_mode="HTML")
+            return
+        elif subcmd == "admin":
+            set_stats_public(chat_id, False)
+            await message.reply("🔒 <b>Statistika faqat adminlar uchun cheklandi.</b>", parse_mode="HTML")
+            return
 
     # 2.2. STATISTIKANI CHIQARISH (stata / Stata / /stata)
+    # Agar guruhda statistika to'liq o'chirilgan bo'lsa:
     if not is_stats_enabled(chat_id):
-        await message.reply(
-            "ℹ️ Ushbu guruhda statistika o'chirilgan. Yoqish uchun: <code>/stata on</code>",
-            parse_mode="HTML"
-        )
+        if is_admin:
+            await message.reply(
+                "ℹ️ Ushbu guruhda statistika o'chirilgan. Yoqish uchun: <code>/stata on</code>",
+                parse_mode="HTML"
+            )
+        return
+
+    # Agar ommaviy bo'lmasa va admin bo'lmasa -> jim turadi
+    if not is_stats_public(chat_id) and not is_admin:
         return
 
     chat_title = message.chat.title or "Guruh"

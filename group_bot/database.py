@@ -116,8 +116,44 @@ def init_db():
                 updated_at TIMESTAMP NOT NULL
             );
         """)
+
+        # Ensure all columns exist in chat_settings if table was created previously
+        try:
+            cur = conn.execute("PRAGMA table_info(chat_settings);")
+            existing_cols = {row["name"] for row in cur.fetchall()}
+            needed_cols = {
+                "censor_mute_seconds": "INTEGER DEFAULT 15",
+                "censor_action": "TEXT DEFAULT 'mute'",
+                "flood_msg_limit": "INTEGER DEFAULT 5",
+                "flood_msg_window": "INTEGER DEFAULT 4",
+                "flood_mute_seconds": "INTEGER DEFAULT 900",
+                "flood_sticker_limit": "INTEGER DEFAULT 3",
+                "flood_sticker_window": "INTEGER DEFAULT 4",
+                "flood_sticker_mute_seconds": "INTEGER DEFAULT 900",
+                "warn_limit": "INTEGER DEFAULT 3",
+                "warn_action": "TEXT DEFAULT 'mute'",
+                "warn_mute_seconds": "INTEGER DEFAULT 86400",
+                "link_filter_enabled": "INTEGER DEFAULT 0",
+                "welcome_enabled": "INTEGER DEFAULT 1",
+                "welcome_text": "TEXT DEFAULT 'Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!'",
+                "updated_at": "TIMESTAMP"
+            }
+            for col_name, col_type in needed_cols.items():
+                if col_name not in existing_cols:
+                    conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col_name} {col_type};")
+        except Exception:
+            pass
+
         conn.commit()
 
+
+def delete_message_record(chat_id: int, message_id: int):
+    """O'chirilgan xabarni (so'kinish, reklama va h.k.) statadan tozalash."""
+    if not message_id:
+        return
+    with get_connection() as conn:
+        conn.execute("DELETE FROM messages WHERE chat_id = ? AND message_id = ?", (chat_id, message_id))
+        conn.commit()
 
 
 def add_message(chat_id: int, user_id: int, full_name: str, username: str | None = None, message_id: int | None = None):

@@ -74,6 +74,7 @@ async def health_check_handler(request):
 
 async def start_web_server(port: int):
     """Starts a minimal HTTP web server for Render health checks and Web App."""
+    app = web.Application()
     app.router.add_get("/health", health_check_handler)
     
     try:

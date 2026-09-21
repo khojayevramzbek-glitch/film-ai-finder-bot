@@ -39,8 +39,8 @@ async def cmd_setrules(message: types.Message, bot: Bot):
     if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
         return
 
-    # Faqat @wdablyu va @khojayev_ramz uchun
-    if not is_owner_user(message.from_user):
+    # Guruh admini yoki bot egasi
+    if not await is_admin_or_allowed(message.chat.id, message.from_user, bot):
         return
 
     # /setrules dan keyingi matnni olish
@@ -59,8 +59,7 @@ async def cmd_setrules(message: types.Message, bot: Bot):
 
 @router.message(lambda msg: bool(RULES_REGEX.match((msg.text or msg.caption or "").strip())))
 async def check_rules_command(message: types.Message):
-    # Faqat @wdablyu va @khojayev_ramz uchun
-    if not is_owner_user(message.from_user):
+    if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
         return
 
     text = (message.text or message.caption or "").strip()
