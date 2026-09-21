@@ -101,20 +101,23 @@ async def unmute_after(bot: Bot, chat_id: int, user_id: int, delay: int):
 
 
 # Buyruqlar regexlari (Lotin va Kirill alifbosida)
-MUTE_REGEX = re.compile(r"^/?(?:[sс]?[mм][uу][tт][eе]?|[mм][uу][tт][eе]?)\b", re.IGNORECASE)
-UNMUTE_REGEX = re.compile(r"^/?(?:[uу][nн][mм][uу][tт][eе]?|[aа][nн][mм][uу][tт][eе]?)\b", re.IGNORECASE)
-WARN_REGEX = re.compile(r"^/?([wв][aа][rр][nн])\b", re.IGNORECASE)
-UNWARN_REGEX = re.compile(r"^/?([uу][nн][wв][aа][rр][nн]|[aа][nн][wв][aа][rр][nн])\b", re.IGNORECASE)
-BAN_REGEX = re.compile(r"^/?([bб][aа][nн])\b", re.IGNORECASE)
-UNBAN_REGEX = re.compile(r"^/?([uу][nн][bб][aа][nн]|[rр][aа][zз][bб][aа][nн])\b", re.IGNORECASE)
-USER_STAT_REGEX = re.compile(r"^/?([sс][tт][aа][tт][aа][sс][iі]|[mм][yу][sс][tт][aа][tт])\b", re.IGNORECASE)
+# Moderatsiya buyruqlari qat'iy ravishda '/' belgisi bilan boshlanishi SHART!
+# Bu oddiy suhbatdagi 'ban', 'mute', 'ban qilaman' kabi so'zlarni tasodifan buyruq deb tushunmaslik uchun zarur.
+MUTE_REGEX = re.compile(r"^/(?:[sс]?[mм][uу][tт][eе]?|[mм][uу][tт][eе]?)\b", re.IGNORECASE)
+UNMUTE_REGEX = re.compile(r"^/(?:[uу][nн][mм][uу][tт][eе]?|[aа][nн][mм][uу][tт][eе]?)\b", re.IGNORECASE)
+WARN_REGEX = re.compile(r"^/([wв][aа][rр][nн])\b", re.IGNORECASE)
+UNWARN_REGEX = re.compile(r"^/([uу][nн][wв][aа][rр][nн]|[aа][nн][wв][aа][rр][nн])\b", re.IGNORECASE)
+BAN_REGEX = re.compile(r"^/([bб][aа][nн])\b", re.IGNORECASE)
+UNBAN_REGEX = re.compile(r"^/([uу][nн][bб][aа][nн]|[rр][aа][zз][bб][aа][nн])\b", re.IGNORECASE)
+USER_STAT_REGEX = re.compile(r"^/([sс][tт][aа][tт][aа][sс][iі]|[mм][yу][sс][tт][aа][tт])\b", re.IGNORECASE)
 
 
 def is_moderation_command(message: types.Message) -> bool:
     text = (message.text or message.caption or "").strip()
-    if not text:
+    if not text or not text.startswith("/"):
         return False
-    cmd = text.split()[0] if text.split() else ""
+    tokens = text.split()
+    cmd = tokens[0].split("@")[0] if tokens else ""
     return bool(
         MUTE_REGEX.match(cmd) or UNMUTE_REGEX.match(cmd) or
         WARN_REGEX.match(cmd) or UNWARN_REGEX.match(cmd) or
@@ -192,11 +195,11 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
         return
 
     text = (message.text or message.caption or "").strip()
-    if not text:
+    if not text or not text.startswith("/"):
         return
 
     tokens = text.split()
-    cmd = tokens[0] if tokens else ""
+    cmd = tokens[0].split("@")[0] if tokens else ""
 
     # Faqat admin yoki ruxsat berilganlar uchun tekshirish
     is_authorized = await is_admin_or_allowed(message.chat.id, message.from_user, bot)

@@ -68,7 +68,7 @@ async def callback_toggle_bot(call: CallbackQuery, bot: Bot):
         await call.answer("Xatolik yuz berdi.", show_alert=True)
 
 
-BOT_CMD_REGEX = re.compile(r"^\s*(/?(?:bot|blizkiy|blizki))\b", re.IGNORECASE)
+BOT_CMD_REGEX = re.compile(r"^\s*/(?:bot|blizkiy|blizki)\b", re.IGNORECASE)
 
 
 @router.message(lambda msg: bool(BOT_CMD_REGEX.match((msg.text or msg.caption or "").strip())))

@@ -449,7 +449,7 @@ async def build_censor_keyboard(user: types.User, bot: Bot) -> InlineKeyboardMar
 # 4. Admin Buyruqlari (/censor on/off, /addbadword, /delbadword, /badwords)
 # -------------------------------------------------------------
 
-CENSOR_CMD_REGEX = re.compile(r"^\s*(/?(?:censor|senzor|filtr|cenzor))\b", re.IGNORECASE)
+CENSOR_CMD_REGEX = re.compile(r"^\s*/(?:censor|senzor|filtr|cenzor)\b", re.IGNORECASE)
 
 
 @router.message(lambda msg: bool(CENSOR_CMD_REGEX.match((msg.text or msg.caption or "").strip())))
