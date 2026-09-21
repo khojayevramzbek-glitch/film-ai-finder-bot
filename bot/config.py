@@ -41,7 +41,7 @@ _raw_groq = os.getenv("GROQ_API_KEYS", "") or base64.b64decode(_DEFAULT_GROQ_B64
 GROQ_API_KEYS: List[str] = parse_key_list(_raw_groq)
 
 # Gemini Model Name
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip() or "gemini-3.6-flash"
 
 # Optional Proxy URL
 PROXY_URL = os.getenv("PROXY_URL", "").strip()

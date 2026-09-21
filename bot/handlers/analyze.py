@@ -269,6 +269,28 @@ async def handle_text(message: Message, bot: Bot):
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
     ai_data = await ai_service.analyze_plot_text(text, lang=lang)
+    if not ai_data or not ai_data.get("found"):
+        # 3-tier Safety Shield: TMDb direct title search fallback
+        try:
+            tmdb_fallback = await tmdb_service.search_media(text)
+            if tmdb_fallback and tmdb_fallback.get("title"):
+                ai_data = {
+                    "found": True,
+                    "title_original": tmdb_fallback.get("original_title") or tmdb_fallback.get("title"),
+                    "title_uz": tmdb_fallback.get("title"),
+                    "title_ru": tmdb_fallback.get("title_ru") or tmdb_fallback.get("title"),
+                    "media_type": tmdb_fallback.get("media_type", "movie"),
+                    "release_year": tmdb_fallback.get("year", ""),
+                    "rating": tmdb_fallback.get("rating", "8.0"),
+                    "genres": tmdb_fallback.get("genres", []),
+                    "director": tmdb_fallback.get("director", ""),
+                    "summary": tmdb_fallback.get("overview", "") or f"{tmdb_fallback.get('title')} filmi haqida ma'lumot.",
+                    "characters_or_actors": tmdb_fallback.get("cast", []),
+                    "confidence_reason": "TMDb global kino bazasidan to'g'ridan-to'g'ri topildi"
+                }
+        except Exception as tmdb_err:
+            logger.warning(f"[TMDb Direct Fallback Warning] {tmdb_err}")
+
     if ai_data and ai_data.get("found"):
         set_cached_result(text_cache_key, ai_data)
 
@@ -323,6 +345,27 @@ async def handle_voice_or_audio(message: Message, bot: Bot):
         await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
         ai_data = await ai_service.analyze_plot_text(transcription, lang=lang)
+        if not ai_data or not ai_data.get("found"):
+            try:
+                tmdb_fallback = await tmdb_service.search_media(transcription)
+                if tmdb_fallback and tmdb_fallback.get("title"):
+                    ai_data = {
+                        "found": True,
+                        "title_original": tmdb_fallback.get("original_title") or tmdb_fallback.get("title"),
+                        "title_uz": tmdb_fallback.get("title"),
+                        "title_ru": tmdb_fallback.get("title_ru") or tmdb_fallback.get("title"),
+                        "media_type": tmdb_fallback.get("media_type", "movie"),
+                        "release_year": tmdb_fallback.get("year", ""),
+                        "rating": tmdb_fallback.get("rating", "8.0"),
+                        "genres": tmdb_fallback.get("genres", []),
+                        "director": tmdb_fallback.get("director", ""),
+                        "summary": tmdb_fallback.get("overview", "") or f"{tmdb_fallback.get('title')} filmi.",
+                        "characters_or_actors": tmdb_fallback.get("cast", []),
+                        "confidence_reason": "TMDb bazasidan to'g'ridan-to'g'ri topildi"
+                    }
+            except Exception:
+                pass
+
         await process_and_send_result(
             bot=bot,
             message=message,

@@ -26,11 +26,14 @@ logger = logging.getLogger(__name__)
 gemini_key_pool = APIKeyPool(keys=GEMINI_API_KEYS, service_name="Gemini AI", default_cooldown=60)
 
 FALLBACK_MODELS = [
-    "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
     "gemini-3.7-flash",
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
-    "gemini-3.6-flash"
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+    "gemini-3.5-flash",
 ]
 
 
@@ -189,10 +192,8 @@ class AIService:
                         self.model_name = model_candidate
                         break
                     except Exception as model_err:
-                        err_text = str(model_err).lower()
-                        if "404" in err_text or "not found" in err_text or "429" in err_text or "quota" in err_text:
-                            continue
-                        raise model_err
+                        logger.warning(f"[Gemini Model {model_candidate} Failed]: {model_err}")
+                        continue
 
                 if response and response.text:
                     self.pool.report_success(api_key)
@@ -277,7 +278,18 @@ class AIService:
         return self._parse_json_response(resp_text)
 
     async def analyze_video(self, video_path: Path, metadata_text: str = "", lang: str = "uz") -> Dict[str, Any]:
-        return await asyncio.to_thread(self._sync_analyze_video, video_path, metadata_text, lang)
+        res = await asyncio.to_thread(self._sync_analyze_video, video_path, metadata_text, lang)
+        if res and res.get("found"):
+            return res
+        # Fallback to Groq using metadata text if Gemini failed
+        if metadata_text and len(metadata_text.strip()) > 5:
+            try:
+                groq_res = await groq_service.analyze_plot_text(metadata_text, lang=lang)
+                if groq_res and groq_res.get("found"):
+                    return groq_res
+            except Exception as e:
+                logger.warning(f"[Groq Video Meta Fallback Warning] {e}")
+        return res or {"found": False, "reason": "Film aniqlanmadi."}
 
     # 2. Image / Screenshot Analysis
     def _sync_analyze_image(self, image_path: Path, caption: str = "", lang: str = "uz") -> Dict[str, Any]:
@@ -294,7 +306,18 @@ class AIService:
         return self._parse_json_response(resp_text)
 
     async def analyze_image(self, image_path: Path, caption: str = "", lang: str = "uz") -> Dict[str, Any]:
-        return await asyncio.to_thread(self._sync_analyze_image, image_path, caption, lang)
+        res = await asyncio.to_thread(self._sync_analyze_image, image_path, caption, lang)
+        if res and res.get("found"):
+            return res
+        # Fallback to Groq using caption if Gemini failed
+        if caption and len(caption.strip()) > 5:
+            try:
+                groq_res = await groq_service.analyze_plot_text(caption, lang=lang)
+                if groq_res and groq_res.get("found"):
+                    return groq_res
+            except Exception as e:
+                logger.warning(f"[Groq Image Caption Fallback Warning] {e}")
+        return res or {"found": False, "reason": "Film aniqlanmadi."}
 
     # 3. Plot Description & Mood-Based Text Search
     def _sync_analyze_plot_text(self, text_input: str, lang: str = "uz") -> Dict[str, Any]:
@@ -309,7 +332,20 @@ class AIService:
         return self._parse_json_response(resp_text)
 
     async def analyze_plot_text(self, text_input: str, lang: str = "uz") -> Dict[str, Any]:
-        return await asyncio.to_thread(self._sync_analyze_plot_text, text_input, lang)
+        res = await asyncio.to_thread(self._sync_analyze_plot_text, text_input, lang)
+        if res and res.get("found"):
+            return res
+
+        # ⚡️ Ultra-Fast Groq LPU Fallback (10 Keys, 0.3s)
+        try:
+            logger.info(f"[AI Fallback] Gemini orqali topilmadi, Groq LPU ishga tushirildi: '{text_input[:40]}'")
+            groq_res = await groq_service.analyze_plot_text(text_input, lang=lang)
+            if groq_res and groq_res.get("found"):
+                return groq_res
+        except Exception as e:
+            logger.warning(f"[Groq Plot Fallback Error] {e}")
+
+        return res or {"found": False, "reason": "Film aniqlanmadi."}
 
     # 4. Similar Movies Recommendations
     def _sync_get_similar_movies(self, title: str, lang: str = "uz") -> List[Dict[str, Any]]:

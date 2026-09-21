@@ -78,10 +78,10 @@ def get_user_profile_keyboard(user_id: int, is_banned: bool) -> InlineKeyboardMa
 def get_ai_settings_keyboard(current_model: str, current_temp: float) -> InlineKeyboardMarkup:
     """Dynamic AI model selection and creativity sliders."""
     models = [
-        ("gemini-3.5-flash", "Gemini 3.5 Flash (Standart)"),
+        ("gemini-3.6-flash", "Gemini 3.6 Flash (Standart)"),
         ("gemini-3.7-flash", "Gemini 3.7 Flash (Yangi)"),
-        ("gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (Tez)"),
-        ("gemini-3.6-flash", "Gemini 3.6 Flash"),
+        ("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (Tez)"),
+        ("gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite"),
     ]
 
     buttons = []

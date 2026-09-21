@@ -18,7 +18,6 @@ groq_key_pool = APIKeyPool(keys=GROQ_API_KEYS, service_name="Groq AI (GPT-OSS / 
 GROQ_MODELS = [
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "qwen/qwen3.6-27b",
     "qwen/qwen3.8-27b"
 ]
 
@@ -354,6 +353,26 @@ Javobni FAQAT quyidagi toza JSON formatida qaytaring:
 
     async def transcribe_audio(self, audio_path: Path) -> str:
         return await asyncio.to_thread(self._sync_transcribe_audio, audio_path)
+
+    # 6. Ultra-Fast Groq Movie Plot & Title Search
+    def _sync_analyze_plot_text(self, text_input: str, lang: str = "uz") -> Dict[str, Any]:
+        """Identifies movie, series, or cartoon from plot text, title, or quotes using Groq LPU."""
+        from bot.services.ai_service import build_system_prompt
+        system_prompt = build_system_prompt(lang=lang)
+        prompt = (
+            f"{system_prompt}\n\n"
+            f"Foydalanuvchi quyidagi matn yoki kino nomini yozdi:\n"
+            f"\"{text_input}\"\n\n"
+            f"Ushbu tavsif yoki film nomiga eng mukammal mos keluvchi haqiqiy film, serial yoki multfilmni aniqlang."
+        )
+        resp_text = self._execute_groq(prompt, json_mode=True, temperature=0.2)
+        parsed = self._parse_json(resp_text)
+        if not parsed or not isinstance(parsed, dict):
+            return {"found": False, "reason": "Film aniqlanmadi."}
+        return parsed
+
+    async def analyze_plot_text(self, text_input: str, lang: str = "uz") -> Dict[str, Any]:
+        return await asyncio.to_thread(self._sync_analyze_plot_text, text_input, lang)
 
 
 groq_service = GroqService()
