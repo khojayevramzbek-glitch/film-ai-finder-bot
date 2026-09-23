@@ -16,18 +16,6 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-# ZeroGPU hook for Hugging Face Spaces
-try:
-    import spaces
-
-    @spaces.GPU(duration=1)
-    def dummy_gpu(x=None):
-        """ZeroGPU requirement hook for Hugging Face Spaces."""
-        return "ZeroGPU Ready"
-except Exception:
-    def dummy_gpu(x=None):
-        return "CPU Ready"
-
 # Disable internal aiohttp server in run.py so FastAPI/Gradio alone binds port 7860
 os.environ["RUN_WEB_SERVER"] = "false"
 os.environ["GRADIO_SSR_MODE"] = "false"
@@ -90,12 +78,33 @@ with gr.Blocks(
         .gradio-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; background: #0b0f19 !important; }
         #component-0 { padding: 0 !important; margin: 0 !important; }
     """
-) as demo:
-    # ZeroGPU hook
-    init_btn = gr.Button("gpu_init", visible=False)
-    init_out = gr.Textbox(visible=False)
-    init_btn.click(fn=dummy_gpu, inputs=[], outputs=[init_out])
-    demo.load(fn=dummy_gpu, inputs=[], outputs=[init_out])
+    with gr.Column():
+        gr.Markdown(
+            """
+            # 🛡 Blizkiy Moderatsiya & Kino AI Klasteri
+            **Server Holati:** 🟢 24/7 ONLINE (Doimiy Faol)  
+            **Mini App:** Telegram ilovasida to'liq integratsiya qilingan.
+            """
+        )
+        stats_box = gr.Textbox(value=get_system_stats, every=30, label="Tizim Ko'rsatkichlari (Live)", interactive=False)
+
+
+def keep_alive_worker():
+    """Hugging Face CPU space 48 soatlik harakatsizlikdan uxlab qolmasligi uchun har 20 daqiqada o'zini ping qilib turadi."""
+    import urllib.request
+    space_host = os.getenv("SPACE_HOST") or "uchunrisk-film-ai-finder-bot.hf.space"
+    target_url = f"https://{space_host}/"
+    while True:
+        time.sleep(1200)  # Har 20 daqiqada
+        try:
+            req = urllib.request.Request(target_url, headers={"User-Agent": "HF-KeepAlive/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                print(f"💓 [KeepAlive] Ping yuborildi: {target_url} -> {resp.status}", flush=True)
+        except Exception as e:
+            print(f"⚠️ [KeepAlive] Ping ogohlantirish: {e}", flush=True)
+
+keep_alive_thread = threading.Thread(target=keep_alive_worker, daemon=True)
+keep_alive_thread.start()
 
 
 if __name__ == "__main__":

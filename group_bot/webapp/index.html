@@ -2097,6 +2097,9 @@
     }
 
     // Helper to send API requests trying direct path first, then /gradio_api
+    const DEFAULT_BACKEND_URL = "https://uchunrisk-film-ai-finder-bot.hf.space";
+    const explicitBackend = urlParams.get('backend');
+
     async function apiFetch(path, options = {}) {
       const headers = Object.assign({}, options.headers || {});
       if (currentUserId) {
@@ -2105,15 +2108,39 @@
       const sep = path.includes('?') ? '&' : '?';
       const fullPath = (currentUserId && !path.includes('user_id=')) ? `${path}${sep}user_id=${currentUserId}` : path;
 
-      try {
-        const res = await fetch(fullPath, { ...options, headers });
-        if (res.ok) return res;
-      } catch (e) {}
-      try {
-        const res = await fetch('/gradio_api' + fullPath, { ...options, headers });
-        if (res.ok) return res;
-      } catch (e) {}
-      throw new Error("Network request failed");
+      const candidates = [];
+      if (explicitBackend) {
+        const cleanBackend = explicitBackend.replace(/\/+$/, '');
+        candidates.push(`${cleanBackend}${fullPath}`);
+        candidates.push(`${cleanBackend}/gradio_api${fullPath}`);
+      }
+
+      // If page is hosted on static HF space or file://, prioritize backend server
+      if (window.location.hostname.includes("static.hf.space") || window.location.protocol === "file:") {
+        candidates.push(`${DEFAULT_BACKEND_URL}/gradio_api${fullPath}`);
+        candidates.push(`${DEFAULT_BACKEND_URL}${fullPath}`);
+      }
+
+      // Relative paths (for when hosted directly on backend or custom domain)
+      candidates.push(fullPath);
+      candidates.push('/gradio_api' + fullPath);
+
+      // Fallback to backend URL
+      if (!candidates.includes(`${DEFAULT_BACKEND_URL}/gradio_api${fullPath}`)) {
+        candidates.push(`${DEFAULT_BACKEND_URL}/gradio_api${fullPath}`);
+        candidates.push(`${DEFAULT_BACKEND_URL}${fullPath}`);
+      }
+
+      let lastError = null;
+      for (const targetUrl of candidates) {
+        try {
+          const res = await fetch(targetUrl, { ...options, headers });
+          if (res.ok) return res;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      throw lastError || new Error("Network request failed");
     }
 
     // Update Active Group Banner
@@ -2251,11 +2278,22 @@
     }
 
     // Fetch Groups List
-    async function loadGroups() {
+    async function loadGroups(retryCount = 0) {
       if (window.__INITIAL_GROUPS__ && Array.isArray(window.__INITIAL_GROUPS__) && window.__INITIAL_GROUPS__.length > 0) {
         groupsList = window.__INITIAL_GROUPS__;
         renderGroupsDropdown();
         renderGroupsCards();
+      }
+
+      const container = document.getElementById('groupsCardsContainer');
+      if (groupsList.length === 0 && container && retryCount === 0) {
+        container.innerHTML = `
+          <div class="groups-empty-state" style="padding: 30px 10px;">
+            <div style="font-size: 32px; animation: spin 1s linear infinite; display: inline-block;">⏳</div>
+            <div class="groups-empty-title" style="margin-top: 10px;">Guruhlar yuklanmoqda...</div>
+            <p class="groups-empty-desc">Server bilan xavfsiz aloqa o'rnatilmoqda...</p>
+          </div>
+        `;
       }
 
       try {
@@ -2265,10 +2303,17 @@
           groupsList = data.groups;
           renderGroupsDropdown();
           renderGroupsCards();
+          return;
         }
       } catch (err) {
         console.error("Guruhlarni yuklashda xatolik:", err);
+        if (retryCount < 2) {
+          setTimeout(() => loadGroups(retryCount + 1), 1500);
+          return;
+        }
       }
+      renderGroupsDropdown();
+      renderGroupsCards();
     }
 
     // Handle Group Select Change

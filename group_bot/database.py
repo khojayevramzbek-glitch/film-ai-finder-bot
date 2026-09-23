@@ -211,6 +211,38 @@ def init_db():
         except Exception:
             pass
 
+        # Seed primary group and owner authorization if starting on new server
+        try:
+            now_utc = datetime.now(timezone.utc)
+            conn.execute("""
+                INSERT INTO chats (chat_id, title, invite_link, added_by_user_id, added_by_name, added_by_username, bot_status, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(chat_id) DO UPDATE SET
+                    title = COALESCE(chats.title, excluded.title),
+                    invite_link = COALESCE(chats.invite_link, excluded.invite_link),
+                    updated_at = excluded.updated_at
+            """, (
+                -1003834509976,
+                "Близкий🫶",
+                "https://t.me/+PM3yYk0OwA04MDJi",
+                8594505572,
+                "Ramzbek",
+                "khojayev_ramz",
+                "administrator",
+                now_utc
+            ))
+            conn.execute("""
+                INSERT INTO chat_authorized_users (chat_id, user_id, is_admin, updated_at)
+                VALUES (?, ?, 1, ?)
+                ON CONFLICT(chat_id, user_id) DO UPDATE SET is_admin = 1, updated_at = excluded.updated_at
+            """, (
+                -1003834509976,
+                8594505572,
+                now_utc
+            ))
+        except Exception:
+            pass
+
         conn.commit()
 
 
@@ -900,15 +932,23 @@ def is_user_authorized_for_chat(chat_id: int, user_id: int | None) -> bool:
         return bool(cur.fetchone())
 
 
-def get_user_managed_groups(user_id: int | None) -> list[dict]:
+def get_user_managed_groups(user_id: int | str | None) -> list[dict]:
     """
     Foydalanuvchi boshqarishi mumkin bo'lgan guruhlar ro'yxati.
     - Agar bot egasi bo'lsa (@khojayev_ramz): barcha guruhlar ko'rinadi!
     - Agar oddiy admin bo'lsa: FAQAT o'zining ruxsat etilgan guruhlari ko'rinadi!
     """
     all_groups = get_all_managed_groups()
+    if user_id is not None:
+        try:
+            user_id = int(str(user_id).strip())
+        except (ValueError, TypeError):
+            pass
+
     if not user_id:
-        return []
+        # Agar user_id kelmagan bo'lsa va faqat 1 ta guruh mavjud bo'lsa, qulaylik uchun shuni qaytarish
+        return all_groups if len(all_groups) == 1 else []
+
     if user_id in BOT_OWNER_IDS:
         return all_groups
 
