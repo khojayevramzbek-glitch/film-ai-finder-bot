@@ -1008,6 +1008,16 @@ def get_all_managed_groups() -> list[dict]:
         return rows
 
 
+DEFAULT_WELCOME_TEXT = (
+    "✨ <b>Xush kelibsiz, {mention}!</b>\n\n"
+    "Hurmatli ishtirokchi, <b>«{title}»</b> jamoasiga qo‘shilganingizdan mamnunmiz!\n\n"
+    "<blockquote>🤝 <b>Guruh tartib-qoidalari:</b>\n"
+    "• O‘zaro hurmat va madaniyatli muloqot;\n"
+    "• Reklama, haqorat va keraksiz spamlardan tiyilish;\n"
+    "• Mavzuga doir mazmunli va foydali suhbatlar.</blockquote>\n\n"
+    "<i>Sizga guruhimizda maroqli va samarali vaqt tilaymiz!</i>"
+)
+
 DEFAULT_CHAT_SETTINGS = {
     "censor_mute_seconds": 15,
     "censor_action": "mute",
@@ -1022,7 +1032,7 @@ DEFAULT_CHAT_SETTINGS = {
     "warn_mute_seconds": 3600,
     "link_filter_enabled": 0,
     "welcome_enabled": 1,
-    "welcome_text": "Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!"
+    "welcome_text": DEFAULT_WELCOME_TEXT
 }
 
 
@@ -1060,7 +1070,10 @@ def get_chat_full_settings(chat_id: int) -> dict:
             res = dict(DEFAULT_CHAT_SETTINGS)
             res["chat_id"] = chat_id
             return res
-        return dict(row)
+        res = dict(row)
+        if not res.get("welcome_text") or res.get("welcome_text") == "Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!":
+            res["welcome_text"] = DEFAULT_WELCOME_TEXT
+        return res
 
 
 def update_chat_settings(chat_id: int, settings: dict):

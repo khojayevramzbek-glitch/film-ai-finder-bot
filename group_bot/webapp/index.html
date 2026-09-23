@@ -1655,12 +1655,61 @@
 
         <div class="glass-card">
           <div class="card-header">
-            <h2>👋 Salomlashish Matni (Welcome)</h2>
-            <p>Yangi kirgan a'zoga yuboriladigan xush kelibsiz xabari (<code>{name}</code> — a'zo ismi):</p>
+            <h2>✨ Salomlashish Matni (Ideal Welcome)</h2>
+            <p>Yangi kirgan a'zoga yuboriladigan nufuzli, jiddiy va chiroyli tabrik xabari. Shablonlardan birini tanlang yoki o'zingiz moslang:</p>
           </div>
 
-          <textarea id="textareaWelcome" class="custom-textarea" placeholder="Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!"></textarea>
-          
+          <!-- Quick Templates (Tayyor Shablonlar) -->
+          <div style="margin-bottom: 12px;">
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 800; letter-spacing: 0.5px;">
+              ⚡️ TAYYOR SHABLONLAR (BIR BOSISHDA TANLASH):
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" class="btn-copy" id="btnTplSerious" style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; padding: 6px 12px; font-size: 13px;">
+                👑 Jiddiy & Rasmiy
+              </button>
+              <button type="button" class="btn-copy" id="btnTplFriendly" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; padding: 6px 12px; font-size: 13px;">
+                ✨ Samimiy & Do'stona
+              </button>
+              <button type="button" class="btn-copy" id="btnTplBusiness" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; padding: 6px 12px; font-size: 13px;">
+                💼 Biznes & IT
+              </button>
+            </div>
+          </div>
+
+          <!-- Variables Chips -->
+          <div style="margin-bottom: 12px;">
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 800; letter-spacing: 0.5px;">
+              🧩 TEZKOR O'ZGARUVCHILAR (BOSING VA QO'SHING):
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button type="button" class="tag-chip" onclick="insertWelcomeTag('{mention}')" style="cursor: pointer; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.1);">
+                <span>{mention} (Profil Havolasi)</span>
+              </button>
+              <button type="button" class="tag-chip" onclick="insertWelcomeTag('{name}')" style="cursor: pointer;">
+                <span>{name} (To'liq Ism)</span>
+              </button>
+              <button type="button" class="tag-chip" onclick="insertWelcomeTag('{title}')" style="cursor: pointer;">
+                <span>{title} (Guruh Nomi)</span>
+              </button>
+              <button type="button" class="tag-chip" onclick="insertWelcomeTag('{count}')" style="cursor: pointer;">
+                <span>{count} (A'zolar Soni)</span>
+              </button>
+            </div>
+          </div>
+
+          <textarea id="textareaWelcome" class="custom-textarea" rows="7" placeholder="Salomlashish matnini yozing..."></textarea>
+
+          <!-- Live Telegram Message Preview -->
+          <div style="margin: 14px 0;">
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 800; letter-spacing: 0.5px;">
+              📱 TELEGRAMDA QANDAY KO'RINADI (JONLI KO'RINISH):
+            </div>
+            <div id="welcomeLivePreview" style="background: #18222d; border-radius: 12px; padding: 14px 16px; border: 1px solid rgba(255,255,255,0.08); font-size: 14px; line-height: 1.6; color: #f1f5f9; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
           <button class="btn-save" id="btnSaveWelcome" style="background: linear-gradient(135deg, #0284c7, #2563eb);">
             <span>💾 Salomlashish Matnini Saqlash</span>
           </button>
@@ -2295,7 +2344,13 @@
 
         // Render Rules & Welcome
         document.getElementById('textareaRules').value = g.rules || "";
-        document.getElementById('textareaWelcome').value = currentSettings.welcome_text || "Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!";
+        const wText = currentSettings.welcome_text;
+        if (!wText || wText === "Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!") {
+          document.getElementById('textareaWelcome').value = TPL_SERIOUS;
+        } else {
+          document.getElementById('textareaWelcome').value = wText;
+        }
+        updateWelcomeLivePreview();
 
       } catch (err) {
         console.error("Guruh tafsilotlarini yuklashda xatolik:", err);
@@ -2683,6 +2738,94 @@
       } catch (err) {
         showToast("Saqlashda xatolik", "❌");
       }
+    });
+
+    // Welcome Templates
+    const TPL_SERIOUS = `✨ <b>Xush kelibsiz, {mention}!</b>\n\nHurmatli ishtirokchi, <b>«{title}»</b> jamoasiga qo‘shilganingizdan mamnunmiz!\n\n<blockquote>🤝 <b>Guruh tartib-qoidalari:</b>\n• O‘zaro hurmat va madaniyatli muloqot;\n• Reklama, haqorat va keraksiz spamlardan tiyilish;\n• Mavzuga doir mazmunli va foydali suhbatlar.</blockquote>\n\n<i>Sizga guruhimizda maroqli va samarali vaqt tilaymiz!</i>`;
+
+    const TPL_FRIENDLY = `👋 <b>Assalomu alaykum va xush kelibsiz, {mention}!</b>\n\nBizning ahil <b>«{title}»</b> oilamizga xush kelibsiz! Guruhimizda sizni ko‘rganimizdan bag‘oyat xursandmiz.\n\n<blockquote>💡 <i>Guruhimizda o‘zaro samimiyat, do‘stona muhit va qiziqarli suhbatlar hukm suradi. O‘z fikrlaringiz bilan faol qatnashing!</i></blockquote>\n\nDoimo kayfiyatingiz a'lo bo‘lsin! 😊`;
+
+    const TPL_BUSINESS = `👔 <b>Xush kelibsiz, {mention}!</b>\n\nSiz <b>«{title}»</b> professional hamjamiyatiga muvaffaqiyatli qo‘shildingiz.\n\n<blockquote>📊 <b>Asosiy mezonlar:</b>\n• Faqat sohaviy va professional muloqot;\n• Spam, self-promo va o‘rinsiz havolalar man etiladi;\n• Fikrlar almashish va tajriba ulashish mamnuniyat bilan qabul qilinadi.</blockquote>\n\n<i>Karyerangiz va faoliyatingizda ulkan yutuqlar tilaymiz!</i>`;
+
+    function updateWelcomeLivePreview() {
+      const textarea = document.getElementById('textareaWelcome');
+      const preview = document.getElementById('welcomeLivePreview');
+      if (!textarea || !preview) return;
+
+      const currentTitle = (groupsList && groupsList.find(g => String(g.chat_id) === String(currentChatId))?.title) || 'Bizning Guruh';
+      let raw = textarea.value || TPL_SERIOUS;
+
+      // Replace placeholders for preview
+      raw = raw.replace(/{mention}/g, '<span style="color: #38bdf8; font-weight: 700; text-decoration: underline;">Azizbek Karimov</span>');
+      raw = raw.replace(/{name}/g, '<span style="font-weight: 700;">Azizbek Karimov</span>');
+      raw = raw.replace(/{first_name}/g, 'Azizbek');
+      raw = raw.replace(/{username}/g, '<span style="color: #38bdf8;">@azizbek</span>');
+      raw = raw.replace(/{id}|{user_id}/g, '<code>12345678</code>');
+      raw = raw.replace(/{title}|{chat_title}/g, `<b>«${escapeHtml(currentTitle)}»</b>`);
+      raw = raw.replace(/{count}|{members_count}/g, '<b style="color: #34d399;">1 450</b>');
+      raw = raw.replace(/{rules}/g, 'O‘zaro hurmat va tartib-intizom.');
+
+      // Convert blockquote tags into styled boxes
+      raw = raw.replace(/<blockquote>([\s\S]*?)<\/blockquote>/gi, (match, p1) => {
+        return `<div style="border-left: 3px solid #38bdf8; background: rgba(56,189,248,0.1); padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 13px;">${p1}</div>`;
+      });
+
+      // Convert newlines to br
+      raw = raw.replace(/\n/g, '<br>');
+
+      // Add mockup buttons below preview
+      const previewButtons = `
+        <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+          <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 4px;">
+            📜 Guruh Qoidalari
+          </div>
+          <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 700; color: #94a3b8; display: flex; align-items: center; gap: 4px;">
+            🔗 Guruh Silkasi
+          </div>
+        </div>
+      `;
+
+      preview.innerHTML = raw + previewButtons;
+    }
+
+    window.insertWelcomeTag = function(tag) {
+      haptic('light');
+      const textarea = document.getElementById('textareaWelcome');
+      if (!textarea) return;
+
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const val = textarea.value;
+
+      textarea.value = val.substring(0, start) + tag + val.substring(end);
+      textarea.focus();
+      textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+      updateWelcomeLivePreview();
+    };
+
+    document.getElementById('btnTplSerious')?.addEventListener('click', () => {
+      haptic('medium');
+      document.getElementById('textareaWelcome').value = TPL_SERIOUS;
+      updateWelcomeLivePreview();
+      showToast("Jiddiy & Rasmiy shablon tanlandi!", "👑");
+    });
+
+    document.getElementById('btnTplFriendly')?.addEventListener('click', () => {
+      haptic('medium');
+      document.getElementById('textareaWelcome').value = TPL_FRIENDLY;
+      updateWelcomeLivePreview();
+      showToast("Samimiy & Do'stona shablon tanlandi!", "✨");
+    });
+
+    document.getElementById('btnTplBusiness')?.addEventListener('click', () => {
+      haptic('medium');
+      document.getElementById('textareaWelcome').value = TPL_BUSINESS;
+      updateWelcomeLivePreview();
+      showToast("Biznes & IT shabloni tanlandi!", "💼");
+    });
+
+    document.getElementById('textareaWelcome')?.addEventListener('input', () => {
+      updateWelcomeLivePreview();
     });
 
     // Save Welcome Text Button
