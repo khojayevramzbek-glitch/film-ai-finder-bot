@@ -116,6 +116,12 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
                         group_db.set_stats_public(chat_id, is_public)
                         return JSONResponse({"ok": True, "is_stats_public": is_public}, headers=RESPONSE_HEADERS)
 
+                    if action == "toggle_game" and request.method == "POST":
+                        data = await request.json()
+                        enabled = bool(data.get("enabled", True))
+                        group_db.set_game_status(chat_id, enabled)
+                        return JSONResponse({"ok": True, "is_game_enabled": enabled}, headers=RESPONSE_HEADERS)
+
                     if action == "badwords":
                         if request.method == "POST":
                             data = await request.json()
@@ -221,6 +227,13 @@ def attach_fastapi_routes(app: Any):
             group_db.set_stats_public(chat_id, is_public)
             return make_json_response({"ok": True, "is_stats_public": is_public})
 
+        async def toggle_game(request: Request):
+            chat_id = int(request.path_params.get("chat_id", 0))
+            data = await request.json()
+            enabled = bool(data.get("enabled", True))
+            group_db.set_game_status(chat_id, enabled)
+            return make_json_response({"ok": True, "is_game_enabled": enabled})
+
         async def add_badword(request: Request):
             chat_id = int(request.path_params.get("chat_id", 0))
             data = await request.json()
@@ -283,6 +296,7 @@ def attach_fastapi_routes(app: Any):
             Route("/api/group/{chat_id}/toggle_censor", endpoint=toggle_censor, methods=["POST"]),
             Route("/api/group/{chat_id}/toggle_stats", endpoint=toggle_stats, methods=["POST"]),
             Route("/api/group/{chat_id}/set_stats_public", endpoint=set_stats_public, methods=["POST"]),
+            Route("/api/group/{chat_id}/toggle_game", endpoint=toggle_game, methods=["POST"]),
             Route("/api/group/{chat_id}/badwords", endpoint=add_badword, methods=["POST"]),
             Route("/api/group/{chat_id}/badwords", endpoint=del_badword, methods=["DELETE"]),
             Route("/api/group/{chat_id}/rules", endpoint=save_rules, methods=["POST"]),
@@ -298,6 +312,7 @@ def attach_fastapi_routes(app: Any):
             Route("/gradio_api/api/group/{chat_id}/toggle_censor", endpoint=toggle_censor, methods=["POST"]),
             Route("/gradio_api/api/group/{chat_id}/toggle_stats", endpoint=toggle_stats, methods=["POST"]),
             Route("/gradio_api/api/group/{chat_id}/set_stats_public", endpoint=set_stats_public, methods=["POST"]),
+            Route("/gradio_api/api/group/{chat_id}/toggle_game", endpoint=toggle_game, methods=["POST"]),
             Route("/gradio_api/api/group/{chat_id}/badwords", endpoint=add_badword, methods=["POST"]),
             Route("/gradio_api/api/group/{chat_id}/badwords", endpoint=del_badword, methods=["DELETE"]),
             Route("/gradio_api/api/group/{chat_id}/rules", endpoint=save_rules, methods=["POST"]),
@@ -377,6 +392,16 @@ def attach_aiohttp_routes(app: Any):
             is_public = bool(data.get("is_public", False))
             group_db.set_stats_public(chat_id, is_public)
             return web.json_response({"ok": True, "is_stats_public": is_public})
+
+        async def aiohttp_toggle_game(request):
+            try:
+                chat_id = int(request.match_info["chat_id"])
+                data = await request.json()
+            except Exception:
+                return web.json_response({"ok": False, "error": "Invalid payload"}, status=400)
+            enabled = bool(data.get("enabled", True))
+            group_db.set_game_status(chat_id, enabled)
+            return web.json_response({"ok": True, "is_game_enabled": enabled})
 
         async def aiohttp_add_badword(request):
             try:
@@ -459,6 +484,7 @@ def attach_aiohttp_routes(app: Any):
         app.router.add_post("/api/group/{chat_id}/toggle_censor", aiohttp_toggle_censor)
         app.router.add_post("/api/group/{chat_id}/toggle_stats", aiohttp_toggle_stats)
         app.router.add_post("/api/group/{chat_id}/set_stats_public", aiohttp_set_stats_public)
+        app.router.add_post("/api/group/{chat_id}/toggle_game", aiohttp_toggle_game)
         app.router.add_post("/api/group/{chat_id}/badwords", aiohttp_add_badword)
         app.router.add_delete("/api/group/{chat_id}/badwords", aiohttp_del_badword)
         app.router.add_post("/api/group/{chat_id}/rules", aiohttp_save_rules)

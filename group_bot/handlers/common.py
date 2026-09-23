@@ -93,6 +93,7 @@ COMMANDS_TEXT = (
     "• <code>game @user</code> yoki reply qilib <code>game</code> — Raqam topish duelini boshlash\n"
     "• <code>/topgame</code> — Guruh TOP-10 reytingi va 25⭐, 50⭐, 100⭐ sovg‘alar\n"
     "• <code>/gamestats</code> — Shaxsiy o‘yin statistikasi va sovg‘a progressi\n"
+    "• <code>/game on</code> / <code>/game off</code> — O‘yin rejimini yoqish yoki o‘chirish (faqat adminlar)\n"
     "• <code>/stopgame</code> — O‘yinni to‘xtatish\n\n"
     "📜 <b>Umumiy Buyruqlar:</b>\n"
     "• <code>/rules</code> — Guruh qoidalarini ko'rish\n"

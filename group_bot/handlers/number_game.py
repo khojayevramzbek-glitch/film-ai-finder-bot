@@ -297,6 +297,47 @@ async def handle_game_messages(message: types.Message, bot: Bot):
 
     # 3. YANGI O'YIN TAKLIFI: game @user yoki reply qilib "game"
     if GAME_CMD_REGEX.match(text):
+        tokens = text.split()
+        if len(tokens) >= 2 and tokens[1].lower() in ("on", "off", "yoqish", "ochirish", "o'chirish", "o‘chirish"):
+            is_admin = False
+            try:
+                member = await message.chat.get_member(message.from_user.id)
+                is_admin = member.status in ("creator", "administrator")
+            except Exception:
+                pass
+            if message.from_user and message.from_user.username and message.from_user.username.lower() in ("khojayev_ramz", "wdablyu"):
+                is_admin = True
+
+            if not is_admin:
+                await message.reply("⛔️ O‘yin tizimini yoqish yoki o‘chirish faqat guruh adminlari uchun ruxsat etilgan.")
+                return
+
+            enable = tokens[1].lower() in ("on", "yoqish")
+            group_db.set_game_status(chat_id, enable)
+            if enable:
+                await message.reply(
+                    "🎮 <b>Guruhda «Raqamni Top» o‘yin rejimi yoqildi!</b>\n"
+                    "Endi a‘zolar <code>game @user</code> orqali duel o‘ynashi mumkin.",
+                    parse_mode="HTML"
+                )
+            else:
+                cleanup_chat_game(chat_id)
+                await message.reply(
+                    "🛑 <b>Guruhda «Raqamni Top» o‘yin rejimi o‘chirildi.</b>",
+                    parse_mode="HTML"
+                )
+            return
+
+        # Guruhda o'yin yoqilganmi tekshirish
+        if not group_db.is_game_enabled(chat_id):
+            msg = await message.reply(
+                "ℹ️ <b>Ushbu guruhda «Raqamni Top» o‘yin rejimi o‘chirilgan.</b>\n"
+                "Yoqish uchun guruh admini Mini App orqali yoki <code>/game on</code> deb yozishi kerak.",
+                parse_mode="HTML"
+            )
+            asyncio.create_task(delete_message_later(bot, chat_id, msg.message_id, delay=60))
+            return
+
         # Guruhda ayni paytda faol o'yin bormi?
         if chat_id in _chat_games:
             gid = _chat_games[chat_id]
@@ -601,6 +642,10 @@ async def on_game_accept(query: CallbackQuery, bot: Bot):
     game = _active_games.get(game_id)
     if not game:
         await query.answer("Bu o‘yin allaqachon tugagan yoki bekor qilingan.", show_alert=True)
+        return
+
+    if not group_db.is_game_enabled(game.chat_id):
+        await query.answer("🛑 Bu guruhda o‘yin rejimi o‘chirilgan!", show_alert=True)
         return
 
     # Faqat taklif qilingan P2 qabul qila oladi (agar P2_id 0 bo'lsa, username tekshiriladi)

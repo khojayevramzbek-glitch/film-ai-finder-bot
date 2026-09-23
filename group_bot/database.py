@@ -91,6 +91,12 @@ def init_db():
             );
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_game_settings (
+                chat_id INTEGER PRIMARY KEY,
+                is_enabled INTEGER DEFAULT 1
+            );
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS chats (
                 chat_id INTEGER PRIMARY KEY,
                 title TEXT NOT NULL,
@@ -676,6 +682,32 @@ def set_bot_status(chat_id: int, enabled: bool):
         conn.commit()
 
 
+def is_game_enabled(chat_id: int) -> bool:
+    """Guruhda raqam topish o'yini yoqilganligini tekshirish (standart: yoqilgan - True)."""
+    with get_connection() as conn:
+        cur = conn.execute("SELECT is_enabled FROM chat_game_settings WHERE chat_id = ?", (chat_id,))
+        row = cur.fetchone()
+        if row is None:
+            return True
+        return bool(row["is_enabled"])
+
+
+def set_game_status(chat_id: int, enabled: bool):
+    """Guruhda o'yin tizimini yoqish yoki o'chirish."""
+    val = 1 if enabled else 0
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chat_game_settings (chat_id, is_enabled)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET is_enabled = ?
+            """,
+            (chat_id, val, val)
+        )
+        conn.commit()
+
+
+
 def get_rules(chat_id: int) -> str | None:
     """Guruh qoidalarini bazadan olish."""
     with get_connection() as conn:
@@ -736,11 +768,13 @@ def get_all_managed_groups() -> list[dict]:
                 COALESCE(cs.is_enabled, 1) AS is_censor_enabled,
                 COALESCE(st.is_enabled, 1) AS is_stats_enabled,
                 COALESCE(st.is_public, 0) AS is_stats_public,
+                COALESCE(gm.is_enabled, 1) AS is_game_enabled,
                 (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.chat_id AND m.created_at >= ?) AS msg_count_24h
             FROM chats c
             LEFT JOIN chat_bot_status b ON c.chat_id = b.chat_id
             LEFT JOIN chat_censor_settings cs ON c.chat_id = cs.chat_id
             LEFT JOIN chat_stats_settings st ON c.chat_id = st.chat_id
+            LEFT JOIN chat_game_settings gm ON c.chat_id = gm.chat_id
             WHERE c.chat_id < 0
             ORDER BY msg_count_24h DESC, c.updated_at DESC
         """, (cutoff_24h,))
@@ -759,6 +793,7 @@ def get_all_managed_groups() -> list[dict]:
                     "is_censor_enabled": is_censor_enabled(cid),
                     "is_stats_enabled": is_stats_enabled(cid),
                     "is_stats_public": is_stats_public(cid),
+                    "is_game_enabled": is_game_enabled(cid),
                     "msg_count_24h": 0
                 })
         return rows
@@ -877,6 +912,7 @@ def get_group_details(chat_id: int) -> dict:
     censor_enabled = is_censor_enabled(chat_id)
     stats_enabled = is_stats_enabled(chat_id)
     stats_public = is_stats_public(chat_id)
+    game_enabled = is_game_enabled(chat_id)
     bad_words = get_custom_bad_words(chat_id)
     rules = get_rules(chat_id) or ""
     settings = get_chat_full_settings(chat_id)
@@ -891,6 +927,7 @@ def get_group_details(chat_id: int) -> dict:
         "is_censor_enabled": censor_enabled,
         "is_stats_enabled": stats_enabled,
         "is_stats_public": stats_public,
+        "is_game_enabled": game_enabled,
         "bad_words": bad_words,
         "rules": rules,
         "settings": settings,

@@ -1278,13 +1278,24 @@
           </label>
         </div>
 
-        <div class="switch-row" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
+        <div class="switch-row">
           <div class="switch-info">
             <h3>👥 Statani Ommaga Ko'rsatish</h3>
             <p>Yoqilgan bo'lsa barcha oddiy a'zolar ham reytingni ko'ra oladi, o'chirilgan bo'lsa faqat adminlar ko'radi.</p>
           </div>
           <label class="toggle">
             <input type="checkbox" id="toggleStatsPublic">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="switch-row" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
+          <div class="switch-info">
+            <h3>🎮 «Raqamni Top» O‘yin Rejimi</h3>
+            <p>Guruhda <code>game @user</code> duellari, reyting (/topgame) va Telegram Gift sovg‘alari (25⭐, 50⭐, 100⭐) tizimini yoqish yoki to‘xtatish.</p>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggleGameStatus">
             <span class="slider"></span>
           </label>
         </div>
@@ -2041,6 +2052,9 @@
               <span class="group-badge ${g.is_censor_enabled ? 'active' : ''}">
                 ${g.is_censor_enabled ? '🤬 So\'kinish: Faol' : '🤬 So\'kinish: O\'chiq'}
               </span>
+              <span class="group-badge ${g.is_game_enabled !== false ? 'active' : 'inactive'}">
+                ${g.is_game_enabled !== false ? '🎮 O\'yin: Faol' : '🛑 O\'yin: O\'chiq'}
+              </span>
               <span class="group-badge">
                 💬 ${g.msg_count_24h || 0} xabar / 24h
               </span>
@@ -2166,6 +2180,7 @@
         document.getElementById('toggleCensor').checked = !!g.is_censor_enabled;
         document.getElementById('toggleStats').checked = !!g.is_stats_enabled;
         document.getElementById('toggleStatsPublic').checked = !!g.is_stats_public;
+        document.getElementById('toggleGameStatus').checked = (g.is_game_enabled !== false);
         document.getElementById('toggleLinkFilter').checked = !!currentSettings.link_filter_enabled;
         document.getElementById('toggleWelcome').checked = !!currentSettings.welcome_enabled;
 
@@ -2378,6 +2393,25 @@
           body: JSON.stringify({ is_public })
         });
         showToast(is_public ? "Stata barcha a'zolarga ko'rinadi" : "Stata faqat adminlarga ko'rinadi");
+      } catch (err) {
+        showToast("Xatolik yuz berdi", "❌");
+      }
+    });
+
+    document.getElementById('toggleGameStatus').addEventListener('change', async (e) => {
+      if (!requireCurrentChat()) {
+        e.target.checked = !e.target.checked;
+        return;
+      }
+      haptic('light');
+      const enabled = e.target.checked;
+      try {
+        await apiFetch(`/api/group/${currentChatId}/toggle_game`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled })
+        });
+        showToast(enabled ? "«Raqamni Top» o‘yin rejimi yoqildi!" : "«Raqamni Top» o‘yin rejimi o‘chirildi!", enabled ? "🎮" : "🛑");
       } catch (err) {
         showToast("Xatolik yuz berdi", "❌");
       }
