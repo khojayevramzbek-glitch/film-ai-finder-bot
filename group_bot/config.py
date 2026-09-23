@@ -18,7 +18,7 @@ if not BOT_TOKEN:
     raise ValueError("GROUP_BOT_TOKEN topilmadi! .env fayliga yoki Space Variables ga GROUP_BOT_TOKEN ni kiriting.")
 
 WEBAPP_URL_FILE = BASE_DIR / "webapp_url.txt"
-DEFAULT_WEBAPP_URL = "https://uchunrisk-film-ai-finder-bot.hf.space/gradio_api/webapp"
+DEFAULT_WEBAPP_URL = "https://uchunrisk-blizkiy-mini-app.static.hf.space"
 
 
 def get_webapp_url() -> str:
