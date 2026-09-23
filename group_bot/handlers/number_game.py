@@ -91,10 +91,40 @@ async def delete_message_later(bot: Bot, chat_id: int, message_id: int, delay: i
         pass
 
 
-GAME_CMD_REGEX = re.compile(r"^(?:/game(?:@\w+)?|game)(?:\s+.*)?$", re.IGNORECASE)
-STOP_CMD_REGEX = re.compile(r"^(?:/stopgame(?:@\w+)?|stopgame|/oyintugat(?:@\w+)?|oyintugat)$", re.IGNORECASE)
-TOPGAME_CMD_REGEX = re.compile(r"^(?:/topgame(?:@\w+)?|topgame|/gametop(?:@\w+)?|gametop)$", re.IGNORECASE)
-GAMESTATS_CMD_REGEX = re.compile(r"^(?:/gamestats(?:@\w+)?|gamestats|/mystats(?:@\w+)?|mystats)$", re.IGNORECASE)
+async def auto_expire_invite(bot: Bot, chat_id: int, game_id: str, delay: int = 60):
+    """60 soniya ichida qabul qilinmagan o'yin taklifini avtomatik bekor qilish."""
+    await asyncio.sleep(delay)
+    game = _active_games.get(game_id)
+    if game and game.status == "invited":
+        cleanup_chat_game(chat_id)
+        try:
+            if game.invite_msg_id:
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=game.invite_msg_id,
+                    text="⏱️ <b>«Raqamni Top» taklif vaqti tugadi!</b>\nRaqib 60 soniya ichida qabul qilmadi.",
+                    parse_mode="HTML"
+                )
+        except Exception:
+            pass
+
+
+GAME_CMD_REGEX = re.compile(
+    r"^(?:/game(?:@\w+)?|game|/oyin(?:@\w+)?|oyin|/o'yin(?:@\w+)?|o'yin|/o‘yin(?:@\w+)?|o‘yin|/oyun(?:@\w+)?|oyun)(?:\s+.*)?$",
+    re.IGNORECASE
+)
+STOP_CMD_REGEX = re.compile(
+    r"^(?:/stopgame(?:@\w+)?|stopgame|/oyintugat(?:@\w+)?|oyintugat|/stop(?:@\w+)?|stop)$",
+    re.IGNORECASE
+)
+TOPGAME_CMD_REGEX = re.compile(
+    r"^(?:/topgame(?:@\w+)?|topgame|/gametop(?:@\w+)?|gametop|/topoyinchilar(?:@\w+)?|topoyinchilar)$",
+    re.IGNORECASE
+)
+GAMESTATS_CMD_REGEX = re.compile(
+    r"^(?:/gamestats(?:@\w+)?|gamestats|/mystats(?:@\w+)?|mystats|/statam(?:@\w+)?|statam)$",
+    re.IGNORECASE
+)
 
 
 def is_game_related_message(message: types.Message) -> bool:
@@ -325,7 +355,7 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                 "👉 <code>game @username</code> shaklida yuboring.",
                 parse_mode="HTML"
             )
-            asyncio.create_task(delete_message_later(bot, chat_id, msg.message_id, delay=15))
+            asyncio.create_task(delete_message_later(bot, chat_id, msg.message_id, delay=60))
             return
 
         bot_info = await bot.get_me()
@@ -371,6 +401,7 @@ async def handle_game_messages(message: types.Message, bot: Bot):
             parse_mode="HTML"
         )
         new_game.invite_msg_id = invite_msg.message_id
+        asyncio.create_task(auto_expire_invite(bot, chat_id, game_id, delay=60))
         return
 
     # 4. O'YIN JARAYONIDAGI RAQAM TAXMINLARI:

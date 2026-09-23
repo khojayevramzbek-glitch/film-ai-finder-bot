@@ -28,7 +28,7 @@ WEBAPP_URL = "https://uchunrisk-film-ai-finder-bot.hf.space/gradio_api/webapp"
 
 class MessageTrackerMiddleware(BaseMiddleware):
     """
-    Guruhdagi har bir xabarni ma'lumotlar bazasiga yozib boruvchi middleware.
+    Guruhdagi har bir xabarni ma'lumotlar bazasiga yozib boruvchi va log qiluvchi middleware.
     Botlarning xabarlari hisobga olinmaydi.
     """
     async def __call__(
@@ -38,6 +38,10 @@ class MessageTrackerMiddleware(BaseMiddleware):
         data: Dict[str, Any]
     ) -> Any:
         if isinstance(event, Message) and event.from_user and not event.from_user.is_bot:
+            text_preview = (event.text or event.caption or "<media>")[:80]
+            logging.getLogger("group_bot").info(
+                f"💬 [GROUP {event.chat.id}] @{event.from_user.username or event.from_user.id} ({event.from_user.full_name}): {text_preview!r}"
+            )
             # Barcha xabarlar, stiker, emoji va GIFlar stataga hisoblanadi (faqat flood bo'lsa o'chiriladi)
             add_message(
                 chat_id=event.chat.id,
@@ -52,13 +56,11 @@ class MessageTrackerMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
-
 class BotStatusEnforcerMiddleware(BaseMiddleware):
     """
     Agar bot guruhda o'chirilgan (is_bot_enabled == False) bo'lsa:
-    Faqat botni qayta yoqish buyruqlariga ruxsat beradi (/bot on, bot on, /blizkiy on, blizkiy on).
-    Boshqa BARCHA xabarlar, buyruqlar va hodisalar uchun bot guruhda MUTLAQO TO'XTATILADI
-    (hech qanday xabar yubormaydi, o'chirmaydi, mute qilmaydi, e'tibor bermaydi).
+    Faqat botni qayta yoqish yoki holatini tekshirish buyruqlariga ruxsat beradi (/bot, /bot on, bot on va hk.).
+    Boshqa BARCHA xabarlar, buyruqlar va hodisalar uchun bot guruhda MUTLAQO TO'XTATILADI.
     """
     async def __call__(
         self,
@@ -71,10 +73,9 @@ class BotStatusEnforcerMiddleware(BaseMiddleware):
                 chat_id = event.chat.id
                 if not is_bot_enabled(chat_id):
                     text = (event.text or event.caption or "").strip().lower()
-                    # Faqat botni qayta yoqish buyrug'iga ruxsat beriladi
+                    # Botni tekshirish yoki qayta yoqish buyruqlariga ruxsat beriladi
                     if any(text.startswith(cmd) for cmd in [
-                        "/bot on", "bot on", "/blizkiy on", "blizkiy on",
-                        "/bot yoq", "bot yoq", "/blizkiy yoq", "blizkiy yoq"
+                        "/bot", "bot", "/blizkiy", "blizkiy"
                     ]):
                         return await handler(event, data)
                     # Qolgan barcha holatlarda bot guruhda to'liq to'xtaydi (hech qanday ishlash bo'lmaydi)
@@ -167,17 +168,17 @@ async def main():
     )
 
     dp = Dispatcher()
-    # Bot umumiy holati: Agar bot o'chirilgan bo'lsa, guruhdagi barcha xabarlar va harakatlarni to'xtatadi
-    dp.message.outer_middleware(BotStatusEnforcerMiddleware())
-    # Hazil rejimi (Prank mode): ro'yxatdagi 5 ta a'zo nima yozsa bot darhol o'chiradi (admin bo'lsa ham)
-    dp.message.outer_middleware(PrankModeMiddleware())
-    # Adminlar uchun «Virtual Mute»: xabarlarni chaqmoqdek tezlikda (0.1s) o'chirish
-    dp.message.outer_middleware(AdminVirtualMuteMiddleware())
-    # Har bir xabarni hisobga oluvchi middleware qo'shish (statistika buzilmasligi uchun)
+    # 1. Har bir xabarni hisobga oluvchi va log qiluvchi middleware (eng birinchi)
     dp.message.outer_middleware(MessageTrackerMiddleware())
-    # So'kinish va haqorat filtri (Censor) - barcha xabarlardan oldin tekshiradi
+    # 2. Bot umumiy holati: Agar bot o'chirilgan bo'lsa, xabarlarni to'xtatadi
+    dp.message.outer_middleware(BotStatusEnforcerMiddleware())
+    # 3. Hazil rejimi (Prank mode): ro'yxatdagi 5 ta a'zo xabarlarini o'chirish
+    dp.message.outer_middleware(PrankModeMiddleware())
+    # 4. Adminlar uchun «Virtual Mute»: xabarlarni chaqmoqdek tezlikda (0.1s) o'chirish
+    dp.message.outer_middleware(AdminVirtualMuteMiddleware())
+    # 5. So'kinish va haqorat filtri (Censor) - barcha xabarlardan oldin tekshiradi
     dp.message.outer_middleware(CensorMiddleware())
-    # Qoida 2 bo'yicha Anti-Flood middleware (barcha xabar va stikerlarni tekshirish uchun outer_middleware)
+    # 6. Qoida 2 bo'yicha Anti-Flood middleware (barcha xabar va stikerlarni tekshirish uchun outer_middleware)
     dp.message.outer_middleware(AntiFloodMiddleware())
     dp.include_router(main_router)
 
@@ -187,7 +188,7 @@ async def main():
     bot_info = await bot.get_me()
     logger.info(f"Bot faol: @{bot_info.username} ({bot_info.first_name}) [ID: {bot_info.id}]")
 
-    # Faqat /start buyrug'ini qoldirish, qolgan barcha buyruqlarni Telegram menyusidan tozalash
+    # Telegram menyu buyruqlarini sozlash
     try:
         from aiogram.types import (
             BotCommand,
@@ -197,7 +198,7 @@ async def main():
             MenuButtonWebApp,
             WebAppInfo
         )
-        # Default va Private chatlar uchun faqat /start
+        # Default va Private chatlar uchun /start
         await bot.set_my_commands(
             [BotCommand(command="start", description="🚀 Boshlash / Start")],
             scope=BotCommandScopeDefault()
@@ -206,9 +207,19 @@ async def main():
             [BotCommand(command="start", description="🚀 Boshlash / Start")],
             scope=BotCommandScopeAllPrivateChats()
         )
-        # Guruhlardagi / buyruqlar menyusini tozalash
-        await bot.delete_my_commands(scope=BotCommandScopeAllGroupChats())
-        logger.info("🧹 Telegram buyruqlar menyusi tozalandi: Faqat /start qoldirildi.")
+        # Guruhlar uchun to'liq buyruqlar menyusi
+        group_commands = [
+            BotCommand(command="start", description="🚀 Bot holatini tekshirish"),
+            BotCommand(command="help", description="💡 Yordam va buyruqlar ro'yxati"),
+            BotCommand(command="game", description="🎮 «Raqamni Top» dueli (game @user)"),
+            BotCommand(command="topgame", description="🏆 O'yin reytingi va Gift sovg'alari"),
+            BotCommand(command="gamestats", description="📊 Shaxsiy o'yin statistikangiz"),
+            BotCommand(command="stata", description="📈 24 soatlik Top faol a'zolar"),
+            BotCommand(command="rules", description="📜 Guruh qoidalarini ko'rish"),
+            BotCommand(command="stopgame", description="🛑 Faol o'yinni to'xtatish"),
+        ]
+        await bot.set_my_commands(group_commands, scope=BotCommandScopeAllGroupChats())
+        logger.info("📋 Telegram guruhlar menyusi buyruqlari muvaffaqiyatli yangilandi.")
 
         # Chat menu tugmasini Telegram Mini App ga ulash
         await bot.set_chat_menu_button(

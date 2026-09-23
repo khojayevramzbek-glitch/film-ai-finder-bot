@@ -196,15 +196,19 @@ async def check_stata_command(message: types.Message, bot: Bot):
     # 2.2. STATISTIKANI CHIQARISH (stata / Stata / /stata)
     # Agar guruhda statistika to'liq o'chirilgan bo'lsa:
     if not is_stats_enabled(chat_id):
-        if is_admin:
-            await message.reply(
-                "ℹ️ Ushbu guruhda statistika o'chirilgan. Yoqish uchun: <code>/stata on</code>",
-                parse_mode="HTML"
-            )
+        await message.reply(
+            "ℹ️ Ushbu guruhda statistika o‘chirilgan.\nYoqish uchun: <code>/stata on</code>",
+            parse_mode="HTML"
+        )
         return
 
-    # Agar ommaviy bo'lmasa va admin bo'lmasa -> jim turadi
+    # Agar ommaviy bo'lmasa va admin bo'lmasa:
     if not is_stats_public(chat_id) and not is_admin:
+        await message.reply(
+            "🔒 <b>Guruh statistikasi faqat adminlar uchun sozlangan.</b>\n"
+            "Barcha a‘zolarga ko‘rsatish uchun admin <code>/stata public</code> deb yozishi kerak.",
+            parse_mode="HTML"
+        )
         return
 
     chat_title = message.chat.title or "Guruh"

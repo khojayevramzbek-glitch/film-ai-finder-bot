@@ -1,3 +1,4 @@
+import re
 from aiogram import Router, types, Bot, F
 from aiogram.filters import Command
 from aiogram.enums import ChatType
@@ -88,6 +89,11 @@ COMMANDS_TEXT = (
     "😴 <b>AFK / Sleep Buyruqlari:</b>\n"
     "• <code>/sleep 1h [sabab]</code> — Uyqu yoki bandlik rejimini yoqish\n"
     "• <code>/wake</code> — Uyqu rejimidan chiqish\n\n"
+    "🎮 <b>«Raqamni Top» O‘yin Buyruqlari (Gift Sovg‘alari bilan):</b>\n"
+    "• <code>game @user</code> yoki reply qilib <code>game</code> — Raqam topish duelini boshlash\n"
+    "• <code>/topgame</code> — Guruh TOP-10 reytingi va 25⭐, 50⭐, 100⭐ sovg‘alar\n"
+    "• <code>/gamestats</code> — Shaxsiy o‘yin statistikasi va sovg‘a progressi\n"
+    "• <code>/stopgame</code> — O‘yinni to‘xtatish\n\n"
     "📜 <b>Umumiy Buyruqlar:</b>\n"
     "• <code>/rules</code> — Guruh qoidalarini ko'rish\n"
     "• <code>/setrules [matn]</code> — Yangi qoidalarni kiritish (faqat asosiy adminlar)\n"
@@ -166,7 +172,11 @@ RULES_TEXT = (
 )
 
 
-@router.message(Command("start"))
+START_CMD_REGEX = re.compile(r"^/?(?:start|boshlash)(?:@\w+)?$", re.IGNORECASE)
+HELP_CMD_REGEX = re.compile(r"^/?(?:help|yordam|yordamchi|помощь)(?:@\w+)?$", re.IGNORECASE)
+
+
+@router.message(lambda msg: bool(START_CMD_REGEX.match((msg.text or msg.caption or "").strip())))
 async def cmd_start(message: types.Message, bot: Bot):
     bot_info = await bot.get_me()
     bot_username = bot_info.username or "oken_sherda_bot"
@@ -186,7 +196,7 @@ async def cmd_start(message: types.Message, bot: Bot):
         )
 
 
-@router.message(Command("help"))
+@router.message(lambda msg: bool(HELP_CMD_REGEX.match((msg.text or msg.caption or "").strip())))
 async def cmd_help(message: types.Message, bot: Bot):
     bot_info = await bot.get_me()
     bot_username = bot_info.username or "oken_sherda_bot"
