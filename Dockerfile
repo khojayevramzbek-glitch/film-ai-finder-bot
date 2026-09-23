@@ -29,7 +29,7 @@ ENV HOME=/home/user \
 # Expose HTTP port for Hugging Face (7860) and cloud platforms
 EXPOSE 7860
 
-# Run bot
-CMD ["python", "run.py"]
+# Run bots cluster (Film bot + Group bot + WebApp)
+CMD ["python", "app.py"]
 
 

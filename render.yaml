@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: film-ai-finder-bot
+    env: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    region: frankfurt
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_BOT_TOKEN
+        sync: false
+      - key: GROUP_BOT_TOKEN
+        sync: false
+      - key: GEMINI_API_KEYS
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
+      - key: RUN_WEB_SERVER
+        value: "false"
