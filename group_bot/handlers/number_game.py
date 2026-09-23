@@ -12,11 +12,25 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQu
 from aiogram.exceptions import TelegramBadRequest
 
 try:
-    from group_bot.database import get_user_by_username, get_user_by_id
+    from group_bot.database import (
+        get_user_by_username, get_user_by_id,
+        record_game_result, get_user_game_stats, get_top_game_players
+    )
 except ImportError:
-    from database import get_user_by_username, get_user_by_id
+    from database import (
+        get_user_by_username, get_user_by_id,
+        record_game_result, get_user_game_stats, get_top_game_players
+    )
 
 router = Router()
+
+# Telegram Gift Sovg'alari Marralari:
+GIFT_MILESTONES = {
+    30: {"name": "Telegram Gift (Quti)", "stars": 25, "icon": "🎁"},
+    50: {"name": "Telegram Gift (Raketa)", "stars": 50, "icon": "🚀"},
+    100: {"name": "Telegram Gift (Oltin Kubok)", "stars": 100, "icon": "🏆"}
+}
+BOT_OWNER_NOTIFY_IDS = [8594505572, 7690283463]
 
 
 class GameState:
@@ -79,6 +93,8 @@ async def delete_message_later(bot: Bot, chat_id: int, message_id: int, delay: i
 
 GAME_CMD_REGEX = re.compile(r"^(?:/game|game)\b", re.IGNORECASE)
 STOP_CMD_REGEX = re.compile(r"^(?:/stopgame|stopgame|/oyintugat|oyintugat)\b", re.IGNORECASE)
+TOPGAME_CMD_REGEX = re.compile(r"^(?:/topgame|topgame|/gametop|gametop)\b", re.IGNORECASE)
+GAMESTATS_CMD_REGEX = re.compile(r"^(?:/gamestats|gamestats|/mystats|mystats)\b", re.IGNORECASE)
 
 
 @router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
@@ -88,6 +104,102 @@ async def handle_game_messages(message: types.Message, bot: Bot):
         return
 
     chat_id = message.chat.id
+    now = time.time()
+
+    # 1. TOP O'YINCHILAR REYTINGI: /topgame
+    if TOPGAME_CMD_REGEX.match(text):
+        top_list = get_top_game_players(chat_id, limit=10)
+        if not top_list:
+            await message.reply(
+                "🏆 <b>«Raqamni Top» Reytingi</b>\n\n"
+                "Guruhda hali hech kim o‘yinda g‘alaba qozonmagan.\n"
+                "Birinchi bo‘lib o‘ynash uchun: <code>game @user</code>",
+                parse_mode="HTML"
+            )
+            return
+
+        lines = ["🏆 <b>«Raqamni Top» Eng Kuchli O‘yinchilari (TOP-10):</b>\n"]
+        medals = ["🥇", "🥈", "🥉"] + [f"{i}." for i in range(4, 11)]
+
+        for idx, p in enumerate(top_list):
+            m_str = medals[idx] if idx < len(medals) else f"{idx+1}."
+            name = escape(p["full_name"])
+            uname = f" (@{p['username']})" if p.get("username") else ""
+            wins = p["wins"]
+            claimed = set(p.get("claimed_milestones", "").split(",")) if p.get("claimed_milestones") else set()
+
+            badges = []
+            if "30" in claimed:
+                badges.append("🎁 25⭐")
+            if "50" in claimed:
+                badges.append("🚀 50⭐")
+            if "100" in claimed:
+                badges.append("🏆 100⭐")
+            b_text = f" [{' | '.join(badges)}]" if badges else ""
+
+            lines.append(f"{m_str} <b>{name}</b>{uname} — <b>{wins} ta g‘alaba</b>{b_text}")
+
+        lines.append("\n🎁 <b>Telegram Gift Sovg‘alari:</b>")
+        lines.append("• 30 ta g‘alaba ➡️ 🎁 <b>25 ⭐ Gift</b> (Quti)")
+        lines.append("• 50 ta g‘alaba ➡️ 🚀 <b>50 ⭐ Gift</b> (Raketa)")
+        lines.append("• 100 ta g‘alaba ➡️ 🏆 <b>100 ⭐ Gift</b> (Kubok)")
+        lines.append("\n<i>O‘ynash uchun: <code>game @user</code></i>")
+
+        await message.reply("\n".join(lines), parse_mode="HTML")
+        return
+
+    # 2. SHAXSIY STATISTIKA VA PROGRESS: /gamestats
+    if GAMESTATS_CMD_REGEX.match(text):
+        u = message.from_user
+        stats = get_user_game_stats(chat_id, u.id)
+        if not stats or stats.get("total_games", 0) == 0:
+            await message.reply(
+                "🎮 Siz hali «Raqamni Top» o‘yinini o‘ynamagansiz.\n"
+                "O‘ynash uchun boshqa a’zoga reply qilib <code>game</code> deb yozing!",
+                parse_mode="HTML"
+            )
+            return
+
+        wins = stats.get("wins", 0)
+        losses = stats.get("losses", 0)
+        total = stats.get("total_games", 0)
+        win_rate = int((wins / total) * 100) if total > 0 else 0
+        claimed = set(stats.get("claimed_milestones", "").split(",")) if stats.get("claimed_milestones") else set()
+
+        if wins >= 100:
+            progress_text = "🎉 <b>Barcha sovg‘alar marrasiga (100+) erishilgan! 🏆</b>"
+        elif wins >= 50:
+            rem = 100 - wins
+            pct = min(100, int((wins / 100) * 100))
+            progress_text = f"Keyingi sovg‘a: 🏆 <b>100 ⭐ Gift</b> (yana {rem} ta g‘alaba)\nProgress: <b>{wins}/100</b> ({pct}%)"
+        elif wins >= 30:
+            rem = 50 - wins
+            pct = min(100, int((wins / 50) * 100))
+            progress_text = f"Keyingi sovg‘a: 🚀 <b>50 ⭐ Gift</b> (yana {rem} ta g‘alaba)\nProgress: <b>{wins}/50</b> ({pct}%)"
+        else:
+            rem = 30 - wins
+            pct = min(100, int((wins / 30) * 100))
+            progress_text = f"Keyingi sovg‘a: 🎁 <b>25 ⭐ Gift</b> (yana {rem} ta g‘alaba)\nProgress: <b>{wins}/30</b> ({pct}%)"
+
+        badges = []
+        if "30" in claimed:
+            badges.append("🎁 25⭐ Gift")
+        if "50" in claimed:
+            badges.append("🚀 50⭐ Gift")
+        if "100" in claimed:
+            badges.append("🏆 100⭐ Gift")
+        b_text = f"\n🎖️ <b>Yutilgan sovg‘alar:</b> {', '.join(badges)}" if badges else ""
+
+        resp = (
+            f"👤 <b>{escape(u.full_name)}</b> — O‘yin statistikasi:\n\n"
+            f"🏆 G‘alabalar: <b>{wins} ta</b>\n"
+            f"💀 Mag‘lubiyatlar: <b>{losses} ta</b>\n"
+            f"🎲 Jami o‘yinlar: <b>{total} ta</b>\n"
+            f"📊 G‘alaba ko‘rsatkichi: <b>{win_rate}%</b>{b_text}\n\n"
+            f"🎁 <b>Sovg‘a holati:</b>\n{progress_text}"
+        )
+        await message.reply(resp, parse_mode="HTML")
+        return
     now = time.time()
 
     # 1. Eski qotib qolgan o'yinlarni tozalash (5 daqiqa harakatsiz)
@@ -261,13 +373,52 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                     if guess_val == target_secret:
                         game.status = "finished"
                         cleanup_chat_game(chat_id)
+
+                        winner_wins, new_milestones = record_game_result(
+                            chat_id=chat_id,
+                            winner_id=game.p1_id,
+                            winner_name=game.p1_name,
+                            winner_uname=game.p1_username,
+                            loser_id=game.p2_id,
+                            loser_name=game.p2_name,
+                            loser_uname=game.p2_username
+                        )
+
                         await message.answer(
                             f"🏆 <b>BINGO! G‘ALABA!</b> 🎉🎉🎉\n\n"
-                            f"👑 <b>{escape(game.p1_name)}</b> raqib <b>{escape(game.p2_name)}</b> yashirgan <b>{guess_val}</b> raqamini <b>{game.p1_attempts} ta urinishda</b> topdi va mutlaq g‘olib bo‘ldi! 🥇\n\n"
+                            f"👑 <b>{escape(game.p1_name)}</b> raqib <b>{escape(game.p2_name)}</b> yashirgan <b>{guess_val}</b> raqamini <b>{game.p1_attempts} ta urinishda</b> topdi va mutlaq g‘olib bo‘ldi! 🥇\n"
+                            f"📊 Jami g‘alabalari: <b>{winner_wins} ta</b>\n"
                             f"<i>{escape(game.p1_name)}ning o‘z raqami esa: {game.p1_secret} edi.</i>\n"
                             f"Ajoyib intellektual jang bo‘ldi! 👏",
                             parse_mode="HTML"
                         )
+
+                        # Agar yangi sovg'a marrasiga yetgan bo'lsa (30, 50, 100)
+                        for m in new_milestones:
+                            gift = GIFT_MILESTONES.get(m)
+                            if gift:
+                                await message.answer(
+                                    f"🎁⭐ <b>DIQQAT! KATTA SOVG‘A YUTIB OLINDI!</b> ⭐🎁\n\n"
+                                    f"🎉 <b>{escape(game.p1_name)}</b> «Raqamni Top» o‘yinida <b>{m} ta g‘alaba</b> marrasiga yetdi va "
+                                    f"<b>{gift['icon']} {gift['stars']} ⭐ {gift['name']}</b> sovg‘asini yutib oldi! 🥳\n\n"
+                                    f"<i>G‘olibga sovg‘asi tez orada yuboriladi yoki @khojayev_ramz bilan bog‘laning!</i>",
+                                    parse_mode="HTML"
+                                )
+                                chat_title = message.chat.title or "Guruh"
+                                w_uname_str = f"@{game.p1_username}" if game.p1_username else "usernamesiz"
+                                admin_text = (
+                                    f"🚨 <b>YANGI TELEGRAM GIFT G‘OLIBI!</b> 🎁⭐\n\n"
+                                    f"👤 <b>G‘olib:</b> {escape(game.p1_name)} ({w_uname_str}) [ID: <code>{game.p1_id}</code>]\n"
+                                    f"💬 <b>Guruh:</b> {escape(chat_title)} [ID: <code>{chat_id}</code>]\n"
+                                    f"🏆 <b>G‘alabalar soni:</b> {winner_wins} ta\n"
+                                    f"🎁 <b>Yutuq:</b> {gift['icon']} <b>{gift['stars']} ⭐ {gift['name']}</b> ({m} ta g‘alaba marrasi)\n\n"
+                                    f"🔗 <a href='tg://user?id={game.p1_id}'>Foydalanuvchi profiliga o‘tish</a>"
+                                )
+                                for admin_id in BOT_OWNER_NOTIFY_IDS:
+                                    try:
+                                        await bot.send_message(chat_id=admin_id, text=admin_text, parse_mode="HTML")
+                                    except Exception:
+                                        pass
                         return
 
                     # Topolmadi: Tepa yoki Past
@@ -301,13 +452,52 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                     if guess_val == target_secret:
                         game.status = "finished"
                         cleanup_chat_game(chat_id)
+
+                        winner_wins, new_milestones = record_game_result(
+                            chat_id=chat_id,
+                            winner_id=game.p2_id,
+                            winner_name=game.p2_name,
+                            winner_uname=game.p2_username,
+                            loser_id=game.p1_id,
+                            loser_name=game.p1_name,
+                            loser_uname=game.p1_username
+                        )
+
                         await message.answer(
                             f"🏆 <b>BINGO! G‘ALABA!</b> 🎉🎉🎉\n\n"
-                            f"👑 <b>{escape(game.p2_name)}</b> raqib <b>{escape(game.p1_name)}</b> yashirgan <b>{guess_val}</b> raqamini <b>{game.p2_attempts} ta urinishda</b> topdi va mutlaq g‘olib bo‘ldi! 🥇\n\n"
+                            f"👑 <b>{escape(game.p2_name)}</b> raqib <b>{escape(game.p1_name)}</b> yashirgan <b>{guess_val}</b> raqamini <b>{game.p2_attempts} ta urinishda</b> topdi va mutlaq g‘olib bo‘ldi! 🥇\n"
+                            f"📊 Jami g‘alabalari: <b>{winner_wins} ta</b>\n"
                             f"<i>{escape(game.p2_name)}ning o‘z raqami esa: {game.p2_secret} edi.</i>\n"
                             f"Ajoyib intellektual jang bo‘ldi! 👏",
                             parse_mode="HTML"
                         )
+
+                        # Agar yangi sovg'a marrasiga yetgan bo'lsa (30, 50, 100)
+                        for m in new_milestones:
+                            gift = GIFT_MILESTONES.get(m)
+                            if gift:
+                                await message.answer(
+                                    f"🎁⭐ <b>DIQQAT! KATTA SOVG‘A YUTIB OLINDI!</b> ⭐🎁\n\n"
+                                    f"🎉 <b>{escape(game.p2_name)}</b> «Raqamni Top» o‘yinida <b>{m} ta g‘alaba</b> marrasiga yetdi va "
+                                    f"<b>{gift['icon']} {gift['stars']} ⭐ {gift['name']}</b> sovg‘asini yutib oldi! 🥳\n\n"
+                                    f"<i>G‘olibga sovg‘asi tez orada yuboriladi yoki @khojayev_ramz bilan bog‘laning!</i>",
+                                    parse_mode="HTML"
+                                )
+                                chat_title = message.chat.title or "Guruh"
+                                w_uname_str = f"@{game.p2_username}" if game.p2_username else "usernamesiz"
+                                admin_text = (
+                                    f"🚨 <b>YANGI TELEGRAM GIFT G‘OLIBI!</b> 🎁⭐\n\n"
+                                    f"👤 <b>G‘olib:</b> {escape(game.p2_name)} ({w_uname_str}) [ID: <code>{game.p2_id}</code>]\n"
+                                    f"💬 <b>Guruh:</b> {escape(chat_title)} [ID: <code>{chat_id}</code>]\n"
+                                    f"🏆 <b>G‘alabalar soni:</b> {winner_wins} ta\n"
+                                    f"🎁 <b>Yutuq:</b> {gift['icon']} <b>{gift['stars']} ⭐ {gift['name']}</b> ({m} ta g‘alaba marrasi)\n\n"
+                                    f"🔗 <a href='tg://user?id={game.p2_id}'>Foydalanuvchi profiliga o‘tish</a>"
+                                )
+                                for admin_id in BOT_OWNER_NOTIFY_IDS:
+                                    try:
+                                        await bot.send_message(chat_id=admin_id, text=admin_text, parse_mode="HTML")
+                                    except Exception:
+                                        pass
                         return
 
                     # Topolmadi: Tepa yoki Past

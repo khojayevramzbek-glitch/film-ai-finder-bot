@@ -116,6 +116,20 @@ def init_db():
             );
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS game_stats (
+                chat_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                full_name TEXT NOT NULL,
+                username TEXT,
+                wins INTEGER DEFAULT 0,
+                losses INTEGER DEFAULT 0,
+                total_games INTEGER DEFAULT 0,
+                claimed_milestones TEXT DEFAULT '',
+                updated_at TIMESTAMP NOT NULL,
+                PRIMARY KEY (chat_id, user_id)
+            );
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_settings (
                 chat_id INTEGER PRIMARY KEY,
                 censor_mute_seconds INTEGER DEFAULT 15,
@@ -1015,6 +1029,99 @@ def get_admin_virtual_mute_remaining(chat_id: int, user_id: int) -> int | None:
     if until_ts and until_ts > now:
         return int(until_ts - now)
     return None
+
+
+# -------------------------------------------------------------
+# «Raqamni Top» O'yin Statistikasi va Sovg'alar Baza Funksiyalari
+# -------------------------------------------------------------
+
+def record_game_result(
+    chat_id: int,
+    winner_id: int,
+    winner_name: str,
+    winner_uname: str | None,
+    loser_id: int,
+    loser_name: str,
+    loser_uname: str | None
+) -> tuple[int, list[int]]:
+    """
+    O'yin natijasini bazaga yozish:
+    G'olibga +1 g'alaba, mag'lubga +1 mag'lubiyat.
+    Agar g'olib yangi marraga (30, 50, 100) yetgan bo'lsa, uni qaytaradi.
+    Qaytaradi: (winner_wins, new_milestones_list)
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    new_milestones = []
+
+    with get_connection() as conn:
+        # 1. G'olibning joriy statistikasini olish
+        cur = conn.execute("SELECT wins, claimed_milestones FROM game_stats WHERE chat_id = ? AND user_id = ?", (chat_id, winner_id))
+        row = cur.fetchone()
+        if row:
+            curr_wins = row["wins"] + 1
+            claimed = set(row["claimed_milestones"].split(",")) if row["claimed_milestones"] else set()
+        else:
+            curr_wins = 1
+            claimed = set()
+
+        # Marraga erishilganmi (30, 50, 100)?
+        for m in (30, 50, 100):
+            if curr_wins >= m and str(m) not in claimed:
+                new_milestones.append(m)
+                claimed.add(str(m))
+
+        claimed_str = ",".join(sorted(claimed, key=lambda x: int(x) if x.isdigit() else 0))
+
+        # G'olibni yangilash
+        conn.execute("""
+            INSERT INTO game_stats (chat_id, user_id, full_name, username, wins, losses, total_games, claimed_milestones, updated_at)
+            VALUES (?, ?, ?, ?, 1, 0, 1, ?, ?)
+            ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                full_name = excluded.full_name,
+                username = excluded.username,
+                wins = wins + 1,
+                total_games = total_games + 1,
+                claimed_milestones = excluded.claimed_milestones,
+                updated_at = excluded.updated_at
+        """, (chat_id, winner_id, winner_name, winner_uname, claimed_str, now))
+
+        # Mag'lubni yangilash
+        conn.execute("""
+            INSERT INTO game_stats (chat_id, user_id, full_name, username, wins, losses, total_games, claimed_milestones, updated_at)
+            VALUES (?, ?, ?, ?, 0, 1, 1, '', ?)
+            ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                full_name = excluded.full_name,
+                username = excluded.username,
+                losses = losses + 1,
+                total_games = total_games + 1,
+                updated_at = excluded.updated_at
+        """, (chat_id, loser_id, loser_name, loser_uname, now))
+
+        conn.commit()
+        return curr_wins, new_milestones
+
+
+def get_user_game_stats(chat_id: int, user_id: int) -> dict | None:
+    """Foydalanuvchining o'yin statistikasini olish."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            "SELECT full_name, username, wins, losses, total_games, claimed_milestones FROM game_stats WHERE chat_id = ? AND user_id = ?",
+            (chat_id, user_id)
+        )
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+        return None
+
+
+def get_top_game_players(chat_id: int, limit: int = 10) -> list[dict]:
+    """Guruhdagi eng ko'p g'alaba qozongan o'yinchilar TOP reytingi."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            "SELECT user_id, full_name, username, wins, losses, total_games, claimed_milestones FROM game_stats WHERE chat_id = ? AND wins > 0 ORDER BY wins DESC LIMIT ?",
+            (chat_id, limit)
+        )
+        return [dict(row) for row in cur.fetchall()]
 
 
 
