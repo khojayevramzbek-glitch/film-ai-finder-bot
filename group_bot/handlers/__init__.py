@@ -12,7 +12,6 @@ from .number_game import router as number_game_router
 
 main_router = Router()
 main_router.include_router(bot_control_router)
-main_router.include_router(number_game_router)
 main_router.include_router(common_router)
 main_router.include_router(welcome_router)
 main_router.include_router(rules_router)
@@ -20,5 +19,6 @@ main_router.include_router(stats_router)
 main_router.include_router(moderation_router)
 main_router.include_router(sleep_router)
 main_router.include_router(censor_router)
+main_router.include_router(number_game_router)
 main_router.include_router(group_events_router)
 

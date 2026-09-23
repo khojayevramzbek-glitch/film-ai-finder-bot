@@ -91,13 +91,50 @@ async def delete_message_later(bot: Bot, chat_id: int, message_id: int, delay: i
         pass
 
 
-GAME_CMD_REGEX = re.compile(r"^(?:/game|game)\b", re.IGNORECASE)
-STOP_CMD_REGEX = re.compile(r"^(?:/stopgame|stopgame|/oyintugat|oyintugat)\b", re.IGNORECASE)
-TOPGAME_CMD_REGEX = re.compile(r"^(?:/topgame|topgame|/gametop|gametop)\b", re.IGNORECASE)
-GAMESTATS_CMD_REGEX = re.compile(r"^(?:/gamestats|gamestats|/mystats|mystats)\b", re.IGNORECASE)
+GAME_CMD_REGEX = re.compile(r"^(?:/game(?:@\w+)?|game)(?:\s+.*)?$", re.IGNORECASE)
+STOP_CMD_REGEX = re.compile(r"^(?:/stopgame(?:@\w+)?|stopgame|/oyintugat(?:@\w+)?|oyintugat)$", re.IGNORECASE)
+TOPGAME_CMD_REGEX = re.compile(r"^(?:/topgame(?:@\w+)?|topgame|/gametop(?:@\w+)?|gametop)$", re.IGNORECASE)
+GAMESTATS_CMD_REGEX = re.compile(r"^(?:/gamestats(?:@\w+)?|gamestats|/mystats(?:@\w+)?|mystats)$", re.IGNORECASE)
 
 
-@router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
+def is_game_related_message(message: types.Message) -> bool:
+    """
+    Faqatgina o'yinga tegishli xabarlarni filtrlash:
+    1. Buyruqlar: /topgame, /gamestats, /stopgame, game @user, /game
+    2. Faol o'yindagi raqam taxminlari (faqat o'ynayotgan o'yinchilarning raqamli xabarlari)
+    Bu filtr boshqa guruh xabarlari (moderatsiya, qoidalar, oddiy gaplar) to'xtab qolmasligi uchun shart!
+    """
+    text = (message.text or message.caption or "").strip()
+    if not text:
+        return False
+
+    if (
+        TOPGAME_CMD_REGEX.match(text)
+        or GAMESTATS_CMD_REGEX.match(text)
+        or STOP_CMD_REGEX.match(text)
+        or GAME_CMD_REGEX.match(text)
+    ):
+        return True
+
+    chat_id = message.chat.id
+    if chat_id in _chat_games:
+        gid = _chat_games[chat_id]
+        game = _active_games.get(gid)
+        if game:
+            if time.time() - game.last_activity > 300:
+                cleanup_chat_game(chat_id)
+                return False
+            if game.status == "playing" and text.isdigit():
+                if message.from_user and message.from_user.id in (game.p1_id, game.p2_id):
+                    return True
+
+    return False
+
+
+@router.message(
+    F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}),
+    is_game_related_message
+)
 async def handle_game_messages(message: types.Message, bot: Bot):
     text = (message.text or message.caption or "").strip()
     if not text:
