@@ -10,7 +10,8 @@ from aiogram.exceptions import TelegramBadRequest
 from group_bot.database import (
     add_warn, get_warns, remove_warn, reset_warns, 
     get_user_24h_stat, get_user_by_username, get_user_by_id,
-    get_chat_full_settings, format_duration
+    get_chat_full_settings, format_duration,
+    set_admin_virtual_mute, remove_admin_virtual_mute, is_admin_virtually_muted
 )
 
 router = Router()
@@ -35,6 +36,24 @@ async def is_admin_or_allowed(chat_id: int, user: types.User | TargetUser, bot: 
     try:
         member = await bot.get_chat_member(chat_id, user.id)
         return member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]
+    except Exception:
+        return False
+
+
+async def is_group_admin(chat_id: int, user_id: int, bot: Bot) -> bool:
+    """Foydalanuvchi guruh adminimi yoki egasimi."""
+    try:
+        member = await bot.get_chat_member(chat_id, user_id)
+        return member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]
+    except Exception:
+        return False
+
+
+async def is_group_creator(chat_id: int, user_id: int, bot: Bot) -> bool:
+    """Foydalanuvchi guruh asosiy egasimi (Creator)."""
+    try:
+        member = await bot.get_chat_member(chat_id, user_id)
+        return member.status == ChatMemberStatus.CREATOR
     except Exception:
         return False
 
@@ -216,8 +235,19 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
             await message.reply(err, parse_mode="HTML")
             return
 
-        if target_user.id == bot.id or await is_admin_or_allowed(message.chat.id, target_user, bot):
-            await message.reply("❌ Admin yoki botni cheklab bo'lmaydi!")
+        # 1. Botning o'zini cheklab bo'lmaydi
+        if target_user.id == bot.id:
+            await message.reply("❌ Botni cheklab bo'lmaydi!")
+            return
+
+        # 2. Bot egalari mutlaqo daxlsiz (@khojayev_ramz, @wdablyu)
+        if target_user.id in ALLOWED_USER_IDS or (target_user.username and target_user.username.lower() in ALLOWED_USERNAMES):
+            await message.reply("❌ Bot egasini cheklab bo'lmaydi!")
+            return
+
+        # 3. Guruh asosiy egasi (Creator) daxlsiz
+        if await is_group_creator(message.chat.id, target_user.id, bot):
+            await message.reply("❌ Guruh asosiy egasini (Creator) cheklab bo'lmaydi!")
             return
 
         # Vaqtni aniqlash (qolgan argumentlar orasidan yoki guruh sozlamasidagi vaqt)
@@ -245,8 +275,20 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
                     found_time = True
                     break
 
-        # Telegram API: agar 30 soniyadan kam bo'lsa, Telegram "umrbod mute" deb qabul qiladi.
-        # Shuning uchun kamida 35s beramiz va asyncio taymer bilan muddat tugashi bilan ochamiz.
+        target_is_admin = await is_group_admin(message.chat.id, target_user.id, bot)
+        u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
+
+        # Agar nishondagi foydalanuvchi ADMIN bo'lsa -> Virtual Mute (0.1s tezkor o'chirish)
+        if target_is_admin:
+            set_admin_virtual_mute(message.chat.id, target_user.id, total_seconds)
+            await message.answer(
+                f"🔇 <b>Admin {escape(target_user.full_name)}</b>{u_tag} <b>{duration_text}ga</b> Mute qilindi (Virtual Mute)!\n"
+                f"<i>(Jazo davomida admin yozgan barcha xabarlar 0.1s ichida avtomatik o'chirib tashlanadi)</i>",
+                parse_mode="HTML"
+            )
+            return
+
+        # Agar oddiy a'zo bo'lsa -> Telegram API orqali restrictChatMember
         until_date = datetime.now(timezone.utc) + timedelta(seconds=max(total_seconds, 35))
 
         try:
@@ -266,13 +308,17 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
             if total_seconds < 35:
                 asyncio.create_task(unmute_after(bot, message.chat.id, target_user.id, delay=total_seconds))
 
-            u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
             await message.answer(
                 f"🔇 Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} <b>{duration_text}ga</b> yozishdan cheklandi (Mute).",
                 parse_mode="HTML"
             )
-        except TelegramBadRequest as e:
-            await message.reply(f"⚠️ Xatolik: Botda tegishli admin huquqlari yo'q ({e.message})")
+        except TelegramBadRequest:
+            # Agar Telegram API ruxsat bermasa -> Virtual Mute fallback
+            set_admin_virtual_mute(message.chat.id, target_user.id, total_seconds)
+            await message.answer(
+                f"🔇 <b>{escape(target_user.full_name)}</b>{u_tag} <b>{duration_text}ga</b> Mute qilindi (Virtual Mute).",
+                parse_mode="HTML"
+            )
         return
 
     # 2. UNMUTE: /unmute, unmute, анмут
@@ -282,6 +328,12 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
             await message.reply(err, parse_mode="HTML")
             return
 
+        # Virtual Mutedan tozalash (agar bor bo'lsa)
+        was_virtually_muted = is_admin_virtually_muted(message.chat.id, target_user.id)
+        if was_virtually_muted:
+            remove_admin_virtual_mute(message.chat.id, target_user.id)
+
+        # Telegram API orqali ham cheklovni olib tashlash
         try:
             permissions = ChatPermissions(
                 can_send_messages=True,
@@ -295,13 +347,14 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
                 user_id=target_user.id,
                 permissions=permissions
             )
-            u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
-            await message.answer(
-                f"🔊 Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} uchun yozish cheklovi olib tashlandi.",
-                parse_mode="HTML"
-            )
-        except TelegramBadRequest as e:
-            await message.reply(f"⚠️ Xatolik: {e.message}")
+        except TelegramBadRequest:
+            pass
+
+        u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
+        await message.answer(
+            f"🔊 <b>{escape(target_user.full_name)}</b>{u_tag} uchun yozish cheklovi olib tashlandi (Unmute).",
+            parse_mode="HTML"
+        )
         return
 
     # 3. WARN: /warn, warn, варн

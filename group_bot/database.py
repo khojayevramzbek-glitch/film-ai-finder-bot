@@ -1,4 +1,5 @@
 import sqlite3
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -102,6 +103,16 @@ def init_db():
                 username TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (chat_id, username)
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS admin_virtual_mutes (
+                chat_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                until_ts REAL NOT NULL,
+                duration_seconds INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (chat_id, user_id)
             );
         """)
         conn.execute("""
@@ -930,6 +941,80 @@ def is_prank_user(chat_id: int, username: str | None) -> bool:
     with get_connection() as conn:
         cur = conn.execute("SELECT 1 FROM prank_users WHERE chat_id = ? AND username = ?", (chat_id, clean_username))
         return cur.fetchone() is not None
+
+
+# -------------------------------------------------------------
+# Adminlar uchun «Virtual Mute» Kesh va Baza funksiyalari
+# -------------------------------------------------------------
+_admin_virtual_mutes_cache: dict[tuple[int, int], float] = {}
+
+
+def init_admin_virtual_mutes_cache():
+    """Bot ishga tushganda faol virtual mutelarni xotiraga (RAM) yuklash."""
+    now = time.time()
+    try:
+        with get_connection() as conn:
+            cur = conn.execute("SELECT chat_id, user_id, until_ts FROM admin_virtual_mutes WHERE until_ts > ?", (now,))
+            _admin_virtual_mutes_cache.clear()
+            for row in cur.fetchall():
+                _admin_virtual_mutes_cache[(int(row["chat_id"]), int(row["user_id"]))] = float(row["until_ts"])
+    except Exception:
+        _admin_virtual_mutes_cache.clear()
+
+
+def set_admin_virtual_mute(chat_id: int, user_id: int, duration_seconds: int) -> float:
+    """Adminni virtual mute qilish va bazaga hamda xotiraga saqlash."""
+    until_ts = time.time() + duration_seconds
+    _admin_virtual_mutes_cache[(chat_id, user_id)] = until_ts
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO admin_virtual_mutes (chat_id, user_id, until_ts, duration_seconds)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                until_ts = excluded.until_ts,
+                duration_seconds = excluded.duration_seconds,
+                created_at = CURRENT_TIMESTAMP
+        """, (chat_id, user_id, until_ts, duration_seconds))
+        conn.commit()
+    return until_ts
+
+
+def remove_admin_virtual_mute(chat_id: int, user_id: int) -> bool:
+    """Adminni virtual mutedan chiqarish."""
+    _admin_virtual_mutes_cache.pop((chat_id, user_id), None)
+    with get_connection() as conn:
+        conn.execute("DELETE FROM admin_virtual_mutes WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
+        conn.commit()
+    return True
+
+
+def is_admin_virtually_muted(chat_id: int, user_id: int) -> bool:
+    """Admin ayni damda virtual mutedami (O(1) mikrosoniya tekshiruv)."""
+    now = time.time()
+    until_ts = _admin_virtual_mutes_cache.get((chat_id, user_id))
+    if until_ts is not None:
+        if now < until_ts:
+            return True
+        else:
+            # Vaqti tugagan, kesh va bazadan tozalash
+            _admin_virtual_mutes_cache.pop((chat_id, user_id), None)
+            try:
+                with get_connection() as conn:
+                    conn.execute("DELETE FROM admin_virtual_mutes WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
+                    conn.commit()
+            except Exception:
+                pass
+            return False
+    return False
+
+
+def get_admin_virtual_mute_remaining(chat_id: int, user_id: int) -> int | None:
+    """Adminning qolgan mute soniyalarini olish."""
+    now = time.time()
+    until_ts = _admin_virtual_mutes_cache.get((chat_id, user_id))
+    if until_ts and until_ts > now:
+        return int(until_ts - now)
+    return None
 
 
 

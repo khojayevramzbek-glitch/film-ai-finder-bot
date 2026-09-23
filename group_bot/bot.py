@@ -16,7 +16,8 @@ from aiogram.client.default import DefaultBotProperties
 from group_bot.config import BOT_TOKEN
 from group_bot.database import (
     init_db, add_message, cleanup_old_messages, is_bot_enabled,
-    save_chat_title, is_prank_user, delete_message_record
+    save_chat_title, is_prank_user, delete_message_record,
+    init_admin_virtual_mutes_cache, is_admin_virtually_muted
 )
 from group_bot.handlers import main_router
 from group_bot.handlers.antiflood import AntiFloodMiddleware
@@ -113,6 +114,39 @@ class PrankModeMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
+class AdminVirtualMuteMiddleware(BaseMiddleware):
+    """
+    Adminlar uchun «Virtual Mute»:
+    Agar admin virtual mutedagi ro'yxatda bo'lsa, u yozgan har qanday
+    xabar, stiker, GIF, rasm yoki media 0.1 soniya (chaqmoqdek tezlikda)
+    o'chirib tashlanadi va statistika toza saqlanadi.
+    Bot egalari mutlaqo daxlsiz.
+    """
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        if isinstance(event, Message) and event.chat:
+            if event.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
+                if event.from_user:
+                    uid = event.from_user.id
+                    uname = (event.from_user.username or "").lower()
+                    # Bot egalari daxlsiz
+                    if uid in {8594505572, 7690283463} or uname in {"khojayev_ramz", "wdablyu"}:
+                        return await handler(event, data)
+
+                    if is_admin_virtually_muted(event.chat.id, uid):
+                        try:
+                            await event.delete()
+                            delete_message_record(event.chat.id, event.message_id)
+                        except Exception:
+                            pass
+                        return
+        return await handler(event, data)
+
+
 async def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -124,6 +158,7 @@ async def main():
     logger.info("Ma'lumotlar bazasi tayyorlanmoqda...")
     init_db()
     cleanup_old_messages(days=3)
+    init_admin_virtual_mutes_cache()
 
     logger.info("Bot ishga tushirilmoqda...")
     bot = Bot(
@@ -136,6 +171,8 @@ async def main():
     dp.message.outer_middleware(BotStatusEnforcerMiddleware())
     # Hazil rejimi (Prank mode): ro'yxatdagi 5 ta a'zo nima yozsa bot darhol o'chiradi (admin bo'lsa ham)
     dp.message.outer_middleware(PrankModeMiddleware())
+    # Adminlar uchun «Virtual Mute»: xabarlarni chaqmoqdek tezlikda (0.1s) o'chirish
+    dp.message.outer_middleware(AdminVirtualMuteMiddleware())
     # Har bir xabarni hisobga oluvchi middleware qo'shish (statistika buzilmasligi uchun)
     dp.message.outer_middleware(MessageTrackerMiddleware())
     # So'kinish va haqorat filtri (Censor) - barcha xabarlardan oldin tekshiradi
