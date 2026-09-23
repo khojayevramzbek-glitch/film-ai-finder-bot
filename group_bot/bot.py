@@ -248,6 +248,7 @@ async def main():
             BotCommand(command="gamestats", description="📊 Shaxsiy o'yin statistikangiz"),
             BotCommand(command="stata", description="📈 24 soatlik Top faol a'zolar"),
             BotCommand(command="rules", description="📜 Guruh qoidalarini ko'rish"),
+            BotCommand(command="setlink", description="🔗 Guruh silkasini sozlash (/setlink <link>)"),
             BotCommand(command="stopgame", description="🛑 Faol o'yinni to'xtatish"),
         ]
         await bot.set_my_commands(group_commands, scope=BotCommandScopeAllGroupChats())

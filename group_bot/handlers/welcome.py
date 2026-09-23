@@ -127,8 +127,26 @@ async def send_welcome_card(
         InlineKeyboardButton(text="📜 Guruh Qoidalari", callback_data=f"welcome_rules:{chat_id}")
     ]
 
-    if chat_username:
-        action_row.append(InlineKeyboardButton(text="🔗 Guruh Silkasi", url=f"https://t.me/{chat_username}"))
+    # Guruh silkasini aniqlash (bazadan, username yoki bot taklif havolasidan)
+    group_link = None
+    try:
+        from group_bot.database import get_chat_invite_link, set_chat_invite_link
+        group_link = get_chat_invite_link(chat_id)
+    except Exception:
+        pass
+
+    if not group_link:
+        if chat_username:
+            group_link = f"https://t.me/{chat_username.lstrip('@')}"
+        else:
+            try:
+                group_link = await bot.export_chat_invite_link(chat_id)
+                set_chat_invite_link(chat_id, group_link)
+            except Exception:
+                pass
+
+    if group_link and str(group_link).strip().startswith("http"):
+        action_row.append(InlineKeyboardButton(text="🔗 Guruh Silkasi", url=str(group_link).strip()))
 
     inline_keyboard.append(action_row)
     markup = InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
@@ -264,6 +282,52 @@ async def cmd_test_welcome(message: types.Message, bot: Bot):
         users=[caller],
         is_test=True,
         reply_to_msg_id=message.message_id
+    )
+
+
+@router.message(Command("setlink", "qoshlink", "link"))
+async def cmd_set_link(message: types.Message, bot: Bot):
+    """Guruh taklif havolasini (silkasi) sozlash buyrug'i."""
+    if message.chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        await message.reply("ℹ️ Ushbu buyruq faqat guruhlarda ishlaydi!")
+        return
+
+    from group_bot.database import is_user_authorized_for_chat, set_chat_invite_link
+    user_id = message.from_user.id if message.from_user else 0
+
+    is_admin = False
+    try:
+        cm = await message.chat.get_member(user_id)
+        if cm.status in ("creator", "administrator"):
+            is_admin = True
+    except Exception:
+        pass
+
+    if not is_admin and not is_user_authorized_for_chat(message.chat.id, user_id):
+        await message.reply("⛔️ Bu buyruq faqat guruh adminlari yoki bot egasi uchun!")
+        return
+
+    parts = message.text.strip().split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply(
+            "ℹ️ <b>Guruh silkasini kiritish uchun havola bilan birga yozing:</b>\n\n"
+            "Misol: <code>/setlink https://t.me/+PM3yYk0OwA04MDJi</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    new_link = parts[1].strip()
+    if not (new_link.startswith("https://t.me/") or new_link.startswith("http://t.me/")):
+        await message.reply("⚠️ Havola noto‘g‘ri formatda! <code>https://t.me/...</code> ko‘rinishida bo‘lishi shart.", parse_mode="HTML")
+        return
+
+    set_chat_invite_link(message.chat.id, new_link)
+    await message.reply(
+        f"✅ <b>Guruh silkasi muvaffaqiyatli saqlandi!</b>\n\n"
+        f"🔗 <b>Havola:</b> {new_link}\n\n"
+        f"<i>Endi yangi a'zolar kirganda yoki /testwelcome qilinganda «🔗 Guruh Silkasi» tugmasi ushbu havolaga yo‘naltiradi.</i>",
+        parse_mode="HTML",
+        disable_web_page_preview=True
     )
 
 

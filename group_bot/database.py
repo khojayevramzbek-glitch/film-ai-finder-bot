@@ -835,6 +835,35 @@ def save_chat_full_info(
         conn.commit()
 
 
+def get_chat_invite_link(chat_id: int) -> str | None:
+    """Guruh taklif havolasini (invite_link) olish."""
+    with get_connection() as conn:
+        cur = conn.execute("SELECT invite_link, username FROM chats WHERE chat_id = ?", (chat_id,))
+        row = cur.fetchone()
+        if row:
+            if row["invite_link"] and str(row["invite_link"]).strip().startswith("http"):
+                return str(row["invite_link"]).strip()
+            if row["username"]:
+                return f"https://t.me/{str(row['username']).lstrip('@').strip()}"
+    return None
+
+
+def set_chat_invite_link(chat_id: int, invite_link: str):
+    """Guruh taklif havolasini bazaga yozish."""
+    now_utc = datetime.now(timezone.utc)
+    link_clean = invite_link.strip() if invite_link else None
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chats (chat_id, invite_link, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET invite_link = excluded.invite_link, updated_at = excluded.updated_at
+            """,
+            (chat_id, link_clean, now_utc)
+        )
+        conn.commit()
+
+
 def record_chat_authorized_user(chat_id: int, user_id: int, is_admin: bool = True):
     """Foydalanuvchini guruh admini / ruxsat etilgan foydalanuvchisi sifatida belgilash."""
     now_utc = datetime.now(timezone.utc)
