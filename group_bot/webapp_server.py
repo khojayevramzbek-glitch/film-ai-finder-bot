@@ -10,30 +10,31 @@ WEBAPP_HTML_PATH = Path(__file__).resolve().parent / "webapp" / "index.html"
 
 
 def get_webapp_html() -> str:
-    """Returns the Mini App HTML content with pre-populated initial groups data."""
+    """Returns the pure Mini App HTML content (groups are fetched dynamically per user for privacy)."""
     if WEBAPP_HTML_PATH.exists():
-        html = WEBAPP_HTML_PATH.read_text(encoding="utf-8")
-        try:
-            groups = group_db.get_all_managed_groups()
-            inject_script = f"<script>window.__INITIAL_GROUPS__ = {json.dumps(groups)};</script>"
-            if "</head>" in html:
-                html = html.replace("</head>", f"{inject_script}\n</head>")
-            else:
-                html = f"{inject_script}\n{html}"
-        except Exception as e:
-            logger.warning(f"Error injecting initial groups: {e}")
-        return html
+        return WEBAPP_HTML_PATH.read_text(encoding="utf-8")
     return "<h1>Blizkiy Bot Web App topilmadi</h1>"
 
 
 # ---------------------------------------------------------------------------
 # FastAPI Middleware & Routes (for Gradio / demo.app in app.py)
 # ---------------------------------------------------------------------------
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.middleware import Middleware
-from fastapi import Request
-from fastapi.responses import HTMLResponse, JSONResponse
-from starlette.routing import Route
+try:
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.middleware import Middleware
+    from fastapi import Request
+    from fastapi.responses import HTMLResponse, JSONResponse
+    from starlette.routing import Route
+    HAS_FASTAPI = True
+except ImportError:
+    HAS_FASTAPI = False
+    BaseHTTPMiddleware = object
+    Middleware = None
+    Request = None
+    HTMLResponse = None
+    JSONResponse = None
+    Route = None
+
 
 RESPONSE_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -75,9 +76,18 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
         # API routing
         if norm_path.startswith("/api/"):
             try:
+                user_id_param = request.query_params.get("user_id") or request.headers.get("X-Telegram-User-Id")
+                user_id = int(user_id_param) if user_id_param and str(user_id_param).isdigit() else None
+
                 if norm_path == "/api/groups" and request.method == "GET":
-                    groups = group_db.get_all_managed_groups()
+                    groups = group_db.get_user_managed_groups(user_id)
                     return JSONResponse({"ok": True, "groups": groups}, headers=RESPONSE_HEADERS)
+
+                if norm_path == "/api/manager/overview" and request.method == "GET":
+                    if not user_id or user_id not in group_db.BOT_OWNER_IDS:
+                        return JSONResponse({"ok": False, "error": "Ruxsat berilmagan! Faqat bot egasi uchun."}, status_code=403, headers=RESPONSE_HEADERS)
+                    overview = group_db.get_manager_overview()
+                    return JSONResponse({"ok": True, "summary": overview["summary"], "groups": overview["groups"], "manager": overview}, headers=RESPONSE_HEADERS)
 
                 parts = norm_path.split("/")
                 if len(parts) >= 4 and parts[1] == "api" and parts[2] == "group":
@@ -191,8 +201,18 @@ def attach_fastapi_routes(app: Any):
             return make_html_response()
 
         async def get_groups(request: Request):
-            groups = group_db.get_all_managed_groups()
+            user_id_param = request.query_params.get("user_id") or request.headers.get("X-Telegram-User-Id")
+            user_id = int(user_id_param) if user_id_param and str(user_id_param).isdigit() else None
+            groups = group_db.get_user_managed_groups(user_id)
             return make_json_response({"ok": True, "groups": groups})
+
+        async def get_manager_overview(request: Request):
+            user_id_param = request.query_params.get("user_id") or request.headers.get("X-Telegram-User-Id")
+            user_id = int(user_id_param) if user_id_param and str(user_id_param).isdigit() else None
+            if not user_id or user_id not in group_db.BOT_OWNER_IDS:
+                return make_json_response({"ok": False, "error": "Faqat bot egasi uchun ruxsat berilgan!"}, status_code=403)
+            overview = group_db.get_manager_overview()
+            return make_json_response({"ok": True, "summary": overview["summary"], "groups": overview["groups"], "manager": overview})
 
         async def get_group_details(request: Request):
             chat_id = int(request.path_params.get("chat_id", 0))
@@ -291,6 +311,7 @@ def attach_fastapi_routes(app: Any):
             Route("/webapp", endpoint=serve_webapp, methods=["GET"]),
             Route("/", endpoint=serve_root, methods=["GET"]),
             Route("/api/groups", endpoint=get_groups, methods=["GET"]),
+            Route("/api/manager/overview", endpoint=get_manager_overview, methods=["GET"]),
             Route("/api/group/{chat_id}", endpoint=get_group_details, methods=["GET"]),
             Route("/api/group/{chat_id}/toggle_bot", endpoint=toggle_bot, methods=["POST"]),
             Route("/api/group/{chat_id}/toggle_censor", endpoint=toggle_censor, methods=["POST"]),
@@ -307,6 +328,7 @@ def attach_fastapi_routes(app: Any):
 
             Route("/gradio_api/webapp", endpoint=serve_webapp, methods=["GET"]),
             Route("/gradio_api/api/groups", endpoint=get_groups, methods=["GET"]),
+            Route("/gradio_api/api/manager/overview", endpoint=get_manager_overview, methods=["GET"]),
             Route("/gradio_api/api/group/{chat_id}", endpoint=get_group_details, methods=["GET"]),
             Route("/gradio_api/api/group/{chat_id}/toggle_bot", endpoint=toggle_bot, methods=["POST"]),
             Route("/gradio_api/api/group/{chat_id}/toggle_censor", endpoint=toggle_censor, methods=["POST"]),
@@ -342,8 +364,18 @@ def attach_aiohttp_routes(app: Any):
             return web.Response(text=get_webapp_html(), content_type="text/html")
 
         async def aiohttp_get_groups(request):
-            groups = group_db.get_all_managed_groups()
+            user_id_param = request.query.get("user_id") or request.headers.get("X-Telegram-User-Id")
+            user_id = int(user_id_param) if user_id_param and str(user_id_param).isdigit() else None
+            groups = group_db.get_user_managed_groups(user_id)
             return web.json_response({"ok": True, "groups": groups})
+
+        async def aiohttp_get_manager_overview(request):
+            user_id_param = request.query.get("user_id") or request.headers.get("X-Telegram-User-Id")
+            user_id = int(user_id_param) if user_id_param and str(user_id_param).isdigit() else None
+            if not user_id or user_id not in group_db.BOT_OWNER_IDS:
+                return web.json_response({"ok": False, "error": "Faqat bot egasi uchun ruxsat berilgan!"}, status=403)
+            overview = group_db.get_manager_overview()
+            return web.json_response({"ok": True, "summary": overview["summary"], "groups": overview["groups"], "manager": overview})
 
         async def aiohttp_get_group_details(request):
             try:
@@ -479,6 +511,7 @@ def attach_aiohttp_routes(app: Any):
 
         app.router.add_get("/webapp", aiohttp_serve_webapp)
         app.router.add_get("/api/groups", aiohttp_get_groups)
+        app.router.add_get("/api/manager/overview", aiohttp_get_manager_overview)
         app.router.add_get("/api/group/{chat_id}", aiohttp_get_group_details)
         app.router.add_post("/api/group/{chat_id}/toggle_bot", aiohttp_toggle_bot)
         app.router.add_post("/api/group/{chat_id}/toggle_censor", aiohttp_toggle_censor)

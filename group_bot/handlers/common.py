@@ -286,7 +286,18 @@ async def cmd_settings(message: types.Message, bot: Bot):
     if message.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
         chat_id = message.chat.id
         chat_title = message.chat.title or "Guruh"
-        group_webapp_url = f"{WEBAPP_URL}?chat_id={chat_id}"
+        user_id = message.from_user.id if message.from_user else 0
+
+        # Agar admin bo'lsa, uni ushbu guruhga ruxsat etilgan foydalanuvchi deb keshlaymiz
+        try:
+            member = await message.chat.get_member(user_id)
+            if member.status in ("creator", "administrator"):
+                from group_bot.database import record_chat_authorized_user
+                record_chat_authorized_user(chat_id, user_id, is_admin=True)
+        except Exception:
+            pass
+
+        group_webapp_url = f"{WEBAPP_URL}?chat_id={chat_id}&user_id={user_id}"
 
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -311,12 +322,13 @@ async def cmd_settings(message: types.Message, bot: Bot):
             reply_markup=kb
         )
     else:
+        user_id = message.from_user.id if message.from_user else 0
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
                         text="📱 Mini App Boshqaruv Markazi",
-                        web_app=WebAppInfo(url=WEBAPP_URL)
+                        web_app=WebAppInfo(url=f"{WEBAPP_URL}?user_id={user_id}")
                     )
                 ],
                 [
@@ -333,4 +345,50 @@ async def cmd_settings(message: types.Message, bot: Bot):
             parse_mode="HTML",
             reply_markup=kb
         )
+
+
+@router.message(Command("manager", "menedjer", "adminpanel"))
+async def cmd_manager(message: types.Message, bot: Bot):
+    user_id = message.from_user.id if message.from_user else 0
+    from group_bot.database import BOT_OWNER_IDS, get_manager_overview
+
+    is_owner = (user_id in BOT_OWNER_IDS) or (
+        message.from_user and message.from_user.username and message.from_user.username.lower() in ("khojayev_ramz", "wdablyu")
+    )
+    if not is_owner:
+        await message.reply("⛔️ Bu buyruq faqat bot egasi (@khojayev_ramz) uchun!")
+        return
+
+    data = get_manager_overview()
+    summary = data.get("summary", {})
+    total_groups = summary.get("total_groups", 0)
+    active_groups = summary.get("active_groups", 0)
+    inactive_groups = summary.get("inactive_groups", 0)
+    total_members = summary.get("total_members", 0)
+    total_msgs = summary.get("total_msgs_24h", 0)
+
+    manager_text = (
+        f"👑 <b>BLIZKIY BOT — MENEDJER HISOBOTI</b>\n\n"
+        f"📊 <b>Umumiy ko‘rsatkichlar:</b>\n"
+        f"• 👥 Jami ulangan guruhlar: <b>{total_groups} ta</b>\n"
+        f"• 🟢 Faol ishlayotgan: <b>{active_groups} ta</b>\n"
+        f"• 🔴 O‘chirilgan / to‘xtatilgan: <b>{inactive_groups} ta</b>\n"
+        f"• 👤 Jami qamrov (a’zolar soni): <b>{total_members:,} kishi</b>\n"
+        f"• 💬 So‘nggi 24h xabarlar: <b>{total_msgs:,} ta</b>\n\n"
+        f"Pastdagi tugma orqali barcha guruhlar ro‘yxati, ularning taklif havolalari (silkasi) va sozlamalarini ko‘rishingiz mumkin:"
+    )
+
+    manager_url = f"{WEBAPP_URL}?tab=manager&user_id={user_id}"
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="👑 «Bot Manager» Panelini Ochish",
+                    web_app=WebAppInfo(url=manager_url)
+                )
+            ]
+        ]
+    )
+    await message.reply(manager_text, parse_mode="HTML", reply_markup=kb)
+
 

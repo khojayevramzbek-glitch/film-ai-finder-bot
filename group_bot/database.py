@@ -104,6 +104,15 @@ def init_db():
             );
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_authorized_users (
+                chat_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                is_admin INTEGER DEFAULT 1,
+                updated_at TIMESTAMP NOT NULL,
+                PRIMARY KEY (chat_id, user_id)
+            );
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS prank_users (
                 chat_id INTEGER NOT NULL,
                 username TEXT NOT NULL,
@@ -180,6 +189,25 @@ def init_db():
             for col_name, col_type in needed_cols.items():
                 if col_name not in existing_cols:
                     conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col_name} {col_type};")
+        except Exception:
+            pass
+
+        # Ensure all columns exist in chats table
+        try:
+            cur = conn.execute("PRAGMA table_info(chats);")
+            existing_chats_cols = {row["name"] for row in cur.fetchall()}
+            needed_chats_cols = {
+                "username": "TEXT",
+                "invite_link": "TEXT",
+                "members_count": "INTEGER DEFAULT 0",
+                "added_by_user_id": "INTEGER",
+                "added_by_name": "TEXT",
+                "added_by_username": "TEXT",
+                "bot_status": "TEXT DEFAULT 'administrator'"
+            }
+            for col_name, col_type in needed_chats_cols.items():
+                if col_name not in existing_chats_cols:
+                    conn.execute(f"ALTER TABLE chats ADD COLUMN {col_name} {col_type};")
         except Exception:
             pass
 
@@ -731,6 +759,9 @@ def set_rules(chat_id: int, rules_text: str):
         conn.commit()
 
 
+BOT_OWNER_IDS = {8594505572, 7690283463}
+
+
 def save_chat_title(chat_id: int, title: str):
     """Guruh nomi va chat_id sini bazaga saqlash yoki yangilash."""
     if not title:
@@ -746,6 +777,184 @@ def save_chat_title(chat_id: int, title: str):
             (chat_id, title, now_utc, title, now_utc)
         )
         conn.commit()
+
+
+def save_chat_full_info(
+    chat_id: int,
+    title: str,
+    username: str | None = None,
+    invite_link: str | None = None,
+    members_count: int | None = None,
+    added_by_user_id: int | None = None,
+    added_by_name: str | None = None,
+    added_by_username: str | None = None,
+    bot_status: str | None = None
+):
+    """Guruhning to'liq ma'lumotlarini (nomi, silkasi, a'zolar soni, kim qo'shgani) bazaga saqlash."""
+    if not title:
+        title = f"Guruh {chat_id}"
+    now_utc = datetime.now(timezone.utc)
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chats (chat_id, title, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET title = ?, updated_at = ?
+            """,
+            (chat_id, title, now_utc, title, now_utc)
+        )
+        
+        updates = []
+        params = []
+        if username is not None:
+            updates.append("username = ?")
+            params.append(username.lstrip("@").strip() if username else None)
+        if invite_link is not None:
+            updates.append("invite_link = ?")
+            params.append(invite_link.strip() if invite_link else None)
+        if members_count is not None and members_count > 0:
+            updates.append("members_count = ?")
+            params.append(int(members_count))
+        if added_by_user_id is not None:
+            updates.append("added_by_user_id = ?")
+            params.append(int(added_by_user_id))
+        if added_by_name is not None:
+            updates.append("added_by_name = ?")
+            params.append(str(added_by_name))
+        if added_by_username is not None:
+            updates.append("added_by_username = ?")
+            params.append(str(added_by_username).lstrip("@").strip())
+        if bot_status is not None:
+            updates.append("bot_status = ?")
+            params.append(str(bot_status))
+            
+        if updates:
+            sql = f"UPDATE chats SET {', '.join(updates)}, updated_at = ? WHERE chat_id = ?"
+            params.extend([now_utc, chat_id])
+            conn.execute(sql, params)
+        conn.commit()
+
+
+def record_chat_authorized_user(chat_id: int, user_id: int, is_admin: bool = True):
+    """Foydalanuvchini guruh admini / ruxsat etilgan foydalanuvchisi sifatida belgilash."""
+    now_utc = datetime.now(timezone.utc)
+    val = 1 if is_admin else 0
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO chat_authorized_users (chat_id, user_id, is_admin, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(chat_id, user_id) DO UPDATE SET is_admin = excluded.is_admin, updated_at = excluded.updated_at
+            """,
+            (chat_id, user_id, val, now_utc)
+        )
+        conn.commit()
+
+
+def is_user_authorized_for_chat(chat_id: int, user_id: int | None) -> bool:
+    """Foydalanuvchining ushbu guruhni boshqarishga ruxsati bormi tekshirish."""
+    if not user_id:
+        return False
+    if user_id in BOT_OWNER_IDS:
+        return True
+    with get_connection() as conn:
+        cur = conn.execute(
+            "SELECT 1 FROM chat_authorized_users WHERE chat_id = ? AND user_id = ? AND is_admin = 1",
+            (chat_id, user_id)
+        )
+        if cur.fetchone():
+            return True
+        cur = conn.execute(
+            "SELECT 1 FROM chats WHERE chat_id = ? AND added_by_user_id = ?",
+            (chat_id, user_id)
+        )
+        return bool(cur.fetchone())
+
+
+def get_user_managed_groups(user_id: int | None) -> list[dict]:
+    """
+    Foydalanuvchi boshqarishi mumkin bo'lgan guruhlar ro'yxati.
+    - Agar bot egasi bo'lsa (@khojayev_ramz): barcha guruhlar ko'rinadi!
+    - Agar oddiy admin bo'lsa: FAQAT o'zining ruxsat etilgan guruhlari ko'rinadi!
+    """
+    all_groups = get_all_managed_groups()
+    if not user_id:
+        return []
+    if user_id in BOT_OWNER_IDS:
+        return all_groups
+
+    with get_connection() as conn:
+        cur = conn.execute(
+            "SELECT DISTINCT chat_id FROM chat_authorized_users WHERE user_id = ? AND is_admin = 1",
+            (user_id,)
+        )
+        auth_ids = {row["chat_id"] for row in cur.fetchall()}
+
+        cur2 = conn.execute(
+            "SELECT chat_id FROM chats WHERE added_by_user_id = ?",
+            (user_id,)
+        )
+        for row in cur2.fetchall():
+            auth_ids.add(row["chat_id"])
+
+    return [g for g in all_groups if g["chat_id"] in auth_ids]
+
+
+def get_manager_overview() -> dict:
+    """
+    Faqat bot egasi (@khojayev_ramz) uchun:
+    Barcha qo'shilgan guruhlar, ularning silkalari, a'zolari va bot holati haqida to'liq hisobot.
+    """
+    cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+    with get_connection() as conn:
+        cur = conn.execute("""
+            SELECT 
+                c.chat_id,
+                COALESCE(c.title, 'Guruh ' || c.chat_id) AS title,
+                c.username,
+                c.invite_link,
+                COALESCE(c.members_count, 0) AS members_count,
+                c.added_by_user_id,
+                c.added_by_name,
+                c.added_by_username,
+                COALESCE(c.bot_status, 'administrator') AS bot_status,
+                COALESCE(b.is_enabled, 1) AS is_bot_enabled,
+                COALESCE(cs.is_enabled, 1) AS is_censor_enabled,
+                COALESCE(st.is_enabled, 1) AS is_stats_enabled,
+                COALESCE(gm.is_enabled, 1) AS is_game_enabled,
+                (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.chat_id AND m.created_at >= ?) AS msg_count_24h,
+                c.updated_at
+            FROM chats c
+            LEFT JOIN chat_bot_status b ON c.chat_id = b.chat_id
+            LEFT JOIN chat_censor_settings cs ON c.chat_id = cs.chat_id
+            LEFT JOIN chat_stats_settings st ON c.chat_id = st.chat_id
+            LEFT JOIN chat_game_settings gm ON c.chat_id = gm.chat_id
+            WHERE c.chat_id < 0
+            ORDER BY msg_count_24h DESC, c.updated_at DESC
+        """, (cutoff_24h,))
+        groups = [dict(r) for r in cur.fetchall()]
+
+        # Generate default telegram link if invite_link is missing but username exists
+        for g in groups:
+            if not g.get("invite_link") and g.get("username"):
+                g["invite_link"] = f"https://t.me/{g['username']}"
+
+        total_groups = len(groups)
+        active_groups = sum(1 for g in groups if g["is_bot_enabled"])
+        total_members = sum(g["members_count"] or 0 for g in groups)
+        total_msgs_24h = sum(g["msg_count_24h"] or 0 for g in groups)
+
+        return {
+            "summary": {
+                "total_groups": total_groups,
+                "active_groups": active_groups,
+                "inactive_groups": total_groups - active_groups,
+                "total_members": total_members,
+                "total_msgs_24h": total_msgs_24h
+            },
+            "groups": groups
+        }
+
 
 
 def get_chat_title(chat_id: int) -> str:

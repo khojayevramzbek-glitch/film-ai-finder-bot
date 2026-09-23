@@ -1115,6 +1115,9 @@
   <!-- Desktop Top Navigation Bar (PC) -->
   <div class="desktop-nav-wrap">
     <nav class="desktop-nav">
+      <button class="desktop-nav-item" data-tab="tab-manager" id="navItemManager" style="display: none; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; font-weight: 800;">
+        <span>👑 Bot Manager</span>
+      </button>
       <button class="desktop-nav-item active" data-tab="tab-groups">
         <span>👥 Qo'shilgan Guruhlar</span>
       </button>
@@ -1189,6 +1192,58 @@
         <option value="">Guruhlar yuklanmoqda...</option>
       </select>
       <div class="group-selector-arrow">▼</div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- TAB M: BOT MANAGER (SUPER-ADMIN PANEL ONLY FOR @khojayev_ramz) -->
+    <!-- =================================================================== -->
+    <div id="tab-manager" class="tab-pane" style="display: none;">
+      <div class="glass-card" style="border-color: rgba(245, 158, 11, 0.4); box-shadow: 0 0 35px rgba(245, 158, 11, 0.15);">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 24px;">👑</span>
+              <h2>Bot Boshqaruv Markazi (Manager)</h2>
+            </div>
+            <p style="color: #fbbf24; font-weight: 600; margin-top: 4px;">
+              Faqat @khojayev_ramz uchun maxsus monitoring paneli. Bot qo'shilgan barcha guruhlar, ularning silkalari, a'zolari va holati:
+            </p>
+          </div>
+          <button class="btn-copy" id="btnRefreshManager" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; font-weight: 800; padding: 10px 18px;">
+            🔄 Yangilash
+          </button>
+        </div>
+
+        <!-- Manager Quick Summary Grid -->
+        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-top: 14px;">
+          <div class="stat-badge" style="border-color: rgba(245, 158, 11, 0.3);">
+            <div class="stat-label">👥 Jami Guruhlar</div>
+            <div class="stat-value" id="mgrTotalGroups" style="color: #fbbf24;">0 ta</div>
+          </div>
+          <div class="stat-badge" style="border-color: rgba(16, 185, 129, 0.3);">
+            <div class="stat-label">🟢 Faol Guruhlar</div>
+            <div class="stat-value" id="mgrActiveGroups" style="color: #34d399;">0 ta</div>
+          </div>
+          <div class="stat-badge" style="border-color: rgba(56, 189, 248, 0.3);">
+            <div class="stat-label">👤 Jami Qamrov (A'zolar)</div>
+            <div class="stat-value" id="mgrTotalMembers" style="color: #38bdf8;">0 kishi</div>
+          </div>
+          <div class="stat-badge" style="border-color: rgba(99, 102, 241, 0.3);">
+            <div class="stat-label">💬 24h Xabarlar</div>
+            <div class="stat-value" id="mgrTotalMsgs" style="color: #818cf8;">0 ta</div>
+          </div>
+        </div>
+
+        <!-- Search Bar -->
+        <div style="margin: 16px 0 12px; display: flex; gap: 10px;">
+          <input type="text" id="inputSearchManagerGroups" class="text-input" placeholder="🔍 Guruh nomi yoki ID bo'yicha qidirish..." style="flex: 1;">
+        </div>
+
+        <!-- Manager Groups Cards Container -->
+        <div id="managerGroupsContainer" class="groups-cards-grid">
+          <!-- Populated dynamically by JavaScript -->
+        </div>
+      </div>
     </div>
 
     <!-- =================================================================== -->
@@ -1696,6 +1751,10 @@
 
   <!-- Mobile Bottom Navigation Bar (Phone) -->
   <nav class="bottom-nav">
+    <button class="nav-item" data-tab="tab-manager" id="bottomNavItemManager" style="display: none; color: #fbbf24; background: rgba(245, 158, 11, 0.1);">
+      <span class="nav-icon">👑</span>
+      <span>Manager</span>
+    </button>
     <button class="nav-item active" data-tab="tab-groups">
       <span class="nav-icon">👥</span>
       <span>Guruhlar</span>
@@ -1753,8 +1812,21 @@
       }
     }
 
-    // Set User Profile from Telegram
+    // Set User Profile from Telegram & Detect Owner
     const tgUser = tg?.initDataUnsafe?.user;
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentUserId = (tgUser && tgUser.id) ? tgUser.id : (urlParams.get('user_id') ? parseInt(urlParams.get('user_id'), 10) : null);
+    const currentUsername = (tgUser && tgUser.username) ? tgUser.username.toLowerCase() : '';
+    const BOT_OWNER_IDS = [8594505572, 7690283463];
+    const isOwner = BOT_OWNER_IDS.includes(Number(currentUserId)) || ['khojayev_ramz', 'wdablyu'].includes(currentUsername);
+
+    if (isOwner) {
+      const mgrNav = document.getElementById('navItemManager');
+      if (mgrNav) mgrNav.style.display = 'inline-flex';
+      const btmMgrNav = document.getElementById('bottomNavItemManager');
+      if (btmMgrNav) btmMgrNav.style.display = 'flex';
+    }
+
     if (tgUser) {
       document.getElementById('userName').textContent = tgUser.first_name || tgUser.username || "Admin";
       const initial = (tgUser.first_name || tgUser.username || "A").charAt(0).toUpperCase();
@@ -1808,6 +1880,10 @@
       if (target) {
         target.classList.add('active');
       }
+
+      if (tabId === 'tab-manager') {
+        loadManagerOverview();
+      }
     }
 
     document.querySelectorAll('.desktop-nav-item, .nav-item').forEach(btn => {
@@ -1835,7 +1911,6 @@
     let currentSettings = {};
 
     // Parse URL query parameter for pre-selected chat_id
-    const urlParams = new URLSearchParams(window.location.search);
     const initialChatId = urlParams.get('chat_id');
 
     // Preset & Custom Time Handlers (from seconds to years)
@@ -1974,12 +2049,19 @@
 
     // Helper to send API requests trying direct path first, then /gradio_api
     async function apiFetch(path, options = {}) {
+      const headers = Object.assign({}, options.headers || {});
+      if (currentUserId) {
+        headers['X-Telegram-User-Id'] = String(currentUserId);
+      }
+      const sep = path.includes('?') ? '&' : '?';
+      const fullPath = (currentUserId && !path.includes('user_id=')) ? `${path}${sep}user_id=${currentUserId}` : path;
+
       try {
-        const res = await fetch(path, options);
+        const res = await fetch(fullPath, { ...options, headers });
         if (res.ok) return res;
       } catch (e) {}
       try {
-        const res = await fetch('/gradio_api' + path, options);
+        const res = await fetch('/gradio_api' + fullPath, { ...options, headers });
         if (res.ok) return res;
       } catch (e) {}
       throw new Error("Network request failed");
@@ -2611,10 +2693,154 @@
       await savePartialSetting({ welcome_text }, "Salomlashish matni saqlandi!");
     });
 
+    // ===================================================================
+    // BOT MANAGER DASHBOARD (SUPER-ADMIN ONLY FOR @khojayev_ramz)
+    // ===================================================================
+    let managerAllGroups = [];
+
+    async function loadManagerOverview() {
+      if (!isOwner) return;
+      try {
+        const res = await apiFetch('/api/manager/overview');
+        const data = await res.json();
+        if (!data.ok) {
+          showToast("Boshqaruv ma'lumotlarini yuklashda xatolik", "❌");
+          return;
+        }
+        const s = data.summary || {};
+        const elTotalGroups = document.getElementById('mgrTotalGroups');
+        const elActiveGroups = document.getElementById('mgrActiveGroups');
+        const elTotalMembers = document.getElementById('mgrTotalMembers');
+        const elTotalMsgs = document.getElementById('mgrTotalMsgs');
+
+        if (elTotalGroups) elTotalGroups.textContent = (s.total_groups || 0) + " ta";
+        if (elActiveGroups) elActiveGroups.textContent = (s.active_groups || 0) + " ta";
+        if (elTotalMembers) elTotalMembers.textContent = (s.total_members || 0).toLocaleString() + " kishi";
+        if (elTotalMsgs) elTotalMsgs.textContent = (s.total_msgs_24h || 0).toLocaleString() + " ta";
+
+        managerAllGroups = data.groups || [];
+        filterAndRenderManagerGroups();
+      } catch (err) {
+        console.error("Manager overview yuklashda xatolik:", err);
+      }
+    }
+
+    function filterAndRenderManagerGroups() {
+      const query = (document.getElementById('inputSearchManagerGroups')?.value || '').toLowerCase().trim();
+      const filtered = managerAllGroups.filter(g => {
+        if (!query) return true;
+        return (g.title && g.title.toLowerCase().includes(query)) ||
+               (g.username && g.username.toLowerCase().includes(query)) ||
+               String(g.chat_id).includes(query) ||
+               (g.added_by_name && g.added_by_name.toLowerCase().includes(query)) ||
+               (g.added_by_username && g.added_by_username.toLowerCase().includes(query));
+      });
+      renderManagerGroupsCards(filtered);
+    }
+
+    function renderManagerGroupsCards(groups) {
+      const container = document.getElementById('managerGroupsContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (!groups || groups.length === 0) {
+        container.innerHTML = `
+          <div class="groups-empty-state" style="padding: 28px 10px;">
+            <div class="groups-empty-icon">🔍</div>
+            <div class="groups-empty-title">Guruh topilmadi</div>
+            <p class="groups-empty-desc">Qidiruv bo'yicha mos keluvchi guruh mavjud emas.</p>
+          </div>
+        `;
+        return;
+      }
+
+      groups.forEach(g => {
+        const initial = (g.title || 'G').charAt(0).toUpperCase();
+        const card = document.createElement('div');
+        card.className = 'group-item-card';
+        card.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+
+        const linkHtml = g.invite_link ? 
+          `<a href="${escapeHtml(g.invite_link)}" target="_blank" style="color: #38bdf8; text-decoration: none; font-size: 13px; font-weight: 700; word-break: break-all;">🔗 ${escapeHtml(g.invite_link)} ↗</a>` :
+          `<span style="color: var(--text-muted); font-size: 12px;">🔒 Havola mavjud emas (Maxfiy guruh)</span>`;
+
+        const addedByText = g.added_by_name || (g.added_by_username ? `@${g.added_by_username}` : (g.added_by_user_id ? `ID: ${g.added_by_user_id}` : 'Nomaʼlum'));
+
+        card.innerHTML = `
+          <div>
+            <div class="group-card-header">
+              <div class="group-card-avatar" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; font-weight: 900;">${escapeHtml(initial)}</div>
+              <div class="group-card-info">
+                <div class="group-card-title">${escapeHtml(g.title || 'Guruh')}</div>
+                <div class="group-card-id">ID: ${g.chat_id}</div>
+              </div>
+            </div>
+
+            <div style="margin: 8px 0 10px; padding: 10px 12px; background: rgba(0,0,0,0.28); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+              <div style="margin-bottom: 6px;">${linkHtml}</div>
+              <div style="font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+                <span>👤 Qo'shgan: <strong style="color: #fff;">${escapeHtml(addedByText)}</strong></span>
+                <span>👥 A'zolar: <strong style="color: #38bdf8;">${(g.members_count || 0).toLocaleString()} ta</strong></span>
+              </div>
+            </div>
+
+            <div class="group-card-badges">
+              <span class="group-badge ${g.is_bot_enabled ? 'active' : 'inactive'}">
+                ${g.is_bot_enabled ? '🟢 Bot Faol' : '🔴 Bot O\'chirilgan'}
+              </span>
+              <span class="group-badge ${g.bot_status === 'left' ? 'inactive' : 'active'}">
+                ${g.bot_status === 'left' ? '🚫 Bot Chiqarilgan' : '🤖 ' + (g.bot_status || 'admin')}
+              </span>
+              <span class="group-badge ${g.is_censor_enabled ? 'active' : ''}">
+                ${g.is_censor_enabled ? '🤬 So\'kinish: On' : '🤬 So\'kinish: Off'}
+              </span>
+              <span class="group-badge ${g.is_game_enabled !== false ? 'active' : 'inactive'}">
+                ${g.is_game_enabled !== false ? '🎮 O\'yin: On' : '🛑 O\'yin: Off'}
+              </span>
+              <span class="group-badge">
+                💬 ${g.msg_count_24h || 0} xabar / 24h
+              </span>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <button class="btn-select-group" onclick="selectAndManageGroup('${g.chat_id}')" style="flex: 1;">
+              <span>⚙️ Sozlamalar &rarr;</span>
+            </button>
+            ${g.invite_link ? `
+              <a href="${escapeHtml(g.invite_link)}" target="_blank" class="btn-copy" style="text-decoration: none; display: flex; align-items: center; justify-content: center; padding: 0 16px; font-weight: 700; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8;">
+                ↗ Guruhga
+              </a>
+            ` : ''}
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    const btnRefreshMgr = document.getElementById('btnRefreshManager');
+    if (btnRefreshMgr) {
+      btnRefreshMgr.addEventListener('click', async () => {
+        haptic('medium');
+        showToast("Manager ma'lumotlari yangilanmoqda...", "🔄");
+        await loadManagerOverview();
+        showToast("Manager ma'lumotlari yangilandi!", "✅");
+      });
+    }
+
+    const inputSearchMgr = document.getElementById('inputSearchManagerGroups');
+    if (inputSearchMgr) {
+      inputSearchMgr.addEventListener('input', () => {
+        filterAndRenderManagerGroups();
+      });
+    }
+
     // Initialize on load
     loadGroups().then(() => {
       const targetTab = urlParams.get('tab');
-      if (targetTab === 'groups' || (!initialChatId && groupsList.length > 0)) {
+      if (targetTab === 'manager' && isOwner) {
+        switchTab('tab-manager');
+      } else if (targetTab === 'groups' || (!initialChatId && groupsList.length > 0)) {
         switchTab('tab-groups');
       } else if (initialChatId) {
         switchTab('tab-general');
