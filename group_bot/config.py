@@ -30,9 +30,22 @@ def get_webapp_url() -> str:
                 return saved_url
         except Exception:
             pass
+
+    # 1. Agar Render da ishlayotgan bo'lsa, Render'ning o'zining to'liq WebApp URL manzili
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
+    if render_url and render_url.startswith("http"):
+        return f"{render_url}/webapp"
+
+    # 2. Agar WEBAPP_URL muhit o'zgaruvchisi berilgan bo'lsa
     env_url = os.getenv("WEBAPP_URL", "").strip()
     if env_url and env_url.startswith("http"):
         return env_url
+
+    # 3. Agar Hugging Face da ishlayotgan bo'lsa, static ilovaga backend parametrini uzatish
+    space_host = os.getenv("SPACE_HOST", "").strip()
+    if space_host:
+        return f"{DEFAULT_WEBAPP_URL}?backend=https://{space_host}"
+
     return DEFAULT_WEBAPP_URL
 
 
