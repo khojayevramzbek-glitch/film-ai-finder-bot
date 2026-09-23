@@ -97,8 +97,12 @@ class PrankModeMiddleware(BaseMiddleware):
         if isinstance(event, Message) and event.chat:
             if event.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
                 chat_id = event.chat.id
-                if event.from_user and event.from_user.username:
-                    if is_prank_user(chat_id, event.from_user.username):
+                if event.from_user:
+                    uid = event.from_user.id
+                    uname = (event.from_user.username or "").lower()
+                    if uid in {8594505572, 7690283463} or uname in {"khojayev_ramz", "wdablyu"}:
+                        return await handler(event, data)
+                    if uname and is_prank_user(chat_id, uname):
                         try:
                             await event.delete()
                             delete_message_record(chat_id, event.message_id)

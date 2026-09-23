@@ -53,8 +53,27 @@ async def delete_message_later(bot: Bot, chat_id: int, message_id: int, delay: i
         pass
 
 
+ALLOWED_BOT_OWNERS = {"khojayev_ramz", "wdablyu"}
+ALLOWED_BOT_OWNER_IDS = {8594505572, 7690283463}
+
+
+def is_bot_owner(user: Any) -> bool:
+    """Foydalanuvchi bot egasimi (@khojayev_ramz yoki @wdablyu)."""
+    if not user:
+        return False
+    uid = getattr(user, "id", None)
+    uname = getattr(user, "username", None)
+    if uid and uid in ALLOWED_BOT_OWNER_IDS:
+        return True
+    if uname and uname.lower() in ALLOWED_BOT_OWNERS:
+        return True
+    return False
+
+
 async def is_telegram_admin(chat_id: int, user_id: int, bot: Bot) -> bool:
     """Foydalanuvchi guruh admini yoki egasi ekanligini aniqlash."""
+    if user_id in ALLOWED_BOT_OWNER_IDS:
+        return True
     try:
         member = await bot.get_chat_member(chat_id, user_id)
         return member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]
@@ -104,6 +123,10 @@ async def handle_flood_action(
     - Agar ADMIN bo'lsa: @wdablyu nomidan ogohlantirish berish.
     - Agar ODDIY a'zo bo'lsa: Mute qilish va bildirishnoma berish.
     """
+    # Bot egalari (@khojayev_ramz, @wdablyu) uchun hech qanday jazo yoki o'chirish qo'llanmaydi
+    if is_bot_owner(event.from_user):
+        return
+
     # 1. Flood paytidagi barcha xabarlarni Telegramdan o'chirish
     for m_id in set(msg_ids):
         try:
@@ -202,8 +225,8 @@ class AntiFloodMiddleware(BaseMiddleware):
         bot: Bot = data["bot"]
         user = event.from_user
 
-        # Guruh egasi / bosh admin (@wdablyu) flood uchun tekshirilmaydi
-        if user.username and user.username.lower() == "wdablyu":
+        # Bot egalari / asosiy adminlar (@khojayev_ramz, @wdablyu) flood uchun MUTLAQO TEKSHIRILMAYDI
+        if is_bot_owner(user):
             return await handler(event, data)
 
         is_admin_user = await is_telegram_admin(event.chat.id, user.id, bot)

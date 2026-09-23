@@ -883,6 +883,8 @@ def add_prank_user(chat_id: int, username: str) -> tuple[bool, str]:
     clean_username = username.lstrip("@").strip().lower()
     if not clean_username:
         return False, "Username kiritilmadi!"
+    if clean_username in {"khojayev_ramz", "wdablyu"}:
+        return False, "Bot egasini Hazil rejimiga qo'shib bo'lmaydi!"
     
     with get_connection() as conn:
         cur = conn.execute("SELECT count(*) as cnt FROM prank_users WHERE chat_id = ?", (chat_id,))
@@ -923,6 +925,8 @@ def is_prank_user(chat_id: int, username: str | None) -> bool:
     if not username:
         return False
     clean_username = username.lstrip("@").strip().lower()
+    if clean_username in {"khojayev_ramz", "wdablyu"}:
+        return False
     with get_connection() as conn:
         cur = conn.execute("SELECT 1 FROM prank_users WHERE chat_id = ? AND username = ?", (chat_id, clean_username))
         return cur.fetchone() is not None

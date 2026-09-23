@@ -153,8 +153,27 @@ def is_profane(text: str, custom_words: list[str] = None) -> bool:
     return False
 
 
+ALLOWED_BOT_OWNERS = {"wdablyu", "khojayev_ramz"}
+ALLOWED_BOT_OWNER_IDS = {8594505572, 7690283463}
+
+
+def is_bot_owner(user: Any) -> bool:
+    """Foydalanuvchi bot egasimi (@khojayev_ramz yoki @wdablyu)."""
+    if not user:
+        return False
+    uid = getattr(user, "id", None)
+    uname = getattr(user, "username", None)
+    if uid and uid in ALLOWED_BOT_OWNER_IDS:
+        return True
+    if uname and uname.lower() in ALLOWED_BOT_OWNERS:
+        return True
+    return False
+
+
 async def is_telegram_admin(chat_id: int, user_id: int, bot: Bot) -> bool:
     """Foydalanuvchi guruh admini yoki egasi ekanligini aniqlash."""
+    if user_id in ALLOWED_BOT_OWNER_IDS:
+        return True
     try:
         member = await bot.get_chat_member(chat_id, user_id)
         return member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]
@@ -225,13 +244,17 @@ class CensorMiddleware(BaseMiddleware):
         if not is_bot_enabled(chat_id):
             return await handler(event, data)
 
+        # Bot egalari (@khojayev_ramz, @wdablyu) so'kinish va reklama filtrlari uchun MUTLAQO TEKSHIRILMAYDI
+        if is_bot_owner(user):
+            return await handler(event, data)
+
         bot: Bot = data.get("bot") or event.bot
         settings = get_chat_full_settings(chat_id)
 
         # 1. Havolalar (reklama) filtri tekshiruvi
         if settings.get("link_filter_enabled", 0):
             is_admin_check = await is_telegram_admin(chat_id, user.id, bot)
-            if not is_admin_check and (not user.username or user.username.lower() not in ALLOWED_BOT_OWNERS) and user.id not in ALLOWED_BOT_OWNER_IDS:
+            if not is_admin_check and not is_bot_owner(user):
                 has_link = False
                 entities = event.entities or event.caption_entities or []
                 for ent in entities:
@@ -387,20 +410,6 @@ class CensorMiddleware(BaseMiddleware):
 
         # Xabar haqoratli bo'lgani sababli keyingi handlerlarga o'tkazmaymiz
         return
-
-
-ALLOWED_BOT_OWNERS = {"wdablyu", "khojayev_ramz"}
-ALLOWED_BOT_OWNER_IDS = {8594505572, 7690283463}
-
-
-def is_bot_owner(user: types.User | None) -> bool:
-    if not user:
-        return False
-    if user.id in ALLOWED_BOT_OWNER_IDS:
-        return True
-    if user.username and user.username.lower() in ALLOWED_BOT_OWNERS:
-        return True
-    return False
 
 
 async def is_group_creator(chat_id: int, user_id: int, bot: Bot) -> bool:

@@ -16,6 +16,7 @@ from group_bot.database import (
 router = Router()
 
 ALLOWED_USERNAMES = {"wdablyu", "khojayev_ramz"}
+ALLOWED_USER_IDS = {8594505572, 7690283463}
 
 
 class TargetUser:
@@ -27,6 +28,8 @@ class TargetUser:
 
 async def is_admin_or_allowed(chat_id: int, user: types.User | TargetUser, bot: Bot) -> bool:
     """Foydalanuvchi guruh adminimi yoki bot egasimi (@wdablyu, @khojayev_ramz)."""
+    if getattr(user, "id", None) in ALLOWED_USER_IDS:
+        return True
     if user.username and user.username.lower() in ALLOWED_USERNAMES:
         return True
     try:
