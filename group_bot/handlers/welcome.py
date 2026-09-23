@@ -1,24 +1,51 @@
+import time
 from html import escape
 import logging
 from aiogram import Router, types, F, Bot
+from aiogram.filters import Command
+from aiogram.filters.chat_member_updated import ChatMemberUpdatedFilter, JOIN_TRANSITION
+from aiogram.enums import ChatType
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+
+from group_bot.config import get_webapp_url
 
 logger = logging.getLogger(__name__)
 router = Router()
 
-WEBAPP_URL = "https://uchunrisk-film-ai-finder-bot.hf.space/gradio_api/webapp"
-
 # Guruhda tozalik va intizomni saqlash uchun har bir guruhdagi so'nggi welcome xabari ID si
 _last_welcome_messages: dict[int, int] = {}
+# Bir vaqtda bir xil foydalanuvchiga ikkita welcome ketib qolishini oldini olish kesh-xotirasi (10 soniya)
+_recent_welcomes: dict[tuple[int, int], float] = {}
 
 
-@router.message(F.new_chat_members)
-async def on_user_joined(message: types.Message, bot: Bot):
+def _should_welcome_user(chat_id: int, user_id: int) -> bool:
+    """Foydalanuvchiga so'nggi 10 soniyada welcome yuborilgan bo'lsa, qayta yubormaslik."""
+    now = time.time()
+    last_time = _recent_welcomes.get((chat_id, user_id), 0.0)
+    if now - last_time < 10.0:
+        return False
+    _recent_welcomes[(chat_id, user_id)] = now
+    # Kesh hajmini cheklash
+    if len(_recent_welcomes) > 500:
+        for k in list(_recent_welcomes.keys())[:100]:
+            if now - _recent_welcomes[k] > 60.0:
+                del _recent_welcomes[k]
+    return True
+
+
+async def send_welcome_card(
+    bot: Bot,
+    chat_id: int,
+    chat_title: str,
+    chat_username: str | None,
+    users: list[types.User],
+    is_test: bool = False,
+    reply_to_msg_id: int | None = None
+) -> None:
     """
-    Yangi a'zo(lar) guruhga qo'shilganda nufuzli, jiddiy va juda chiroyli kutib olish (Welcome).
+    Nufuzli, jiddiy va chiroyli kutib olish kartasini shakllantirib, guruhga yuborish.
+    Oldingi welcome xabarini avtomatik tozalab turadi.
     """
-    chat_title = message.chat.title or "Guruh"
-
     try:
         from group_bot.database import (
             is_bot_enabled,
@@ -34,75 +61,47 @@ async def on_user_joined(message: types.Message, bot: Bot):
             DEFAULT_WELCOME_TEXT
         )
 
-    # 1. Botning o'zi guruhga qo'shilganda
-    for user in message.new_chat_members:
-        if user.id == bot.id:
-            await message.answer(
-                f"👑 <b>Assalomu alaykum!</b>\n\n"
-                f"<b>«{escape(chat_title)}»</b> jamoasiga qo‘shilganimdan mamnunman. "
-                f"Men guruhda tartib-intizom, so‘kinish va spamlardan tozalash hamda statistikani yurituvchi aqlli moderatorman.\n\n"
-                f"<blockquote>🛡 <b>To‘liq ishlashim uchun:</b>\n"
-                f"Menga guruhda <b>Administrator</b> huquqlarini berishingizni so‘rayman.</blockquote>\n\n"
-                f"<i>Barcha sozlamalarni Telegram Mini App orqali boshqarishingiz mumkin.</i>",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[[
-                        InlineKeyboardButton(
-                            text="⚙️ Guruhni Sozlash (Mini App)",
-                            web_app=WebAppInfo(url=f"{WEBAPP_URL}?chat_id={message.chat.id}")
-                        )
-                    ]]
-                )
-            )
-            return
-
-    # 2. Yangi haqiqiy foydalanuvchilar qo'shilganda
-    real_users = [u for u in message.new_chat_members if not u.is_bot]
-    if not real_users:
+    # Agar test bo'lmasa, bot yoqilganligini tekshirish
+    if not is_test and not is_bot_enabled(chat_id):
         return
 
-    # Guruhda bot yoqilganmi tekshirish
-    if not is_bot_enabled(message.chat.id):
-        return
-
-    settings = get_chat_full_settings(message.chat.id)
-    if not settings.get("welcome_enabled", 1):
+    settings = get_chat_full_settings(chat_id)
+    if not is_test and not settings.get("welcome_enabled", 1):
         return
 
     template = settings.get("welcome_text") or DEFAULT_WELCOME_TEXT
 
     # O'zgaruvchilarni tayyorlash
-    if len(real_users) == 1:
-        u = real_users[0]
+    if len(users) == 1:
+        u = users[0]
         mentions_str = f'<a href="tg://user?id={u.id}">{escape(u.full_name)}</a>'
         names_str = escape(u.full_name)
         first_names_str = escape(u.first_name)
         usernames_str = f"@{u.username}" if u.username else escape(u.first_name)
         ids_str = str(u.id)
     else:
-        # Bir vaqtda bir nechta odam kirganda chiroyli birlashtirish
-        mentions_list = [f'<a href="tg://user?id={u.id}">{escape(u.full_name)}</a>' for u in real_users]
+        mentions_list = [f'<a href="tg://user?id={u.id}">{escape(u.full_name)}</a>' for u in users]
         if len(mentions_list) == 2:
             mentions_str = f"{mentions_list[0]} va {mentions_list[1]}"
         else:
             mentions_str = ", ".join(mentions_list[:-1]) + f" va {mentions_list[-1]}"
 
-        names_str = ", ".join(escape(u.full_name) for u in real_users)
-        first_names_str = ", ".join(escape(u.first_name) for u in real_users)
-        usernames_str = ", ".join((f"@{u.username}" if u.username else escape(u.first_name)) for u in real_users)
-        ids_str = ", ".join(str(u.id) for u in real_users)
+        names_str = ", ".join(escape(u.full_name) for u in users)
+        first_names_str = ", ".join(escape(u.first_name) for u in users)
+        usernames_str = ", ".join((f"@{u.username}" if u.username else escape(u.first_name)) for u in users)
+        ids_str = ", ".join(str(u.id) for u in users)
 
     title_str = escape(chat_title)
 
-    # Guruh a'zolari soni
+    # A'zolar soni
     try:
-        count = await bot.get_chat_member_count(message.chat.id)
+        count = await bot.get_chat_member_count(chat_id)
         count_str = f"{count:,}".replace(",", " ")
     except Exception:
         count_str = ""
 
     # Guruh qoidalari
-    rules_text = get_rules(message.chat.id) or ""
+    rules_text = get_rules(chat_id) or ""
     rules_str = escape(rules_text) if rules_text else "O‘zaro hurmat va madaniyat saqlanishi shart."
 
     # Shablonni almashtirish
@@ -119,49 +118,153 @@ async def on_user_joined(message: types.Message, bot: Bot):
     welcome_text = welcome_text.replace("{members_count}", count_str)
     welcome_text = welcome_text.replace("{rules}", rules_str)
 
+    if is_test:
+        welcome_text = "🧪 <b>[Sinov Rejimi / Test Welcome]</b>\n\n" + welcome_text
+
     # Tugmalar (Interactive Buttons)
     inline_keyboard = []
     action_row = [
-        InlineKeyboardButton(text="📜 Guruh Qoidalari", callback_data=f"welcome_rules:{message.chat.id}")
+        InlineKeyboardButton(text="📜 Guruh Qoidalari", callback_data=f"welcome_rules:{chat_id}")
     ]
 
-    # Agar guruhning ommaviy username'i bo'lsa
-    if message.chat.username:
-        action_row.append(InlineKeyboardButton(text="🔗 Guruh Silkasi", url=f"https://t.me/{message.chat.username}"))
+    if chat_username:
+        action_row.append(InlineKeyboardButton(text="🔗 Guruh Silkasi", url=f"https://t.me/{chat_username}"))
 
     inline_keyboard.append(action_row)
     markup = InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
-    # Guruhda tozalik va intizom: oldingi welcome xabari bo'lsa, o'chirib yangisini qo'yish
-    old_welcome_id = _last_welcome_messages.get(message.chat.id)
-    if old_welcome_id:
+    # Oldingi welcome xabarini o'chirish (tozalikni saqlash)
+    if not is_test:
+        old_welcome_id = _last_welcome_messages.get(chat_id)
+        if old_welcome_id:
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=old_welcome_id)
+            except Exception:
+                pass
+
+    try:
+        sent_msg = await bot.send_message(
+            chat_id=chat_id,
+            text=welcome_text,
+            parse_mode="HTML",
+            reply_markup=markup,
+            disable_web_page_preview=True,
+            reply_to_message_id=reply_to_msg_id
+        )
+        if not is_test:
+            _last_welcome_messages[chat_id] = sent_msg.message_id
+    except Exception as e:
+        logger.error(f"Welcome xabarini yuborishda xatolik: {e}")
+        # Xavfsiz fallback varianti
         try:
-            await bot.delete_message(chat_id=message.chat.id, message_id=old_welcome_id)
+            fallback = f"✨ <b>Xush kelibsiz, {mentions_str}!</b>\n\n<b>«{title_str}»</b> guruhimizga marhamat!"
+            sent_msg = await bot.send_message(
+                chat_id=chat_id,
+                text=fallback,
+                parse_mode="HTML",
+                reply_markup=markup,
+                disable_web_page_preview=True,
+                reply_to_message_id=reply_to_msg_id
+            )
+            if not is_test:
+                _last_welcome_messages[chat_id] = sent_msg.message_id
         except Exception:
             pass
 
-    try:
-        sent_msg = await message.answer(
-            welcome_text,
-            parse_mode="HTML",
-            reply_markup=markup,
-            disable_web_page_preview=True
-        )
-        _last_welcome_messages[message.chat.id] = sent_msg.message_id
-    except Exception as e:
-        logger.error(f"Welcome xabarini yuborishda xatolik: {e}")
-        # Agar maxsus formatda xato bo'lsa, xavfsiz zaxira varianti
-        try:
-            fallback = f"✨ <b>Xush kelibsiz, {mentions_str}!</b>\n\n<b>«{title_str}»</b> guruhimizga marhamat!"
-            sent_msg = await message.answer(
-                fallback,
+
+@router.message(F.new_chat_members)
+async def on_user_joined_message(message: types.Message, bot: Bot):
+    """
+    Yangi a'zo(lar) guruhga qo'shilganda (Message orqali).
+    """
+    chat_title = message.chat.title or "Guruh"
+
+    # 1. Botning o'zi guruhga qo'shilganda
+    for user in message.new_chat_members:
+        if user.id == bot.id:
+            webapp_url = get_webapp_url()
+            await message.answer(
+                f"👑 <b>Assalomu alaykum!</b>\n\n"
+                f"<b>«{escape(chat_title)}»</b> jamoasiga qo‘shilganimdan mamnunman. "
+                f"Men guruhda tartib-intizom, so‘kinish va spamlardan tozalash hamda statistikani yurituvchi aqlli moderatorman.\n\n"
+                f"<blockquote>🛡 <b>To‘liq ishlashim uchun:</b>\n"
+                f"Menga guruhda <b>Administrator</b> huquqlarini berishingizni so‘rayman.</blockquote>\n\n"
+                f"<i>Barcha sozlamalarni Telegram Mini App orqali boshqarishingiz mumkin.</i>",
                 parse_mode="HTML",
-                reply_markup=markup,
-                disable_web_page_preview=True
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[
+                        InlineKeyboardButton(
+                            text="⚙️ Guruhni Sozlash (Mini App)",
+                            web_app=WebAppInfo(url=f"{webapp_url}?chat_id={message.chat.id}")
+                        )
+                    ]]
+                )
             )
-            _last_welcome_messages[message.chat.id] = sent_msg.message_id
-        except Exception:
-            pass
+            return
+
+    # 2. Yangi haqiqiy foydalanuvchilar
+    real_users = [u for u in message.new_chat_members if not u.is_bot and _should_welcome_user(message.chat.id, u.id)]
+    if not real_users:
+        return
+
+    await send_welcome_card(
+        bot=bot,
+        chat_id=message.chat.id,
+        chat_title=chat_title,
+        chat_username=message.chat.username,
+        users=real_users
+    )
+
+
+@router.chat_member(ChatMemberUpdatedFilter(JOIN_TRANSITION))
+async def on_user_joined_chat_member(event: types.ChatMemberUpdated, bot: Bot):
+    """
+    Yangi a'zo guruhga havola orqali qo'shilganda yoki guruhda 'Xush kelibsiz' xizmat xabarlari
+    yashirilgan (hide join messages) bo'lsa ham welcome kafolatli ishlashi uchun.
+    """
+    if event.chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        return
+
+    user = event.new_chat_member.user
+    if user.is_bot:
+        return
+
+    if not _should_welcome_user(event.chat.id, user.id):
+        return
+
+    chat_title = event.chat.title or "Guruh"
+    await send_welcome_card(
+        bot=bot,
+        chat_id=event.chat.id,
+        chat_title=chat_title,
+        chat_username=event.chat.username,
+        users=[user]
+    )
+
+
+@router.message(Command("testwelcome", "welcometest"))
+async def cmd_test_welcome(message: types.Message, bot: Bot):
+    """
+    Adminlar yoki bot egasi guruhda welcome qanday ko'rinishini zudlik bilan sinab ko'rishi uchun.
+    """
+    if message.chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        await message.reply("ℹ️ Ushbu buyruq faqat guruhlarda ishlaydi!")
+        return
+
+    caller = message.from_user
+    if not caller:
+        return
+
+    chat_title = message.chat.title or "Guruh"
+    await send_welcome_card(
+        bot=bot,
+        chat_id=message.chat.id,
+        chat_title=chat_title,
+        chat_username=message.chat.username,
+        users=[caller],
+        is_test=True,
+        reply_to_msg_id=message.message_id
+    )
 
 
 @router.callback_query(F.data.startswith("welcome_rules:"))

@@ -26,7 +26,7 @@ async def on_my_chat_member(event: types.ChatMemberUpdated, bot: Bot):
     chat = event.chat
     if chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
         from group_bot.database import save_chat_full_info, set_bot_status, record_chat_authorized_user
-        from group_bot.bot import WEBAPP_URL
+        from group_bot.config import get_webapp_url
 
         new_status = event.new_chat_member.status
         old_status = event.old_chat_member.status
@@ -96,13 +96,14 @@ async def on_my_chat_member(event: types.ChatMemberUpdated, bot: Bot):
             try:
                 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
+                webapp_url = get_webapp_url()
                 user_id_param = f"&user_id={added_by_id}" if added_by_id else ""
                 kb = InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
                             InlineKeyboardButton(
                                 text="⚙️ Guruhni Sozlash (Mini App)",
-                                web_app=WebAppInfo(url=f"{WEBAPP_URL}?chat_id={chat.id}{user_id_param}")
+                                web_app=WebAppInfo(url=f"{webapp_url}?chat_id={chat.id}{user_id_param}")
                             )
                         ]
                     ]

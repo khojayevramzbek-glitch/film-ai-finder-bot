@@ -32,3 +32,8 @@ __pycache__/
 # OS Files
 .DS_Store
 Thumbs.db
+
+# Tunnel & Local Binaries
+cloudflared.exe
+webapp_url.txt
+group_bot/webapp_url.txt

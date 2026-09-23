@@ -4,6 +4,13 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, Awaitable
 
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 GROUP_BOT_DIR = Path(__file__).resolve().parent
 if str(GROUP_BOT_DIR) not in sys.path:
     sys.path.insert(0, str(GROUP_BOT_DIR))
@@ -13,7 +20,7 @@ from aiogram.enums import ParseMode, ChatType
 from aiogram.types import Message, TelegramObject
 from aiogram.client.default import DefaultBotProperties
 
-from group_bot.config import BOT_TOKEN
+from group_bot.config import BOT_TOKEN, get_webapp_url
 from group_bot.database import (
     init_db, add_message, cleanup_old_messages, is_bot_enabled,
     save_chat_title, is_prank_user, delete_message_record,
@@ -22,8 +29,6 @@ from group_bot.database import (
 from group_bot.handlers import main_router
 from group_bot.handlers.antiflood import AntiFloodMiddleware
 from group_bot.handlers.censor import CensorMiddleware
-
-WEBAPP_URL = "https://uchunrisk-film-ai-finder-bot.hf.space/gradio_api/webapp"
 
 
 class MessageTrackerMiddleware(BaseMiddleware):
@@ -188,6 +193,23 @@ async def main():
     bot_info = await bot.get_me()
     logger.info(f"Bot faol: @{bot_info.username} ({bot_info.first_name}) [ID: {bot_info.id}]")
 
+    # 7. Ichki Mini App aiohttp veb-serverini ishga tushirish
+    web_runner = None
+    try:
+        import os
+        from aiohttp import web
+        from group_bot.webapp_server import attach_aiohttp_routes
+        app = web.Application()
+        attach_aiohttp_routes(app)
+        web_runner = web.AppRunner(app)
+        await web_runner.setup()
+        port = int(os.getenv("PORT", "7860"))
+        site = web.TCPSite(web_runner, "0.0.0.0", port)
+        await site.start()
+        logger.info(f"🌐 [Web Server] Mini App web server 0.0.0.0:{port} da muvaffaqiyatli ishga tushirildi.")
+    except Exception as e:
+        logger.warning(f"Web serverni ishga tushirishda ogohlantirish (ehtimol port band): {e}")
+
     # Telegram menyu buyruqlarini sozlash
     try:
         from aiogram.types import (
@@ -198,19 +220,29 @@ async def main():
             MenuButtonWebApp,
             WebAppInfo
         )
-        # Default va Private chatlar uchun /start
+        # Default va Private chatlar uchun /start va /manager
         await bot.set_my_commands(
-            [BotCommand(command="start", description="🚀 Boshlash / Start")],
+            [
+                BotCommand(command="start", description="🚀 Boshlash / Start"),
+                BotCommand(command="manager", description="👑 Bot Menedjeri / Statistika"),
+                BotCommand(command="help", description="💡 Yordam"),
+            ],
             scope=BotCommandScopeDefault()
         )
         await bot.set_my_commands(
-            [BotCommand(command="start", description="🚀 Boshlash / Start")],
+            [
+                BotCommand(command="start", description="🚀 Boshlash / Start"),
+                BotCommand(command="manager", description="👑 Bot Menedjeri / Statistika"),
+                BotCommand(command="help", description="💡 Yordam"),
+            ],
             scope=BotCommandScopeAllPrivateChats()
         )
         # Guruhlar uchun to'liq buyruqlar menyusi
         group_commands = [
             BotCommand(command="start", description="🚀 Bot holatini tekshirish"),
             BotCommand(command="help", description="💡 Yordam va buyruqlar ro'yxati"),
+            BotCommand(command="manager", description="👑 Bot Menedjer (Bot egasi)"),
+            BotCommand(command="testwelcome", description="✨ Welcome kartasini sinash"),
             BotCommand(command="game", description="🎮 «Raqamni Top» dueli (game @user)"),
             BotCommand(command="topgame", description="🏆 O'yin reytingi va Gift sovg'alari"),
             BotCommand(command="gamestats", description="📊 Shaxsiy o'yin statistikangiz"),
@@ -222,24 +254,26 @@ async def main():
         logger.info("📋 Telegram guruhlar menyusi buyruqlari muvaffaqiyatli yangilandi.")
 
         # Chat menu tugmasini Telegram Mini App ga ulash
+        current_webapp_url = get_webapp_url()
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(
                 text="📱 Boshqaruv",
-                web_app=WebAppInfo(url=WEBAPP_URL)
+                web_app=WebAppInfo(url=current_webapp_url)
             )
         )
-        logger.info(f"📱 Telegram Menu Button Mini App ga muvaffaqiyatli ulandi: {WEBAPP_URL}")
+        logger.info(f"📱 Telegram Menu Button Mini App ga muvaffaqiyatli ulandi: {current_webapp_url}")
     except Exception as e:
         logger.warning(f"Menu button va buyruqlarni o'rnatishda xatolik: {e}")
 
     try:
         await dp.start_polling(
-
             bot,
             allowed_updates=["message", "chat_member", "my_chat_member", "callback_query"],
             handle_signals=False
         )
     finally:
+        if web_runner:
+            await web_runner.cleanup()
         await bot.session.close()
         logger.info("Bot to'xtatildi.")
 

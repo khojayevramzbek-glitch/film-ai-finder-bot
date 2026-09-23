@@ -7,34 +7,45 @@ from html import escape
 
 router = Router()
 
-WEBAPP_URL = "https://uchunrisk-film-ai-finder-bot.hf.space/gradio_api/webapp"
+from group_bot.config import get_webapp_url
+from group_bot.database import BOT_OWNER_IDS
 
 
-def get_main_menu_keyboard(bot_username: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="➕ Guruhga Qo'shish",
-                    url=f"https://t.me/{bot_username}?startgroup=true"
-                ),
-                InlineKeyboardButton(
-                    text="👥 Qo'shilgan Guruhlar",
-                    web_app=WebAppInfo(url=f"{WEBAPP_URL}?tab=groups")
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📱 Mini App Boshqaruv",
-                    web_app=WebAppInfo(url=WEBAPP_URL)
-                ),
-                InlineKeyboardButton(
-                    text="👑 Bosh Admin",
-                    url="https://t.me/khojayev_ramz"
-                )
-            ]
+def get_main_menu_keyboard(bot_username: str, user_id: int | None = None) -> InlineKeyboardMarkup:
+    webapp_url = get_webapp_url()
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="➕ Guruhga Qo'shish",
+                url=f"https://t.me/{bot_username}?startgroup=true"
+            ),
+            InlineKeyboardButton(
+                text="👥 Guruhlarim",
+                web_app=WebAppInfo(url=f"{webapp_url}?tab=groups&user_id={user_id or 0}")
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📱 Mini App Boshqaruv",
+                web_app=WebAppInfo(url=f"{webapp_url}?user_id={user_id or 0}")
+            ),
+            InlineKeyboardButton(
+                text="👑 Bosh Admin",
+                url="https://t.me/khojayev_ramz"
+            )
         ]
-    )
+    ]
+
+    # Agar bot egasi bo'lsa, maxsus Bot Manager tugmasini qo'shish
+    if user_id and user_id in BOT_OWNER_IDS:
+        rows.insert(0, [
+            InlineKeyboardButton(
+                text="👑 «Bot Manager» Super-Admin",
+                web_app=WebAppInfo(url=f"{webapp_url}?tab=manager&user_id={user_id}")
+            )
+        ])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def get_back_keyboard() -> InlineKeyboardMarkup:
@@ -297,7 +308,7 @@ async def cmd_settings(message: types.Message, bot: Bot):
         except Exception:
             pass
 
-        group_webapp_url = f"{WEBAPP_URL}?chat_id={chat_id}&user_id={user_id}"
+        group_webapp_url = f"{get_webapp_url()}?chat_id={chat_id}&user_id={user_id}"
 
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -323,22 +334,30 @@ async def cmd_settings(message: types.Message, bot: Bot):
         )
     else:
         user_id = message.from_user.id if message.from_user else 0
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="📱 Mini App Boshqaruv Markazi",
-                        web_app=WebAppInfo(url=f"{WEBAPP_URL}?user_id={user_id}")
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="➕ Botni Guruhga Qo'shish",
-                        url=f"https://t.me/{bot_username}?startgroup=true"
-                    )
-                ]
+        webapp_url = get_webapp_url()
+        kb_rows = [
+            [
+                InlineKeyboardButton(
+                    text="📱 Mini App Boshqaruv Markazi",
+                    web_app=WebAppInfo(url=f"{webapp_url}?user_id={user_id}")
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="➕ Botni Guruhga Qo'shish",
+                    url=f"https://t.me/{bot_username}?startgroup=true"
+                )
             ]
-        )
+        ]
+        if user_id in BOT_OWNER_IDS:
+            kb_rows.insert(0, [
+                InlineKeyboardButton(
+                    text="👑 «Bot Manager» Super-Admin",
+                    web_app=WebAppInfo(url=f"{webapp_url}?tab=manager&user_id={user_id}")
+                )
+            ])
+
+        kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
         await message.answer(
             "📱 <b>Blizkiy Bot — Mini App Boshqaruv Markazi:</b>\n\n"
             "Guruhlaringizni to'liq qulaylikda boshqarish, botni yoqish/o'chirish, tsenzura va statistika sozlamalarini o'zgartirish uchun Mini App'ni oching:",
@@ -374,21 +393,35 @@ async def cmd_manager(message: types.Message, bot: Bot):
         f"• 🟢 Faol ishlayotgan: <b>{active_groups} ta</b>\n"
         f"• 🔴 O‘chirilgan / to‘xtatilgan: <b>{inactive_groups} ta</b>\n"
         f"• 👤 Jami qamrov (a’zolar soni): <b>{total_members:,} kishi</b>\n"
-        f"• 💬 So‘nggi 24h xabarlar: <b>{total_msgs:,} ta</b>\n\n"
-        f"Pastdagi tugma orqali barcha guruhlar ro‘yxati, ularning taklif havolalari (silkasi) va sozlamalarini ko‘rishingiz mumkin:"
+        f"• 💬 So‘nggi 24h xabarlar: <b>{total_msgs:,} ta</b>\n"
     )
 
-    manager_url = f"{WEBAPP_URL}?tab=manager&user_id={user_id}"
+    groups_list = data.get("groups", [])
+    if groups_list:
+        manager_text += "\n📋 <b>Ulangan Guruhlar:</b>\n"
+        for idx, g in enumerate(groups_list[:10], 1):
+            title = escape(g.get("title") or "Nomsiz")
+            status_icon = "🟢" if g.get("is_bot_enabled") else "🔴"
+            m_count = g.get("members_count", 0)
+            added_by = f"@{g['added_by_username']}" if g.get("added_by_username") else (escape(g.get("added_by_name") or "") or str(g.get("added_by_user_id") or "Noma'lum"))
+            link = g.get("invite_link") or (f"https://t.me/{g['username']}" if g.get("username") else None)
+            
+            manager_text += f"\n{idx}. <b>{title}</b> ({status_icon})\n"
+            manager_text += f"   👥 A'zolar: <b>{m_count:,}</b> | 👤 Qo‘shgan: {added_by}\n"
+            if link:
+                manager_text += f"   🔗 <a href=\"{link}\">Guruhga kirish</a>\n"
+
+    manager_url = f"{get_webapp_url()}?tab=manager&user_id={user_id}"
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="👑 «Bot Manager» Panelini Ochish",
+                    text="👑 «Bot Manager» Panelini Ochish (Mini App)",
                     web_app=WebAppInfo(url=manager_url)
                 )
             ]
         ]
     )
-    await message.reply(manager_text, parse_mode="HTML", reply_markup=kb)
+    await message.reply(manager_text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
 
 
