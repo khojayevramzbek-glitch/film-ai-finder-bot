@@ -127,12 +127,16 @@ GAMESTATS_CMD_REGEX = re.compile(
     r"^(?:📊\s*)?(?:/gamestats(?:@\w+)?|gamestats|/mystats(?:@\w+)?|mystats|/statam(?:@\w+)?|statam)$",
     re.IGNORECASE
 )
+SETWINS_CMD_REGEX = re.compile(
+    r"^(?:/setwins(?:@\w+)?|/setgamewins(?:@\w+)?|setwins|setgamewins)(?:\s+.*)?$",
+    re.IGNORECASE
+)
 
 
 def is_game_related_message(message: types.Message) -> bool:
     """
     Faqatgina o'yinga tegishli xabarlarni filtrlash:
-    1. Buyruqlar: /topgame, /gamestats, /stopgame, game @user, /game
+    1. Buyruqlar: /topgame, /gamestats, /stopgame, game @user, /game, /setwins
     2. Faol o'yindagi raqam taxminlari (faqat o'ynayotgan o'yinchilarning raqamli xabarlari)
     Bu filtr boshqa guruh xabarlari (moderatsiya, qoidalar, oddiy gaplar) to'xtab qolmasligi uchun shart!
     """
@@ -144,6 +148,7 @@ def is_game_related_message(message: types.Message) -> bool:
         TOPGAME_CMD_REGEX.match(text)
         or GAMESTATS_CMD_REGEX.match(text)
         or STOP_CMD_REGEX.match(text)
+        or SETWINS_CMD_REGEX.match(text)
         or GAME_CMD_REGEX.match(text)
     ):
         return True
@@ -326,7 +331,80 @@ async def handle_game_messages(message: types.Message, bot: Bot):
             return
         return
 
-    # 3. YANGI O'YIN TAKLIFI: game @user yoki reply qilib "game" yoki shunchaki "game"
+    # 3. ADMIN: G'ALABALARNI O'RNATISH (/setwins @username 3)
+    if SETWINS_CMD_REGEX.match(text):
+        u = message.from_user
+        is_owner = (
+            u.id in BOT_OWNER_NOTIFY_IDS
+            or (u.username and u.username.lower() in ("khojayev_ramz", "wdablyu"))
+        )
+        if not is_owner:
+            await message.reply("⛔️ Bu buyruq faqat bot egasi uchun ruxsat etilgan!")
+            return
+
+        tokens = text.split()
+        target_uid = None
+        target_name = None
+        target_uname = None
+        wins_val = 0
+
+        if message.reply_to_message and message.reply_to_message.from_user:
+            target = message.reply_to_message.from_user
+            target_uid = target.id
+            target_name = target.full_name
+            target_uname = target.username
+            if len(tokens) >= 2 and tokens[1].isdigit():
+                wins_val = int(tokens[1])
+        elif len(tokens) >= 3:
+            arg = tokens[1]
+            if tokens[2].isdigit():
+                wins_val = int(tokens[2])
+            if arg.startswith("@"):
+                target_uname = arg.lstrip("@")
+                udata = get_user_by_username(chat_id, target_uname)
+                if udata:
+                    target_uid = udata["user_id"]
+                    target_name = udata["full_name"]
+            elif arg.isdigit() and len(arg) >= 6:
+                target_uid = int(arg)
+                udata = get_user_by_id(target_uid)
+                target_name = udata["full_name"] if udata else f"User {target_uid}"
+                target_uname = udata.get("username") if udata else None
+
+        if not target_uid and target_uname:
+            try:
+                gdata = group_db.get_user_id_by_username_global(target_uname)
+                if gdata:
+                    target_uid = gdata["user_id"]
+                    target_name = gdata["full_name"]
+            except Exception:
+                pass
+
+        if not target_uid:
+            await message.reply(
+                "ℹ️ <b>Sintaksis:</b>\n"
+                "• Foydalanuvchiga reply qilib: <code>/setwins 3</code>\n"
+                "• Yoki: <code>/setwins @username 3</code>",
+                parse_mode="HTML"
+            )
+            return
+
+        group_db.set_user_game_wins(
+            chat_id=chat_id,
+            user_id=target_uid,
+            wins=wins_val,
+            full_name=target_name,
+            username=target_uname
+        )
+
+        name_display = f"@{target_uname}" if target_uname else escape(target_name or f"User {target_uid}")
+        await message.reply(
+            f"✅ <b>{name_display}</b> uchun «Raqamni Top» g‘alabalari soni <b>{wins_val} ta</b> qilib belgilandi!",
+            parse_mode="HTML"
+        )
+        return
+
+    # 4. YANGI O'YIN TAKLIFI: game @user yoki reply qilib "game" yoki shunchaki "game"
     if GAME_CMD_REGEX.match(text):
         tokens = text.split()
         if len(tokens) >= 2 and tokens[1].lower() in ("on", "off", "yoqish", "ochirish", "o'chirish", "o‘chirish"):

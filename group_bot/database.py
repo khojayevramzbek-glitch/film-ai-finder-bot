@@ -1448,4 +1448,51 @@ def get_top_game_players(chat_id: int, limit: int = 10) -> list[dict]:
         return [dict(row) for row in cur.fetchall()]
 
 
+def set_user_game_wins(
+    chat_id: int,
+    user_id: int,
+    wins: int,
+    full_name: str | None = None,
+    username: str | None = None
+) -> int:
+    """Foydalanuvchining g'alabalar sonini to'g'ridan-to'g'ri o'rnatish (Admin uchun)."""
+    now = datetime.now(timezone.utc).isoformat()
+    with get_connection() as conn:
+        if not full_name:
+            cur = conn.execute("SELECT full_name, username FROM messages WHERE user_id = ? ORDER BY id DESC LIMIT 1", (user_id,))
+            row = cur.fetchone()
+            if row:
+                full_name = row["full_name"]
+                username = row["username"] or username
+            else:
+                full_name = username or f"User {user_id}"
+
+        conn.execute("""
+            INSERT INTO game_stats (chat_id, user_id, full_name, username, wins, losses, total_games, claimed_milestones, updated_at)
+            VALUES (?, ?, ?, ?, ?, 0, ?, '', ?)
+            ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                full_name = COALESCE(excluded.full_name, full_name),
+                username = COALESCE(excluded.username, username),
+                wins = excluded.wins,
+                total_games = MAX(total_games, excluded.wins),
+                updated_at = excluded.updated_at
+        """, (chat_id, user_id, full_name, username, wins, wins, now))
+        conn.commit()
+    return wins
+
+
+def get_user_id_by_username_global(username: str) -> dict | None:
+    """Butun bazadan username bo'yicha user_id va full_name topish."""
+    clean = username.lstrip("@").strip().lower()
+    with get_connection() as conn:
+        cur = conn.execute(
+            "SELECT user_id, full_name, username FROM messages WHERE LOWER(username) = ? ORDER BY id DESC LIMIT 1",
+            (clean,)
+        )
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+    return None
+
+
 
