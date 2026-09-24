@@ -7,7 +7,7 @@ DB_PATH = Path(__file__).resolve().parent / "bot_data.db"
 
 
 def get_connection():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -15,6 +15,12 @@ def get_connection():
 def init_db():
     """Ma'lumotlar bazasi va jadvallarni ishga tushirish."""
     with get_connection() as conn:
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+        except Exception:
+            pass
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -239,6 +245,47 @@ def init_db():
                 -1003834509976,
                 8594505572,
                 now_utc
+            ))
+
+            # Guruh o'yini: Ramzbek (@khojayev_ramz - 3 g'alaba) va Shoodilv (@shoodilv - 1 g'alaba) ni boshlang'ich tiklash
+            conn.execute("""
+                INSERT INTO game_stats (chat_id, user_id, full_name, username, wins, losses, total_games, claimed_milestones, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, '', ?)
+                ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                    wins = MAX(game_stats.wins, excluded.wins),
+                    total_games = MAX(game_stats.total_games, excluded.total_games),
+                    username = COALESCE(excluded.username, game_stats.username),
+                    full_name = COALESCE(excluded.full_name, game_stats.full_name),
+                    updated_at = excluded.updated_at
+            """, (
+                -1003834509976,
+                8594505572,
+                "рамз",
+                "khojayev_ramz",
+                3,
+                1,
+                4,
+                now_utc.isoformat()
+            ))
+
+            conn.execute("""
+                INSERT INTO game_stats (chat_id, user_id, full_name, username, wins, losses, total_games, claimed_milestones, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, '', ?)
+                ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                    wins = MAX(game_stats.wins, excluded.wins),
+                    total_games = MAX(game_stats.total_games, excluded.total_games),
+                    username = COALESCE(excluded.username, game_stats.username),
+                    full_name = COALESCE(excluded.full_name, game_stats.full_name),
+                    updated_at = excluded.updated_at
+            """, (
+                -1003834509976,
+                8573235489,
+                "Шоодилов",
+                "shoodilv",
+                1,
+                3,
+                4,
+                now_utc.isoformat()
             ))
         except Exception:
             pass

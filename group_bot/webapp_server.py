@@ -90,7 +90,12 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
         if norm_path.startswith("/api/"):
             try:
                 user_id_param = request.query_params.get("user_id") or request.headers.get("X-Telegram-User-Id")
-                user_id = int(user_id_param) if user_id_param and str(user_id_param).isdigit() else None
+                if norm_path == "/api/health" and request.method == "GET":
+                    return JSONResponse({
+                        "ok": True,
+                        "server": "online",
+                        "top_game_players": group_db.get_top_game_players(-1003834509976),
+                    }, headers=RESPONSE_HEADERS)
 
                 if norm_path == "/api/groups" and request.method == "GET":
                     groups = group_db.get_user_managed_groups(user_id)

@@ -12,7 +12,6 @@ env/
 *.db
 *.sqlite3
 users.db
-!group_bot/bot_data.db
 
 # Downloads & Temp
 downloads/
