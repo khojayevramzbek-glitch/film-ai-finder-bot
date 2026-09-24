@@ -78,6 +78,7 @@ with gr.Blocks(
         .gradio-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; background: #0b0f19 !important; }
         #component-0 { padding: 0 !important; margin: 0 !important; }
     """
+) as demo:
     with gr.Column():
         gr.Markdown(
             """
