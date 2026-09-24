@@ -151,6 +151,23 @@ def init_db():
             );
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS known_users (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                full_name TEXT NOT NULL,
+                last_chat_id INTEGER,
+                updated_at TIMESTAMP NOT NULL
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_known_users_username
+            ON known_users(username COLLATE NOCASE);
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_known_users_chat
+            ON known_users(last_chat_id);
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_settings (
                 chat_id INTEGER PRIMARY KEY,
                 censor_mute_seconds INTEGER DEFAULT 15,
@@ -287,10 +304,73 @@ def init_db():
                 4,
                 now_utc.isoformat()
             ))
+            # 4. known_users katalogini messages va game_stats dan to'ldirish (Backfill)
+            conn.execute("""
+                INSERT OR IGNORE INTO known_users (user_id, username, full_name, last_chat_id, updated_at)
+                SELECT user_id, username, full_name, chat_id, created_at
+                FROM (
+                    SELECT user_id, username, full_name, chat_id, created_at
+                    FROM messages
+                    WHERE user_id IS NOT NULL AND user_id > 0
+                    ORDER BY id DESC
+                )
+                GROUP BY user_id;
+            """)
+            conn.execute("""
+                INSERT OR IGNORE INTO known_users (user_id, username, full_name, last_chat_id, updated_at)
+                SELECT user_id, username, full_name, chat_id, updated_at
+                FROM game_stats
+                WHERE user_id IS NOT NULL AND user_id > 0;
+            """)
+            conn.execute("""
+                INSERT INTO known_users (user_id, username, full_name, last_chat_id, updated_at)
+                VALUES (8594505572, 'khojayev_ramz', 'Ramzbek', -1003834509976, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    username = excluded.username,
+                    full_name = excluded.full_name,
+                    updated_at = excluded.updated_at;
+            """, (now_utc.isoformat(),))
+            conn.execute("""
+                INSERT INTO known_users (user_id, username, full_name, last_chat_id, updated_at)
+                VALUES (7690283463, 'wdablyu', 'Wdablyu', -1003834509976, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    username = excluded.username,
+                    full_name = excluded.full_name,
+                    updated_at = excluded.updated_at;
+            """, (now_utc.isoformat(),))
         except Exception:
             pass
 
         conn.commit()
+
+
+def upsert_known_user(user_id: int, full_name: str, username: str | None = None, chat_id: int | None = None):
+    """
+    Foydalanuvchini doimiy foydalanuvchilar katalogiga (known_users) yozish yoki yangilash.
+    Ushbu jadval 3 kundan keyin tozalanmaydi, butunlay saqlanib qoladi.
+    """
+    if not user_id or user_id <= 0:
+        return
+    clean_username = username.lstrip("@").strip() if username else None
+    clean_full_name = (full_name or "").strip() or f"Foydalanuvchi [{user_id}]"
+    now_utc = datetime.now(timezone.utc).isoformat()
+    try:
+        with get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO known_users (user_id, username, full_name, last_chat_id, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    username = COALESCE(excluded.username, known_users.username),
+                    full_name = CASE WHEN excluded.full_name != '' THEN excluded.full_name ELSE known_users.full_name END,
+                    last_chat_id = COALESCE(excluded.last_chat_id, known_users.last_chat_id),
+                    updated_at = excluded.updated_at
+                """,
+                (user_id, clean_username, clean_full_name, chat_id, now_utc)
+            )
+            conn.commit()
+    except Exception:
+        pass
 
 
 def delete_message_record(chat_id: int, message_id: int):
@@ -303,8 +383,9 @@ def delete_message_record(chat_id: int, message_id: int):
 
 
 def add_message(chat_id: int, user_id: int, full_name: str, username: str | None = None, message_id: int | None = None):
-    """Yangi kelgan xabarni bazaga yozish."""
+    """Yangi kelgan xabarni bazaga yozish va doimiy katalogga muhrlash."""
     now_utc = datetime.now(timezone.utc)
+    upsert_known_user(user_id, full_name, username, chat_id)
     with get_connection() as conn:
         conn.execute(
             """
@@ -474,24 +555,65 @@ def get_user_24h_stat(chat_id: int, user_id: int) -> int:
 
 
 def get_user_by_username(chat_id: int, username: str) -> dict | None:
-    """Foydalanuvchini username bo'yicha bazadan qidirish."""
+    """
+    Foydalanuvchini username bo'yicha super-tergov qidiruvi (Waterfall Lookup):
+    1. known_users - aynan shu guruhda ko'rilgan
+    2. known_users - barcha guruhlar bo'yicha global qidiruv
+    3. messages - shu guruhdagi so'nggi xabarlar
+    4. messages - umumiy xabarlar bazasi
+    5. game_stats - o'yin o'ynaganlar bazasi
+    """
     clean_username = username.lstrip("@").strip().lower()
+    if not clean_username:
+        return None
+
     with get_connection() as conn:
-        # 1. Avval shu guruhning o'zidan qidirish
-        cursor = conn.execute(
+        # 1. known_users (shu guruh)
+        if chat_id:
+            cur = conn.execute(
+                """
+                SELECT user_id, full_name, username 
+                FROM known_users 
+                WHERE last_chat_id = ? AND LOWER(username) = ? 
+                LIMIT 1
+                """,
+                (chat_id, clean_username)
+            )
+            row = cur.fetchone()
+            if row:
+                return dict(row)
+
+        # 2. known_users (umumiy)
+        cur = conn.execute(
             """
             SELECT user_id, full_name, username 
-            FROM messages 
-            WHERE chat_id = ? AND LOWER(username) = ? 
-            ORDER BY id DESC LIMIT 1
+            FROM known_users 
+            WHERE LOWER(username) = ? 
+            ORDER BY updated_at DESC LIMIT 1
             """,
-            (chat_id, clean_username)
+            (clean_username,)
         )
-        row = cursor.fetchone()
+        row = cur.fetchone()
         if row:
             return dict(row)
 
-        # 2. Agar guruhda topilmasa, umumiy baza bo'yicha qidirish
+        # 3. messages (shu guruh)
+        if chat_id:
+            cursor = conn.execute(
+                """
+                SELECT user_id, full_name, username 
+                FROM messages 
+                WHERE chat_id = ? AND LOWER(username) = ? 
+                ORDER BY id DESC LIMIT 1
+                """,
+                (chat_id, clean_username)
+            )
+            row = cursor.fetchone()
+            if row:
+                upsert_known_user(row["user_id"], row["full_name"], row["username"], chat_id)
+                return dict(row)
+
+        # 4. messages (umumiy)
         cursor = conn.execute(
             """
             SELECT user_id, full_name, username 
@@ -502,12 +624,43 @@ def get_user_by_username(chat_id: int, username: str) -> dict | None:
             (clean_username,)
         )
         row = cursor.fetchone()
-        return dict(row) if row else None
+        if row:
+            upsert_known_user(row["user_id"], row["full_name"], row["username"], chat_id)
+            return dict(row)
+
+        # 5. game_stats
+        cursor = conn.execute(
+            """
+            SELECT user_id, full_name, username 
+            FROM game_stats 
+            WHERE LOWER(username) = ? 
+            ORDER BY updated_at DESC LIMIT 1
+            """,
+            (clean_username,)
+        )
+        row = cursor.fetchone()
+        if row:
+            upsert_known_user(row["user_id"], row["full_name"], row["username"], chat_id)
+            return dict(row)
+
+    return None
 
 
 def get_user_by_id(user_id: int) -> dict | None:
-    """Foydalanuvchini ID bo'yicha bazadan qidirish."""
+    """Foydalanuvchini ID bo'yicha super-tergov qidiruvi."""
+    if not user_id:
+        return None
     with get_connection() as conn:
+        # 1. known_users
+        cur = conn.execute(
+            "SELECT user_id, full_name, username FROM known_users WHERE user_id = ?",
+            (user_id,)
+        )
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+
+        # 2. messages
         cursor = conn.execute(
             """
             SELECT user_id, full_name, username 
@@ -518,7 +671,26 @@ def get_user_by_id(user_id: int) -> dict | None:
             (user_id,)
         )
         row = cursor.fetchone()
-        return dict(row) if row else None
+        if row:
+            upsert_known_user(row["user_id"], row["full_name"], row["username"])
+            return dict(row)
+
+        # 3. game_stats
+        cursor = conn.execute(
+            """
+            SELECT user_id, full_name, username 
+            FROM game_stats 
+            WHERE user_id = ? 
+            ORDER BY updated_at DESC LIMIT 1
+            """,
+            (user_id,)
+        )
+        row = cursor.fetchone()
+        if row:
+            upsert_known_user(row["user_id"], row["full_name"], row["username"])
+            return dict(row)
+
+    return None
 
 
 def set_user_sleep(user_id: int, username: str | None, full_name: str, duration_seconds: int, reason: str | None = None) -> datetime:
@@ -1469,6 +1641,8 @@ def record_game_result(
         """, (chat_id, loser_id, loser_name, loser_uname, now))
 
         conn.commit()
+        upsert_known_user(winner_id, winner_name, winner_uname, chat_id)
+        upsert_known_user(loser_id, loser_name, loser_uname, chat_id)
         return curr_wins, new_milestones
 
 
@@ -1525,21 +1699,14 @@ def set_user_game_wins(
                 updated_at = excluded.updated_at
         """, (chat_id, user_id, full_name, username, wins, wins, now))
         conn.commit()
+    upsert_known_user(user_id, full_name, username, chat_id)
     return wins
 
 
 def get_user_id_by_username_global(username: str) -> dict | None:
-    """Butun bazadan username bo'yicha user_id va full_name topish."""
-    clean = username.lstrip("@").strip().lower()
-    with get_connection() as conn:
-        cur = conn.execute(
-            "SELECT user_id, full_name, username FROM messages WHERE LOWER(username) = ? ORDER BY id DESC LIMIT 1",
-            (clean,)
-        )
-        row = cur.fetchone()
-        if row:
-            return dict(row)
-    return None
+    """Butun bazadan username bo'yicha user_id va full_name topish (Super-tergov waterfall)."""
+    return get_user_by_username(0, username)
+
 
 
 

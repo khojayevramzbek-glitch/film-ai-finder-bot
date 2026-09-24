@@ -24,7 +24,8 @@ from group_bot.config import BOT_TOKEN, get_webapp_url
 from group_bot.database import (
     init_db, add_message, cleanup_old_messages, is_bot_enabled,
     save_chat_title, is_prank_user, delete_message_record,
-    init_admin_virtual_mutes_cache, is_admin_virtually_muted
+    init_admin_virtual_mutes_cache, is_admin_virtually_muted,
+    upsert_known_user
 )
 from group_bot.handlers import main_router
 from group_bot.handlers.antiflood import AntiFloodMiddleware
@@ -55,6 +56,18 @@ class MessageTrackerMiddleware(BaseMiddleware):
                 username=event.from_user.username,
                 message_id=event.message_id
             )
+            # Reply qilingan foydalanuvchini ham doimiy katalogga muhrlash
+            if event.reply_to_message and event.reply_to_message.from_user and not event.reply_to_message.from_user.is_bot:
+                ru = event.reply_to_message.from_user
+                upsert_known_user(ru.id, ru.full_name, ru.username, event.chat.id)
+            # Forward qilingan xabar egasini muhrlash
+            if event.forward_from and not event.forward_from.is_bot:
+                fu = event.forward_from
+                upsert_known_user(fu.id, fu.full_name, fu.username, event.chat.id)
+            # Mention qilingan a'zolarni muhrlash
+            for ent in (event.entities or event.caption_entities or []):
+                if ent.type == "text_mention" and ent.user and not ent.user.is_bot:
+                    upsert_known_user(ent.user.id, ent.user.full_name, ent.user.username, event.chat.id)
             # Guruh nomini saqlab borish
             if event.chat and event.chat.title:
                 save_chat_title(event.chat.id, event.chat.title)

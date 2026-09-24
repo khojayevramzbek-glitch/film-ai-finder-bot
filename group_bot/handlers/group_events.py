@@ -120,3 +120,30 @@ async def on_my_chat_member(event: types.ChatMemberUpdated, bot: Bot):
                 )
             except Exception:
                 pass
+
+
+@router.chat_member()
+async def on_chat_member_generic(event: types.ChatMemberUpdated):
+    """
+    Guruh a'zolari holati o'zgarganda (chiqdi, cheklandi, admin bo'ldi va h.k.)
+    foydalanuvchini doimiy katalogga (known_users) muhrlash.
+    """
+    from group_bot.database import upsert_known_user
+    user = event.new_chat_member.user if event.new_chat_member else event.from_user
+    if user and not user.is_bot:
+        upsert_known_user(
+            user_id=user.id,
+            full_name=user.full_name,
+            username=user.username,
+            chat_id=event.chat.id
+        )
+
+
+@router.message(F.left_chat_member)
+async def on_left_chat_member_message(message: types.Message):
+    """A'zo guruhdan chiqqanda yoki chiqarilganda bazaga muhrlash."""
+    from group_bot.database import upsert_known_user
+    u = message.left_chat_member
+    if u and not u.is_bot:
+        upsert_known_user(u.id, u.full_name, u.username, message.chat.id)
+

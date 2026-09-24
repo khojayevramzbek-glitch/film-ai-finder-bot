@@ -10,6 +10,7 @@ from aiogram.exceptions import TelegramBadRequest
 from group_bot.database import (
     add_warn, get_warns, remove_warn, reset_warns, 
     get_user_24h_stat, get_user_by_username, get_user_by_id,
+    upsert_known_user,
     get_chat_full_settings, format_duration,
     set_admin_virtual_mute, remove_admin_virtual_mute, is_admin_virtually_muted
 )
@@ -18,6 +19,7 @@ router = Router()
 
 ALLOWED_USERNAMES = {"wdablyu", "khojayev_ramz"}
 ALLOWED_USER_IDS = {8594505572, 7690283463}
+TG_LINK_REGEX = re.compile(r"(?:https?://)?(?:t\.me|telegram\.me)/([a-zA-Z0-9_]{3,})", re.IGNORECASE)
 
 
 class TargetUser:
@@ -153,18 +155,26 @@ async def resolve_target_and_args(message: types.Message, bot: Bot) -> tuple[Tar
     Xabardan maqsadli foydalanuvchi (TargetUser) va qolgan argumentlarni ajratib oladi:
     1. Reply qilingan bo'lsa -> reply qilingan foydalanuvchi.
     2. Message text_mention entities bo'lsa -> entity.user.
-    3. Args ichida @username bo'lsa -> bazadan qidirish.
-    4. Args ichida raqamli ID bo'lsa -> ID bo'yicha olish.
+    3. Args ichida @username yoki t.me/username bo'lsa -> bazadan va chat adminlaridan super-tergov qidirish.
+    4. Args ichida raqamli ID bo'lsa -> Telegram API va bazadan olish.
     Qaytaradi: (target_user, remaining_args, error_message)
     """
     text = (message.text or message.caption or "").strip()
     tokens = text.split()
     cmd = tokens[0] if tokens else ""
-    args = tokens[1:]
+    raw_args = tokens[1:]
+
+    # Ketma-ket yozilgan buyruqlarni (masalan: /unmute /unban @username) tozalash
+    args = []
+    for a in raw_args:
+        if a.startswith("/") and any(r.match(a) for r in [MUTE_REGEX, UNMUTE_REGEX, WARN_REGEX, UNWARN_REGEX, BAN_REGEX, UNBAN_REGEX]):
+            continue
+        args.append(a)
 
     # 1. Reply qilinganmi?
     if message.reply_to_message and message.reply_to_message.from_user:
         u = message.reply_to_message.from_user
+        upsert_known_user(u.id, u.full_name, u.username, message.chat.id)
         return TargetUser(u.id, u.full_name, u.username), args, None
 
     # 2. Text mention entity (Telegram orqali ism bilan tag qilingan)
@@ -172,18 +182,31 @@ async def resolve_target_and_args(message: types.Message, bot: Bot) -> tuple[Tar
     for ent in entities:
         if ent.type == "text_mention" and ent.user:
             u = ent.user
+            upsert_known_user(u.id, u.full_name, u.username, message.chat.id)
             name_text = text[ent.offset:ent.offset + ent.length]
             remaining_args = [a for a in args if a not in name_text]
             return TargetUser(u.id, u.full_name, u.username), remaining_args, None
 
-    # 3. @username yoki User ID ni args ichidan qidirish
+    # 3. @username, Telegram havola yoki User ID ni args ichidan super-tergov bilan qidirish
     target_user = None
     remaining_args = []
     lookup_error = None
 
     for arg in args:
-        if not target_user and arg.startswith("@"):
-            raw_username = arg.lstrip("@")
+        if target_user:
+            remaining_args.append(arg)
+            continue
+
+        raw_username = None
+        if arg.startswith("@"):
+            raw_username = arg.lstrip("@").strip()
+        else:
+            link_match = TG_LINK_REGEX.search(arg)
+            if link_match:
+                raw_username = link_match.group(1).strip()
+
+        if raw_username:
+            # 1. Bazadan qidirish (known_users -> messages -> game_stats)
             user_data = get_user_by_username(message.chat.id, raw_username)
             if user_data:
                 target_user = TargetUser(
@@ -192,13 +215,40 @@ async def resolve_target_and_args(message: types.Message, bot: Bot) -> tuple[Tar
                     username=user_data.get("username")
                 )
             else:
-                lookup_error = f"⚠️ <b>@{escape(raw_username)}</b> bazadan topilmadi!\nFoydalanuvchi hali guruhda xabar yozmagan bo'lishi mumkin. Xabariga reply qilib ko'ring."
-        elif not target_user and arg.isdigit() and len(arg) >= 6:
+                # 2. Jonli guruh tergovi: Guruh adminlaridan qidirish
+                try:
+                    chat_admins = await bot.get_chat_administrators(message.chat.id)
+                    for adm in chat_admins:
+                        if adm.user and adm.user.username and adm.user.username.lower() == raw_username.lower():
+                            u = adm.user
+                            upsert_known_user(u.id, u.full_name, u.username, message.chat.id)
+                            target_user = TargetUser(u.id, u.full_name, u.username)
+                            break
+                except Exception:
+                    pass
+
+            if not target_user:
+                lookup_error = (
+                    f"⚠️ <b>@{escape(raw_username)}</b> bazadan va guruh ro'yxatidan topilmadi!\n\n"
+                    f"🔍 <b>Tavsiya:</b>\n"
+                    f"1️⃣ Ushbu foydalanuvchining guruhdagi biror xabariga <b>reply</b> qilib buyruq bering.\n"
+                    f"2️⃣ Yoki uning raqamli Telegram ID raqami orqali yozing: <code>{cmd} 123456789</code>\n"
+                    f"3️⃣ Foydalanuvchi hali guruhda xabar yozmagan yoki yaqinda username'ini o'zgartirgan bo'lishi mumkin."
+                )
+        elif arg.isdigit() and len(arg) >= 5:
             uid = int(arg)
-            user_data = get_user_by_id(uid)
-            full_name = user_data["full_name"] if user_data else f"Foydalanuvchi [{uid}]"
-            username = user_data.get("username") if user_data else None
-            target_user = TargetUser(user_id=uid, full_name=full_name, username=username)
+            # Jonli Telegram API orqali a'zo ma'lumotlarini olishga urinish
+            try:
+                cm = await bot.get_chat_member(message.chat.id, uid)
+                u = cm.user
+                upsert_known_user(u.id, u.full_name, u.username, message.chat.id)
+                target_user = TargetUser(u.id, u.full_name, u.username)
+            except Exception:
+                # Guruhda topilmasa yoki ban bo'lsa, bazadan tekshirish
+                user_data = get_user_by_id(uid)
+                full_name = user_data["full_name"] if user_data else f"Foydalanuvchi [{uid}]"
+                username = user_data.get("username") if user_data else None
+                target_user = TargetUser(user_id=uid, full_name=full_name, username=username)
         else:
             remaining_args.append(arg)
 
@@ -350,9 +400,15 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
         except TelegramBadRequest:
             pass
 
+        # Agar foydalanuvchi ban qilingan bo'lsa, bandan ham ochish
+        try:
+            await bot.unban_chat_member(chat_id=message.chat.id, user_id=target_user.id, only_if_banned=True)
+        except TelegramBadRequest:
+            pass
+
         u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
         await message.answer(
-            f"🔊 <b>{escape(target_user.full_name)}</b>{u_tag} uchun yozish cheklovi olib tashlandi (Unmute).",
+            f"🔊 <b>{escape(target_user.full_name)}</b>{u_tag} uchun barcha cheklovlar (Mute & Ban) olib tashlandi.",
             parse_mode="HTML"
         )
         return
@@ -520,15 +576,38 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
             await message.reply(err, parse_mode="HTML")
             return
 
+        # 1. Telegram API orqali blokdan chiqarish (unban)
         try:
             await bot.unban_chat_member(chat_id=message.chat.id, user_id=target_user.id, only_if_banned=True)
-            u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
-            await message.answer(
-                f"✅ Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} blokdan chiqarildi.",
-                parse_mode="HTML"
+        except TelegramBadRequest:
+            pass
+
+        # 2. Shuningdek har qanday yozish cheklovini (mute) ham olib tashlash
+        try:
+            permissions = ChatPermissions(
+                can_send_messages=True,
+                can_send_photos=True,
+                can_send_videos=True,
+                can_send_other_messages=True,
+                can_add_web_page_previews=True
             )
-        except TelegramBadRequest as e:
-            await message.reply(f"⚠️ Xatolik: {e.message}")
+            await bot.restrict_chat_member(
+                chat_id=message.chat.id,
+                user_id=target_user.id,
+                permissions=permissions
+            )
+        except TelegramBadRequest:
+            pass
+
+        # 3. Virtual mutedan tozalash (agar admin bo'lsa)
+        if is_admin_virtually_muted(message.chat.id, target_user.id):
+            remove_admin_virtual_mute(message.chat.id, target_user.id)
+
+        u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
+        await message.answer(
+            f"✅ Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} barcha cheklovlardan (Ban & Mute) chiqarildi.",
+            parse_mode="HTML"
+        )
         return
 
     # 7. Shaxsiy statistika: statasi / mystat
