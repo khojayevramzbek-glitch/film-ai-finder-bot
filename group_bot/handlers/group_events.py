@@ -94,16 +94,14 @@ async def on_my_chat_member(event: types.ChatMemberUpdated, bot: Bot):
 
             # 2. Guruhga xush kelibsiz xabari
             try:
-                from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
-
-                webapp_url = get_webapp_url()
-                user_id_param = f"&user_id={added_by_id}" if added_by_id else ""
+                bot_info = await bot.get_me()
+                bot_username = bot_info.username or "oken_sherda_bot"
                 kb = InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
                             InlineKeyboardButton(
                                 text="⚙️ Guruhni Sozlash (Mini App)",
-                                web_app=WebAppInfo(url=f"{webapp_url}?chat_id={chat.id}{user_id_param}")
+                                url=f"https://t.me/{bot_username}?start=chat_{chat.id}"
                             )
                         ]
                     ]

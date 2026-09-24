@@ -200,7 +200,8 @@ async def on_user_joined_message(message: types.Message, bot: Bot):
     # 1. Botning o'zi guruhga qo'shilganda
     for user in message.new_chat_members:
         if user.id == bot.id:
-            webapp_url = get_webapp_url()
+            bot_info = await bot.get_me()
+            bot_username = bot_info.username or "oken_sherda_bot"
             await message.answer(
                 f"👑 <b>Assalomu alaykum!</b>\n\n"
                 f"<b>«{escape(chat_title)}»</b> jamoasiga qo‘shilganimdan mamnunman. "
@@ -213,7 +214,7 @@ async def on_user_joined_message(message: types.Message, bot: Bot):
                     inline_keyboard=[[
                         InlineKeyboardButton(
                             text="⚙️ Guruhni Sozlash (Mini App)",
-                            web_app=WebAppInfo(url=f"{webapp_url}?chat_id={message.chat.id}")
+                            url=f"https://t.me/{bot_username}?start=chat_{message.chat.id}"
                         )
                     ]]
                 )

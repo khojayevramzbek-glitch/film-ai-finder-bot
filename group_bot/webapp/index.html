@@ -2097,7 +2097,8 @@
     }
 
     // Helper to send API requests trying direct path first, then /gradio_api
-    const DEFAULT_BACKEND_URL = "https://uchunrisk-film-ai-finder-bot.hf.space";
+    const DEFAULT_BACKEND_URL = "https://sapphire-invitations-reviewer-postcards.trycloudflare.com";
+    const HF_BACKEND_URL = "https://uchunrisk-film-ai-finder-bot.hf.space";
     const explicitBackend = urlParams.get('backend');
 
     async function apiFetch(path, options = {}) {
@@ -2115,21 +2116,17 @@
         candidates.push(`${cleanBackend}/gradio_api${fullPath}`);
       }
 
-      // If page is hosted on static HF space or file://, prioritize backend server
-      if (window.location.hostname.includes("static.hf.space") || window.location.protocol === "file:") {
-        candidates.push(`${DEFAULT_BACKEND_URL}/gradio_api${fullPath}`);
-        candidates.push(`${DEFAULT_BACKEND_URL}${fullPath}`);
-      }
+      // 1. Live Tunnel Backend (Direct & instant)
+      candidates.push(`${DEFAULT_BACKEND_URL}${fullPath}`);
+      candidates.push(`${DEFAULT_BACKEND_URL}/gradio_api${fullPath}`);
 
-      // Relative paths (for when hosted directly on backend or custom domain)
+      // 2. Relative paths (for when hosted directly on backend or custom domain)
       candidates.push(fullPath);
       candidates.push('/gradio_api' + fullPath);
 
-      // Fallback to backend URL
-      if (!candidates.includes(`${DEFAULT_BACKEND_URL}/gradio_api${fullPath}`)) {
-        candidates.push(`${DEFAULT_BACKEND_URL}/gradio_api${fullPath}`);
-        candidates.push(`${DEFAULT_BACKEND_URL}${fullPath}`);
-      }
+      // 3. Hugging Face Space fallback
+      candidates.push(`${HF_BACKEND_URL}/gradio_api${fullPath}`);
+      candidates.push(`${HF_BACKEND_URL}${fullPath}`);
 
       let lastError = null;
       for (const targetUrl of candidates) {

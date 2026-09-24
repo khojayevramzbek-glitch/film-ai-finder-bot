@@ -184,8 +184,8 @@ RULES_TEXT = (
 )
 
 
-START_CMD_REGEX = re.compile(r"^/?(?:start|boshlash)(?:@\w+)?$", re.IGNORECASE)
-HELP_CMD_REGEX = re.compile(r"^/?(?:help|yordam|yordamchi|помощь)(?:@\w+)?$", re.IGNORECASE)
+START_CMD_REGEX = re.compile(r"^/?(?:start|boshlash)(?:@\w+)?(?:\s+(.*))?$", re.IGNORECASE)
+HELP_CMD_REGEX = re.compile(r"^/?(?:help|yordam|yordamchi|помощь)(?:@\w+)?(?:\s+(.*))?$", re.IGNORECASE)
 
 
 @router.message(lambda msg: bool(START_CMD_REGEX.match((msg.text or msg.caption or "").strip())))
@@ -194,6 +194,29 @@ async def cmd_start(message: types.Message, bot: Bot):
     bot_username = bot_info.username or "oken_sherda_bot"
 
     if message.chat.type == ChatType.PRIVATE:
+        text_raw = (message.text or message.caption or "").strip()
+        match = START_CMD_REGEX.match(text_raw)
+        arg = (match.group(1) or "").strip() if match else ""
+
+        if arg.startswith("chat_") or arg.startswith("settings_"):
+            chat_id_str = arg.replace("chat_", "").replace("settings_", "")
+            webapp_url = get_webapp_url()
+            user_id = message.from_user.id if message.from_user else 0
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[[
+                    InlineKeyboardButton(
+                        text="⚙️ Guruh Sozlamalarini Ochish (Mini App)",
+                        web_app=WebAppInfo(url=f"{webapp_url}?chat_id={chat_id_str}&user_id={user_id}")
+                    )
+                ]]
+            )
+            await message.answer(
+                "⚙️ <b>Guruh sozlamalari tayyor!</b>\n\nPastdagi tugmani bosib, guruh qoidalari va moderatsiya parametrlarini Mini App orqali boshqarishingiz mumkin:",
+                parse_mode="HTML",
+                reply_markup=kb
+            )
+            return
+
         text = get_welcome_text(message.from_user.full_name)
         await message.answer(
             text,
@@ -201,11 +224,18 @@ async def cmd_start(message: types.Message, bot: Bot):
             reply_markup=get_main_menu_keyboard(bot_username)
         )
     else:
-        await message.reply(
-            "🛡 <b>Blizkiy's bot 🔰 guruhda faol ishlamoqda!</b>\n\n"
-            "Buyruqlar ro'yxatini ko'rish uchun <code>/help</code> deb yozing.",
-            parse_mode="HTML"
-        )
+        try:
+            await message.reply(
+                "🛡 <b>Blizkiy's bot 🔰 guruhda faol ishlamoqda!</b>\n\n"
+                "Buyruqlar ro'yxatini ko'rish uchun <code>/help</code> deb yozing.",
+                parse_mode="HTML"
+            )
+        except Exception:
+            await message.answer(
+                "🛡 <b>Blizkiy's bot 🔰 guruhda faol ishlamoqda!</b>\n\n"
+                "Buyruqlar ro'yxatini ko'rish uchun <code>/help</code> deb yozing.",
+                parse_mode="HTML"
+            )
 
 
 @router.message(lambda msg: bool(HELP_CMD_REGEX.match((msg.text or msg.caption or "").strip())))
@@ -314,8 +344,8 @@ async def cmd_settings(message: types.Message, bot: Bot):
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text=f"⚙️ «{chat_title}» Sozlamalari (Mini App)",
-                        web_app=WebAppInfo(url=group_webapp_url)
+                        text=f"⚙️ «{chat_title}» Sozlamalarini Ochish",
+                        url=f"https://t.me/{bot_username}?start=chat_{chat_id}"
                     )
                 ],
                 [
@@ -326,12 +356,20 @@ async def cmd_settings(message: types.Message, bot: Bot):
                 ]
             ]
         )
-        await message.reply(
-            f"📱 <b>«{escape(chat_title)}» guruhini qulay boshqarish paneli:</b>\n\n"
-            "Pastdagi tugmani bosing va Mini App orqali bot holati, so'kinish filtri, guruh statistikasi va qoidalarni o'zingizga moslang!",
-            parse_mode="HTML",
-            reply_markup=kb
-        )
+        try:
+            await message.reply(
+                f"📱 <b>«{escape(chat_title)}» guruhini qulay boshqarish paneli:</b>\n\n"
+                "Pastdagi tugmani bosing va botga o'tib, Mini App orqali bot holati, so'kinish filtri, guruh statistikasi va qoidalarni o'zingizga moslang!",
+                parse_mode="HTML",
+                reply_markup=kb
+            )
+        except Exception:
+            await message.answer(
+                f"📱 <b>«{escape(chat_title)}» guruhini qulay boshqarish paneli:</b>\n\n"
+                "Pastdagi tugmani bosing va botga o'tib, Mini App orqali bot holati, so'kinish filtri, guruh statistikasi va qoidalarni o'zingizga moslang!",
+                parse_mode="HTML",
+                reply_markup=kb
+            )
     else:
         user_id = message.from_user.id if message.from_user else 0
         webapp_url = get_webapp_url()
