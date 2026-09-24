@@ -32,9 +32,9 @@ def get_webapp_url() -> str:
             pass
 
     # 1. Agar Render da ishlayotgan bo'lsa, Render'ning o'zining to'liq WebApp URL manzili
-    render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip() or "https://film-ai-finder-bot-uc34.onrender.com"
     if render_url and render_url.startswith("http"):
-        return f"{render_url}/webapp"
+        return f"{render_url.rstrip('/')}/webapp"
 
     # 2. Agar WEBAPP_URL muhit o'zgaruvchisi berilgan bo'lsa
     env_url = os.getenv("WEBAPP_URL", "").strip()

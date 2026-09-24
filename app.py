@@ -24,22 +24,26 @@ import run
 
 
 def run_telegram_bot():
-    """Runs the main bot cluster in a background event loop."""
-    print("🚀 [Hugging Face Space] Kino Bot Klasteri ishga tushirilmoqda...", flush=True)
-    try:
-        asyncio.run(run.main())
-    except Exception as e:
-        print(f"❌ [Film Bot Fatal Error] {e}", flush=True)
+    """Runs the main bot cluster in a background event loop with auto-restart."""
+    while True:
+        print("🚀 [Cluster] Kino Bot Klasteri ishga tushirilmoqda...", flush=True)
+        try:
+            asyncio.run(run.main())
+        except Exception as e:
+            print(f"❌ [Film Bot Error] {e}. 3 soniyadan so'ng qayta ishga tushadi...", flush=True)
+        time.sleep(3)
 
 
 def run_group_bot():
-    """Runs the Telegram Group Moderation Bot (@oken_sherda_bot) in a background event loop."""
-    print("🛡 [Hugging Face Space] Guruh Moderatsiya Boti (@oken_sherda_bot) ishga tushirilmoqda...", flush=True)
-    try:
-        from group_bot import bot as group_bot_module
-        asyncio.run(group_bot_module.main())
-    except Exception as e:
-        print(f"❌ [Group Bot Fatal Error] {e}", flush=True)
+    """Runs the Telegram Group Moderation Bot (@oken_sherda_bot) with auto-restart."""
+    while True:
+        print("🛡 [Cluster] Guruh Moderatsiya Boti (@oken_sherda_bot) ishga tushirilmoqda...", flush=True)
+        try:
+            from group_bot import bot as group_bot_module
+            asyncio.run(group_bot_module.main())
+        except Exception as e:
+            print(f"❌ [Group Bot Error] {e}. 3 soniyadan so'ng qayta ishga tushadi...", flush=True)
+        time.sleep(3)
 
 
 # Start both bots in background daemon threads
@@ -91,18 +95,29 @@ with gr.Blocks(
 
 
 def keep_alive_worker():
-    """Hugging Face CPU space 48 soatlik harakatsizlikdan uxlab qolmasligi uchun har 20 daqiqada o'zini ping qilib turadi."""
+    """Render bulutli serveri 15 daqiqalik harakatsizlikdan uxlab qolmasligi uchun har 4 daqiqada o'zini ping qilib uyg'oq ushlab turadi."""
     import urllib.request
-    space_host = os.getenv("SPACE_HOST") or "uchunrisk-film-ai-finder-bot.hf.space"
-    target_url = f"https://{space_host}/"
+    urls_to_ping = [
+        "https://film-ai-finder-bot-uc34.onrender.com/webapp",
+    ]
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
+    if render_url:
+        full_render = f"{render_url.rstrip('/')}/webapp"
+        if full_render not in urls_to_ping:
+            urls_to_ping.append(full_render)
+
+    # Server to'liq ishga tushishi uchun dastlabki 45 soniya kutish
+    time.sleep(45)
+
     while True:
-        time.sleep(1200)  # Har 20 daqiqada
-        try:
-            req = urllib.request.Request(target_url, headers={"User-Agent": "HF-KeepAlive/1.0"})
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                print(f"💓 [KeepAlive] Ping yuborildi: {target_url} -> {resp.status}", flush=True)
-        except Exception as e:
-            print(f"⚠️ [KeepAlive] Ping ogohlantirish: {e}", flush=True)
+        for target_url in urls_to_ping:
+            try:
+                req = urllib.request.Request(target_url, headers={"User-Agent": "Render-KeepAlive/2.0"})
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    print(f"💓 [KeepAlive 24/7] Ping muvaffaqiyatli: {target_url} -> HTTP {resp.status}", flush=True)
+            except Exception as e:
+                print(f"⚠️ [KeepAlive] Ping ogohlantirish ({target_url}): {e}", flush=True)
+        time.sleep(240)  # Har 4 daqiqada doimiy ping (Render 15m uyqu limitini to'liq yo'qotadi)
 
 keep_alive_thread = threading.Thread(target=keep_alive_worker, daemon=True)
 keep_alive_thread.start()
