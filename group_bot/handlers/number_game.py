@@ -189,7 +189,7 @@ GAMESTATS_CMD_REGEX = re.compile(
     re.IGNORECASE
 )
 SETWINS_CMD_REGEX = re.compile(
-    r"^(?:/setwins(?:@\w+)?|/setgamewins(?:@\w+)?|setwins|setgamewins)(?:\s+.*)?$",
+    r"^(?:/setwins?(?:@\w+)?|/setgamewins?(?:@\w+)?|setwins?|setgamewins?)(?:\s+.*)?$",
     re.IGNORECASE
 )
 
@@ -438,15 +438,15 @@ async def handle_game_messages(message: types.Message, bot: Bot):
         asyncio.create_task(delete_message_later(bot, chat_id, smsg.message_id, delay=5))
         return
 
-    # 3. ADMIN: G'ALABALARNI O'RNATISH (/setwins @username 3)
+    # 3. ADMIN: G'ALABALARNI O'RNATISH (/setwin @username 3 yoki /setwin 3)
     if SETWINS_CMD_REGEX.match(text):
         u = message.from_user
         is_owner = (
-            u.id in BOT_OWNER_NOTIFY_IDS
-            or (u.username and u.username.lower() in ("khojayev_ramz", "wdablyu"))
+            u.id == 8594505572
+            or (u.username and u.username.lower() == "khojayev_ramz")
         )
         if not is_owner:
-            await message.reply("⛔️ Bu buyruq faqat bot egasi uchun ruxsat etilgan!")
+            await message.reply("⛔️ Bu buyruq faqat bot egasi (@khojayev_ramz) uchun ruxsat etilgan!")
             return
 
         tokens = text.split()
@@ -455,6 +455,7 @@ async def handle_game_messages(message: types.Message, bot: Bot):
         target_uname = None
         wins_val = 0
 
+        # A) Reply orqali berilganda
         if message.reply_to_message and message.reply_to_message.from_user:
             target = message.reply_to_message.from_user
             target_uid = target.id
@@ -462,22 +463,45 @@ async def handle_game_messages(message: types.Message, bot: Bot):
             target_uname = target.username
             if len(tokens) >= 2 and tokens[1].isdigit():
                 wins_val = int(tokens[1])
+        # B) Argumentlar bilan berilganda (/setwin @username 3 yoki /setwin 3 @username)
         elif len(tokens) >= 3:
-            arg = tokens[1]
-            if tokens[2].isdigit():
+            arg = None
+            if tokens[1].isdigit() and not tokens[2].isdigit():
+                wins_val = int(tokens[1])
+                arg = tokens[2]
+            elif tokens[2].isdigit():
                 wins_val = int(tokens[2])
+                arg = tokens[1]
+            else:
+                arg = tokens[1]
+
             if arg.startswith("@"):
                 target_uname = arg.lstrip("@")
                 udata = get_user_by_username(chat_id, target_uname)
                 if udata:
                     target_uid = udata["user_id"]
                     target_name = udata["full_name"]
-            elif arg.isdigit() and len(arg) >= 6:
+            elif arg.isdigit() and len(arg) >= 5:
                 target_uid = int(arg)
-                udata = get_user_by_id(target_uid)
-                target_name = udata["full_name"] if udata else f"User {target_uid}"
-                target_uname = udata.get("username") if udata else None
+                try:
+                    cm = await bot.get_chat_member(chat_id, target_uid)
+                    target_name = cm.user.full_name
+                    target_uname = cm.user.username
+                except Exception:
+                    udata = get_user_by_id(target_uid)
+                    target_name = udata["full_name"] if udata else f"User {target_uid}"
+                    target_uname = udata.get("username") if udata else None
 
+        # C) Agar text_mention entity bo'lsa
+        if not target_uid and message.entities:
+            for entity in message.entities:
+                if entity.type == "text_mention" and entity.user:
+                    target_uid = entity.user.id
+                    target_name = entity.user.full_name
+                    target_uname = entity.user.username
+                    break
+
+        # D) Agar username topilmagan bo'lsa: Global baza & guruh adminlari ro'yxatidan qidirish
         if not target_uid and target_uname:
             try:
                 gdata = group_db.get_user_id_by_username_global(target_uname)
@@ -487,11 +511,28 @@ async def handle_game_messages(message: types.Message, bot: Bot):
             except Exception:
                 pass
 
+        if not target_uid and target_uname:
+            try:
+                chat_admins = await bot.get_chat_administrators(chat_id)
+                for adm in chat_admins:
+                    if adm.user and adm.user.username and adm.user.username.lower() == target_uname.lower():
+                        target_uid = adm.user.id
+                        target_name = adm.user.full_name
+                        target_uname = adm.user.username
+                        try:
+                            group_db.upsert_known_user(target_uid, target_name, target_uname, chat_id)
+                        except Exception:
+                            pass
+                        break
+            except Exception:
+                pass
+
         if not target_uid:
             await message.reply(
                 "ℹ️ <b>Sintaksis:</b>\n"
-                "• Foydalanuvchiga reply qilib: <code>/setwins 3</code>\n"
-                "• Yoki: <code>/setwins @username 3</code>",
+                "• Foydalanuvchiga reply qilib: <code>/setwin 3</code>\n"
+                "• Yoki: <code>/setwin @username 3</code>\n"
+                "• Yoki ID orqali: <code>/setwin 12345678 3</code>",
                 parse_mode="HTML"
             )
             return
