@@ -9,11 +9,20 @@ logger = logging.getLogger(__name__)
 WEBAPP_HTML_PATH = Path(__file__).resolve().parent / "webapp" / "index.html"
 
 
-def get_webapp_html() -> str:
-    """Returns the pure Mini App HTML content (groups are fetched dynamically per user for privacy)."""
-    if WEBAPP_HTML_PATH.exists():
-        return WEBAPP_HTML_PATH.read_text(encoding="utf-8")
-    return "<h1>Blizkiy Bot Web App topilmadi</h1>"
+def get_webapp_html(user_id: int | None = None) -> str:
+    """Returns the Mini App HTML content with pre-injected groups for zero-latency instant render."""
+    if not WEBAPP_HTML_PATH.exists():
+        return "<h1>Blizkiy Bot Web App topilmadi</h1>"
+    html = WEBAPP_HTML_PATH.read_text(encoding="utf-8")
+    try:
+        groups = group_db.get_user_managed_groups(user_id)
+        if groups:
+            groups_json = json.dumps(groups, ensure_ascii=False)
+            injection = f"<script>window.__INITIAL_GROUPS__ = {groups_json};</script>"
+            html = html.replace("<head>", f"<head>\n  {injection}\n", 1)
+    except Exception as e:
+        logger.warning(f"Initial groups pre-injection failed: {e}")
+    return html
 
 
 # ---------------------------------------------------------------------------
@@ -62,12 +71,16 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
 
         # Mini App HTML serving
         if norm_path in ("/webapp",):
-            return HTMLResponse(content=get_webapp_html(), headers=RESPONSE_HEADERS)
+            user_id_param = request.query_params.get("user_id") or request.headers.get("X-Telegram-User-Id")
+            user_id = int(user_id_param) if user_id_param and str(user_id_param).isdigit() else None
+            return HTMLResponse(content=get_webapp_html(user_id), headers=RESPONSE_HEADERS)
 
         if norm_path == "/" and request.method == "GET":
             accept = request.headers.get("accept", "")
             if "text/html" in accept or "*/*" in accept:
-                return HTMLResponse(content=get_webapp_html(), headers=RESPONSE_HEADERS)
+                user_id_param = request.query_params.get("user_id") or request.headers.get("X-Telegram-User-Id")
+                user_id = int(user_id_param) if user_id_param and str(user_id_param).isdigit() else None
+                return HTMLResponse(content=get_webapp_html(user_id), headers=RESPONSE_HEADERS)
 
         # CORS preflight
         if request.method == "OPTIONS":
@@ -188,17 +201,21 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
 def attach_fastapi_routes(app: Any):
     """FastAPI (demo.app) ga Web App va uning API marshrutlarini eng yuqori prioritetda biriktirish."""
     try:
-        def make_html_response():
-            return HTMLResponse(content=get_webapp_html(), headers=RESPONSE_HEADERS)
+        def make_html_response(req: Request | None = None):
+            user_id = None
+            if req:
+                user_id_param = req.query_params.get("user_id") or req.headers.get("X-Telegram-User-Id")
+                user_id = int(user_id_param) if user_id_param and str(user_id_param).isdigit() else None
+            return HTMLResponse(content=get_webapp_html(user_id), headers=RESPONSE_HEADERS)
 
         def make_json_response(data: dict, status_code: int = 200):
             return JSONResponse(content=data, status_code=status_code, headers=RESPONSE_HEADERS)
 
         async def serve_webapp(request: Request):
-            return make_html_response()
+            return make_html_response(request)
 
         async def serve_root(request: Request):
-            return make_html_response()
+            return make_html_response(request)
 
         async def get_groups(request: Request):
             user_id_param = request.query_params.get("user_id") or request.headers.get("X-Telegram-User-Id")
@@ -361,7 +378,9 @@ def attach_aiohttp_routes(app: Any):
         from aiohttp import web
 
         async def aiohttp_serve_webapp(request):
-            return web.Response(text=get_webapp_html(), content_type="text/html")
+            user_id_param = request.query.get("user_id") or request.headers.get("X-Telegram-User-Id")
+            user_id = int(user_id_param) if user_id_param and str(user_id_param).isdigit() else None
+            return web.Response(text=get_webapp_html(user_id), content_type="text/html")
 
         async def aiohttp_get_groups(request):
             user_id_param = request.query.get("user_id") or request.headers.get("X-Telegram-User-Id")

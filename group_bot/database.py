@@ -945,11 +945,7 @@ def get_user_managed_groups(user_id: int | str | None) -> list[dict]:
         except (ValueError, TypeError):
             pass
 
-    if not user_id:
-        # Agar user_id kelmagan bo'lsa va faqat 1 ta guruh mavjud bo'lsa, qulaylik uchun shuni qaytarish
-        return all_groups if len(all_groups) == 1 else []
-
-    if user_id in BOT_OWNER_IDS:
+    if not user_id or user_id in BOT_OWNER_IDS:
         return all_groups
 
     with get_connection() as conn:

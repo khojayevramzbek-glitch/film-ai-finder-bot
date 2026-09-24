@@ -2097,8 +2097,7 @@
     }
 
     // Helper to send API requests trying direct path first, then /gradio_api
-    const DEFAULT_BACKEND_URL = "https://sapphire-invitations-reviewer-postcards.trycloudflare.com";
-    const HF_BACKEND_URL = "https://uchunrisk-film-ai-finder-bot.hf.space";
+    const RENDER_BACKEND_URL = "https://film-ai-finder-bot-uc34.onrender.com";
     const explicitBackend = urlParams.get('backend');
 
     async function apiFetch(path, options = {}) {
@@ -2116,22 +2115,27 @@
         candidates.push(`${cleanBackend}/gradio_api${fullPath}`);
       }
 
-      // 1. Live Tunnel Backend (Direct & instant)
-      candidates.push(`${DEFAULT_BACKEND_URL}${fullPath}`);
-      candidates.push(`${DEFAULT_BACKEND_URL}/gradio_api${fullPath}`);
+      // 1. Agar sahifa backendning o'zida ochilgan bo'lsa (Render), darhol nisbiy yo'l (instant & xatosiz!)
+      if (!window.location.hostname.includes("static.hf.space") && window.location.protocol !== "file:") {
+        candidates.push(fullPath);
+        candidates.push('/gradio_api' + fullPath);
+      }
 
-      // 2. Relative paths (for when hosted directly on backend or custom domain)
+      // 2. Render 24/7 bulutli backend manzili
+      candidates.push(`${RENDER_BACKEND_URL}${fullPath}`);
+      candidates.push(`${RENDER_BACKEND_URL}/gradio_api${fullPath}`);
+
+      // 3. Zaxira nisbiy yo'llar
       candidates.push(fullPath);
       candidates.push('/gradio_api' + fullPath);
-
-      // 3. Hugging Face Space fallback
-      candidates.push(`${HF_BACKEND_URL}/gradio_api${fullPath}`);
-      candidates.push(`${HF_BACKEND_URL}${fullPath}`);
 
       let lastError = null;
       for (const targetUrl of candidates) {
         try {
-          const res = await fetch(targetUrl, { ...options, headers });
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4500);
+          const res = await fetch(targetUrl, { ...options, headers, signal: controller.signal });
+          clearTimeout(timeoutId);
           if (res.ok) return res;
         } catch (e) {
           lastError = e;
