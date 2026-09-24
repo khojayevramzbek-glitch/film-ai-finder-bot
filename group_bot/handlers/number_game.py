@@ -108,8 +108,30 @@ def cleanup_chat_game(chat_id: int):
         cleanup_game(gid)
 
 
+def make_progress_bar(min_val: int, max_val: int, total_range: int) -> tuple[str, int, int]:
+    """Qidiruv diapazoni qanchalik torayganini ko'rsatuvchi 10 segmentli grafik progress bar."""
+    remaining = max(1, max_val - min_val + 1)
+    if total_range <= 1:
+        explored_pct = 100
+    else:
+        explored_pct = int(((total_range - remaining) / (total_range - 1)) * 100)
+    explored_pct = max(0, min(100, explored_pct))
+
+    blocks = min(10, max(0, explored_pct // 10))
+    if remaining == 1:
+        bar = "🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩"
+    elif remaining <= 5:
+        bar = "🟩" * blocks + "🟥" * (10 - blocks)  # Qizil issiq nishon
+    elif remaining <= 15:
+        bar = "🟩" * blocks + "🟧" * (10 - blocks)  # Yaqinlashmoqda
+    else:
+        bar = "🟦" * blocks + "⬜️" * (10 - blocks)  # Qidiruv
+
+    return bar, remaining, explored_pct
+
+
 def render_game_board(game: GameState) -> tuple[str, InlineKeyboardMarkup]:
-    """Bitta jonli va chiroyli o'yin doskasi matnini va tugmalarini tayyorlash."""
+    """Jonli, o'ta chiroyli va grafik indikatorlarga ega o'yin doskasini shakllantirish."""
     p1_tag = f"@{game.p1_username}" if game.p1_username else escape(game.p1_name)
     p2_tag = f"@{game.p2_username}" if game.p2_username else escape(game.p2_name)
 
@@ -118,32 +140,98 @@ def render_game_board(game: GameState) -> tuple[str, InlineKeyboardMarkup]:
         f"@{game.p2_username}" if game.turn_user_id == game.p2_id and game.p2_username else escape(cur_name)
     )
 
-    last_hint_str = ""
+    cur_min = game.p1_min if game.turn_user_id == game.p1_id else game.p2_min
+    cur_max = game.p1_max if game.turn_user_id == game.p1_id else game.p2_max
+
+    p1_bar, p1_rem, p1_pct = make_progress_bar(game.p1_min, game.p1_max, game.max_range)
+    p2_bar, p2_rem, p2_pct = make_progress_bar(game.p2_min, game.p2_max, game.max_range)
+
+    p1_sub = "🎯 ANIQ TOPILDI!" if p1_rem == 1 else (f"🔥 Juda yaqin! ({p1_rem} ta qoldi)" if p1_rem <= 5 else f"🔍 {p1_rem} ta variant qoldi")
+    p2_sub = "🎯 ANIQ TOPILDI!" if p2_rem == 1 else (f"🔥 Juda yaqin! ({p2_rem} ta qoldi)" if p2_rem <= 5 else f"🔍 {p2_rem} ta variant qoldi")
+
+    # Radar so'nggi zarba matni
     if game.last_guess_val is not None:
         last_hint_str = (
-            f"⚡️ <b>So‘nggi zarba:</b> <b>{escape(game.last_guesser_name)}</b> ➡️ "
-            f"<code>{game.last_guess_val}</code> {game.last_hint_icon}\n"
+            f"⚡️ <b>Oxirgi zarba:</b> <b>{escape(game.last_guesser_name)}</b> ➡️ <code>{game.last_guess_val}</code>\n"
+            f"📡 <b>RADAR ISHORASI:</b> {game.last_hint_icon}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        )
+    else:
+        last_hint_str = (
+            f"🎲 <i>Jang boshlandi! Birinchi bo‘lib {cur_tag} zarba beradi.</i>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n"
         )
 
     text = (
-        f"🎮 <b>«RAQAMNI TOP» DUELI #{game.game_id.upper()}</b>\n"
+        f"🎮 <b>«RAQAMNI TOP» JANGI #{game.game_id.upper()}</b>\n"
         f"⚔️ <b>{p1_tag}</b> <i>vs</i> <b>{p2_tag}</b>\n"
-        f"🔢 <i>Oraliq: 1 dan {game.max_range} gacha</i>\n"
+        f"🎯 <b>Umumiy oraliq:</b> 1 dan {game.max_range} gacha\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>{escape(game.p1_name)}</b> qidirmoqda: <code>[{game.p1_min} ... {game.p1_max}]</code>\n"
-        f"👤 <b>{escape(game.p2_name)}</b> qidirmoqda: <code>[{game.p2_min} ... {game.p2_max}]</code>\n"
+        f"👤 <b>{escape(game.p1_name)}</b> qidirmoqda: <code>[{game.p1_min} — {game.p1_max}]</code>\n"
+        f"{p1_bar} <b>{p1_pct}%</b>\n"
+        f"└ <i>{p1_sub} (Zarbalar: {game.p1_attempts})</i>\n\n"
+        f"👤 <b>{escape(game.p2_name)}</b> qidirmoqda: <code>[{game.p2_min} — {game.p2_max}]</code>\n"
+        f"{p2_bar} <b>{p2_pct}%</b>\n"
+        f"└ <i>{p2_sub} (Zarbalar: {game.p2_attempts})</i>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
         f"{last_hint_str}"
-        f"👉 <b>NAVBAT:</b> 🎯 <b>{cur_tag}</b>\n"
-        f"✍️ <i>Raqib yashirgan raqamni topish uchun guruhga son yozing...</i>"
+        f"👉 <b>HOZIRGI NAVBAT:</b> 🎯 <b>{cur_tag}</b>\n"
+        f"✍️ <i>Raqib raqamini topish uchun <b>[{cur_min} — {cur_max}]</b> orasida son yozing...</i>"
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🔄 Doskani pastga tushirish", callback_data=f"g_ref:{game.game_id}"),
+            InlineKeyboardButton(text="🎁 Sovg‘alar", callback_data="g_gifts")
+        ],
         [
             InlineKeyboardButton(text="🛑 O‘yinni to‘xtatish", callback_data=f"g_stop:{game.game_id}")
         ]
     ])
     return text, kb
+
+
+async def send_or_refresh_board(bot: Bot, chat_id: int, game: GameState):
+    """
+    Doskani doimo guruhning eng pastida (eng yangi xabar sifatida) ushlab turish:
+    1. Yangi doska matni va tugmalari eng pastga yuboriladi.
+    2. Eski doska xabari Telegram'dan o'chiriladi.
+    Buning natijasida guruhda kimdir yozsa ham, o'yin doskasi hech qachon tepada qolib ketmaydi!
+    """
+    board_text, board_kb = render_game_board(game)
+    old_board_id = game.board_msg_id
+
+    try:
+        new_msg = await bot.send_message(
+            chat_id=chat_id,
+            text=board_text,
+            reply_markup=board_kb,
+            parse_mode="HTML"
+        )
+        game.board_msg_id = new_msg.message_id
+    except Exception:
+        if old_board_id:
+            try:
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=old_board_id,
+                    text=board_text,
+                    reply_markup=board_kb,
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+        return
+
+    # Yangi doska yetib borganidan so'ng, eskisini tozalaymiz
+    if old_board_id and old_board_id != game.board_msg_id:
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=old_board_id)
+            from group_bot.database import delete_message_record
+            delete_message_record(chat_id, old_board_id)
+        except Exception:
+            pass
+
 
 
 async def delete_message_later(bot: Bot, chat_id: int, message_id: int, delay: int = 7):
@@ -192,12 +280,16 @@ SETWINS_CMD_REGEX = re.compile(
     r"^(?:/setwins?(?:@\w+)?|/setgamewins?(?:@\w+)?|setwins?|setgamewins?)(?:\s+.*)?$",
     re.IGNORECASE
 )
+BOARD_CMD_REGEX = re.compile(
+    r"^(?:/doska(?:@\w+)?|doska|/board(?:@\w+)?|board)$",
+    re.IGNORECASE
+)
 
 
 def is_game_related_message(message: types.Message) -> bool:
     """
     Faqatgina o'yinga tegishli xabarlarni filtrlash:
-    1. Buyruqlar: /topgame, /gamestats, /stopgame, game @user, /game, /setwins
+    1. Buyruqlar: /topgame, /gamestats, /stopgame, game @user, /game, /setwins, /doska
     2. Faol o'yindagi raqam taxminlari (faqat o'ynayotgan o'yinchilarning raqamli xabarlari)
     Bu filtr boshqa guruh xabarlari (moderatsiya, qoidalar, oddiy gaplar) to'xtab qolmasligi uchun shart!
     """
@@ -211,6 +303,7 @@ def is_game_related_message(message: types.Message) -> bool:
         or STOP_CMD_REGEX.match(text)
         or SETWINS_CMD_REGEX.match(text)
         or GAME_CMD_REGEX.match(text)
+        or BOARD_CMD_REGEX.match(text)
     ):
         return True
 
@@ -438,6 +531,32 @@ async def handle_game_messages(message: types.Message, bot: Bot):
         asyncio.create_task(delete_message_later(bot, chat_id, smsg.message_id, delay=5))
         return
 
+    # 2.5. DOSKA BUYRUG'I: Doskani guruhning eng pastiga tushirish (/doska yoki board)
+    if BOARD_CMD_REGEX.match(text):
+        try:
+            await message.delete()
+            from group_bot.database import delete_message_record
+            delete_message_record(chat_id, message.message_id)
+        except Exception:
+            pass
+
+        u = message.from_user
+        if u and u.id in _user_games:
+            gid = _user_games[u.id]
+            game = _active_games.get(gid)
+            if game and game.chat_id == chat_id and game.status == "playing":
+                await send_or_refresh_board(bot, chat_id, game)
+                return
+
+        chat_gids = list(_chat_games.get(chat_id, set()))
+        if chat_gids:
+            for gid in chat_gids:
+                game = _active_games.get(gid)
+                if game and game.status == "playing":
+                    await send_or_refresh_board(bot, chat_id, game)
+                    return
+        return
+
     # 3. ADMIN: G'ALABALARNI O'RNATISH (/setwin @username 3 yoki /setwin 3)
     if SETWINS_CMD_REGEX.match(text):
         u = message.from_user
@@ -605,7 +724,17 @@ async def handle_game_messages(message: types.Message, bot: Bot):
         if p1.id in _user_games:
             existing_gid = _user_games[p1.id]
             existing_game = _active_games.get(existing_gid)
-            if existing_game and existing_game.status != "finished":
+            if existing_game and existing_game.status == "playing":
+                # O'yin ketyotgan paytda 'game' deb yozsa, doskani darhol eng pastga tushiramiz!
+                try:
+                    await message.delete()
+                    from group_bot.database import delete_message_record
+                    delete_message_record(chat_id, message.message_id)
+                except Exception:
+                    pass
+                await send_or_refresh_board(bot, chat_id, existing_game)
+                return
+            elif existing_game and existing_game.status != "finished":
                 msg = await message.reply("⚠️ Siz ayni paytda faol duelda qatnashmoqdasiz! Avval uni yakunlang yoki /stopgame deb yozing.")
                 asyncio.create_task(delete_message_later(bot, chat_id, msg.message_id, delay=8))
                 return
@@ -815,10 +944,12 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                             f"🏆 <b>BINGO! G‘ALABA!</b> 🎉🎉🎉\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━\n"
                             f"👑 <b>{escape(game.p1_name)}</b> raqib <b>{escape(game.p2_name)}</b> yashirgan "
-                            f"<b>{guess_val}</b> raqamini <b>{game.p1_attempts} ta urinishda</b> topdi va mutlaq g‘olib bo‘ldi! 🥇\n\n"
+                            f"<b>{guess_val}</b> raqamini <b>{game.p1_attempts} ta zarbada</b> topdi va mutlaq g‘olib bo‘ldi! 🥇\n\n"
                             f"📊 <b>{escape(game.p1_name)}</b> jami g‘alabalari: <b>{winner_wins} ta</b>\n"
-                            f"🤫 <b>{escape(game.p1_name)}</b>ning o‘z maxfiy raqami: <b>{game.p1_secret}</b> edi.\n\n"
-                            f"👏 <i>Ajoyib intellektual jang bo‘ldi!</i>"
+                            f"🤫 <b>Maxfiy raqamlar:</b>\n"
+                            f"• {escape(game.p1_name)}: <code>{game.p1_secret}</code>\n"
+                            f"• {escape(game.p2_name)}: <code>{game.p2_secret}</code>\n\n"
+                            f"👏 <i>Ajoyib intellektual duel bo‘ldi!</i>"
                         )
                         win_kb = InlineKeyboardMarkup(inline_keyboard=[
                             [
@@ -827,19 +958,15 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                             ]
                         ])
 
-                        try:
-                            if game.board_msg_id:
-                                await bot.edit_message_text(
-                                    chat_id=chat_id,
-                                    message_id=game.board_msg_id,
-                                    text=win_text,
-                                    reply_markup=win_kb,
-                                    parse_mode="HTML"
-                                )
-                            else:
-                                await message.answer(win_text, reply_markup=win_kb, parse_mode="HTML")
-                        except Exception:
-                            await message.answer(win_text, reply_markup=win_kb, parse_mode="HTML")
+                        if game.board_msg_id:
+                            try:
+                                await bot.delete_message(chat_id=chat_id, message_id=game.board_msg_id)
+                                from group_bot.database import delete_message_record
+                                delete_message_record(chat_id, game.board_msg_id)
+                            except Exception:
+                                pass
+
+                        await message.answer(win_text, reply_markup=win_kb, parse_mode="HTML")
 
                         # Agar yangi sovg'a marrasiga yetgan bo'lsa (30, 50, 100)
                         for m in new_milestones:
@@ -872,33 +999,14 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                     # Topolmadi: Tepa yoki Past
                     if guess_val < target_secret:
                         game.p1_min = max(game.p1_min, guess_val + 1)
-                        game.last_hint_icon = "🔼 <b>TEPA (Kattaroq!)</b>"
+                        game.last_hint_icon = f"🔼 <b>TEPA (KATTAROQ!)</b> <i>— Raqib raqami {guess_val} dan katta!</i>"
                     else:
                         game.p1_max = min(game.p1_max, guess_val - 1)
-                        game.last_hint_icon = "🔽 <b>PAST (Kichikroq!)</b>"
+                        game.last_hint_icon = f"🔽 <b>PAST (KICHIKROQ!)</b> <i>— Raqib raqami {guess_val} dan kichik!</i>"
 
                     # Navbat P2 ga o'tadi
                     game.turn_user_id = game.p2_id
-
-                    board_text, board_kb = render_game_board(game)
-                    try:
-                        if game.board_msg_id:
-                            await bot.edit_message_text(
-                                chat_id=chat_id,
-                                message_id=game.board_msg_id,
-                                text=board_text,
-                                reply_markup=board_kb,
-                                parse_mode="HTML"
-                            )
-                        else:
-                            bmsg = await message.answer(board_text, reply_markup=board_kb, parse_mode="HTML")
-                            game.board_msg_id = bmsg.message_id
-                    except TelegramBadRequest as e:
-                        if "message is not modified" not in str(e).lower():
-                            bmsg = await message.answer(board_text, reply_markup=board_kb, parse_mode="HTML")
-                            game.board_msg_id = bmsg.message_id
-                    except Exception:
-                        pass
+                    await send_or_refresh_board(bot, chat_id, game)
                     return
 
                 # B) P2 taxmin qildi (P1 ning raqamini qidirmoqda):
@@ -925,10 +1033,12 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                             f"🏆 <b>BINGO! G‘ALABA!</b> 🎉🎉🎉\n"
                             f"━━━━━━━━━━━━━━━━━━━━━━\n"
                             f"👑 <b>{escape(game.p2_name)}</b> raqib <b>{escape(game.p1_name)}</b> yashirgan "
-                            f"<b>{guess_val}</b> raqamini <b>{game.p2_attempts} ta urinishda</b> topdi va mutlaq g‘olib bo‘ldi! 🥇\n\n"
+                            f"<b>{guess_val}</b> raqamini <b>{game.p2_attempts} ta zarbada</b> topdi va mutlaq g‘olib bo‘ldi! 🥇\n\n"
                             f"📊 <b>{escape(game.p2_name)}</b> jami g‘alabalari: <b>{winner_wins} ta</b>\n"
-                            f"🤫 <b>{escape(game.p2_name)}</b>ning o‘z maxfiy raqami: <b>{game.p2_secret}</b> edi.\n\n"
-                            f"👏 <i>Ajoyib intellektual jang bo‘ldi!</i>"
+                            f"🤫 <b>Maxfiy raqamlar:</b>\n"
+                            f"• {escape(game.p1_name)}: <code>{game.p1_secret}</code>\n"
+                            f"• {escape(game.p2_name)}: <code>{game.p2_secret}</code>\n\n"
+                            f"👏 <i>Ajoyib intellektual duel bo‘ldi!</i>"
                         )
                         win_kb = InlineKeyboardMarkup(inline_keyboard=[
                             [
@@ -937,19 +1047,15 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                             ]
                         ])
 
-                        try:
-                            if game.board_msg_id:
-                                await bot.edit_message_text(
-                                    chat_id=chat_id,
-                                    message_id=game.board_msg_id,
-                                    text=win_text,
-                                    reply_markup=win_kb,
-                                    parse_mode="HTML"
-                                )
-                            else:
-                                await message.answer(win_text, reply_markup=win_kb, parse_mode="HTML")
-                        except Exception:
-                            await message.answer(win_text, reply_markup=win_kb, parse_mode="HTML")
+                        if game.board_msg_id:
+                            try:
+                                await bot.delete_message(chat_id=chat_id, message_id=game.board_msg_id)
+                                from group_bot.database import delete_message_record
+                                delete_message_record(chat_id, game.board_msg_id)
+                            except Exception:
+                                pass
+
+                        await message.answer(win_text, reply_markup=win_kb, parse_mode="HTML")
 
                         # Agar yangi sovg'a marrasiga yetgan bo'lsa (30, 50, 100)
                         for m in new_milestones:
@@ -982,33 +1088,14 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                     # Topolmadi: Tepa yoki Past
                     if guess_val < target_secret:
                         game.p2_min = max(game.p2_min, guess_val + 1)
-                        game.last_hint_icon = "🔼 <b>TEPA (Kattaroq!)</b>"
+                        game.last_hint_icon = f"🔼 <b>TEPA (KATTAROQ!)</b> <i>— Raqib raqami {guess_val} dan katta!</i>"
                     else:
                         game.p2_max = min(game.p2_max, guess_val - 1)
-                        game.last_hint_icon = "🔽 <b>PAST (Kichikroq!)</b>"
+                        game.last_hint_icon = f"🔽 <b>PAST (KICHIKROQ!)</b> <i>— Raqib raqami {guess_val} dan kichik!</i>"
 
                     # Navbat P1 ga o'tadi
                     game.turn_user_id = game.p1_id
-
-                    board_text, board_kb = render_game_board(game)
-                    try:
-                        if game.board_msg_id:
-                            await bot.edit_message_text(
-                                chat_id=chat_id,
-                                message_id=game.board_msg_id,
-                                text=board_text,
-                                reply_markup=board_kb,
-                                parse_mode="HTML"
-                            )
-                        else:
-                            bmsg = await message.answer(board_text, reply_markup=board_kb, parse_mode="HTML")
-                            game.board_msg_id = bmsg.message_id
-                    except TelegramBadRequest as e:
-                        if "message is not modified" not in str(e).lower():
-                            bmsg = await message.answer(board_text, reply_markup=board_kb, parse_mode="HTML")
-                            game.board_msg_id = bmsg.message_id
-                    except Exception:
-                        pass
+                    await send_or_refresh_board(bot, chat_id, game)
                     return
 
 
@@ -1190,15 +1277,8 @@ async def on_secret_pick(query: CallbackQuery, bot: Bot):
         game.turn_user_id = game.p1_id  # 1-o'yinchi boshlaydi
         game.board_msg_id = query.message.message_id
 
-        board_text, board_kb = render_game_board(game)
-        try:
-            await query.message.edit_text(
-                board_text,
-                reply_markup=board_kb,
-                parse_mode="HTML"
-            )
-        except Exception:
-            pass
+        # Yangi toza o'yin doskasini eng pastga yuboramiz va eski kartani tozalaymiz
+        await send_or_refresh_board(bot, query.message.chat.id, game)
     else:
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
@@ -1219,6 +1299,29 @@ async def on_secret_pick(query: CallbackQuery, bot: Bot):
             )
         except TelegramBadRequest:
             pass
+
+
+@router.callback_query(F.data.startswith("g_ref:"))
+async def on_game_refresh_button(query: CallbackQuery, bot: Bot):
+    game_id = query.data.split(":")[1]
+    game = _active_games.get(game_id)
+    if not game or game.status != "playing":
+        await query.answer("Bu o‘yin faol emas yoki allaqachon yakunlangan.", show_alert=True)
+        return
+    await query.answer("Doska guruhning eng pastiga tushirildi! 👇")
+    await send_or_refresh_board(bot, query.message.chat.id, game)
+
+
+@router.callback_query(F.data == "g_gifts")
+async def on_game_gifts_button(query: CallbackQuery):
+    gift_info = (
+        "🎁 Telegram Gift Sovg‘alari Marralari:\n\n"
+        "• 30 ta g‘alaba ➡️ 🎁 25 ⭐ Gift (Quti)\n"
+        "• 50 ta g‘alaba ➡️ 🚀 50 ⭐ Gift (Raketa)\n"
+        "• 100 ta g‘alaba ➡️ 🏆 100 ⭐ Gift (Kubok)\n\n"
+        "💡 Qoida: Raqib yashirgan maxfiy raqamni birinchi bo‘lib topgan o‘yinchi g‘alaba qozonadi!"
+    )
+    await query.answer(gift_info, show_alert=True)
 
 
 @router.callback_query(F.data.startswith("g_stop:"))
