@@ -556,6 +556,10 @@ async def handle_game_messages(message: types.Message, bot: Bot):
             asyncio.create_task(delete_message_later(bot, chat_id, msg.message_id, delay=60))
             return
 
+        p1 = message.from_user
+        if not p1:
+            return
+
         # 1. Taklif qiluvchi (p1) allaqachon biror faol duelda qatnashayotgan bo'lsa:
         if p1.id in _user_games:
             existing_gid = _user_games[p1.id]
@@ -567,22 +571,6 @@ async def handle_game_messages(message: types.Message, bot: Bot):
             else:
                 _user_games.pop(p1.id, None)
 
-        # 2. Taklif qilingan raqib (p2) allaqachon biror faol duelda bo'lsa:
-        if p2_id and p2_id in _user_games:
-            existing_gid = _user_games[p2_id]
-            existing_game = _active_games.get(existing_gid)
-            if existing_game and existing_game.status != "finished":
-                msg = await message.reply(
-                    f"⚠️ <b>{escape(p2_name or 'Foydalanuvchi')}</b> ayni paytda boshqa duelda qatnashmoqda! "
-                    f"Kuting yoki boshqa raqibni chorlang.",
-                    parse_mode="HTML"
-                )
-                asyncio.create_task(delete_message_later(bot, chat_id, msg.message_id, delay=8))
-                return
-            else:
-                _user_games.pop(p2_id, None)
-
-        p1 = message.from_user
         p2_id = None
         p2_name = None
         p2_username = None
@@ -616,13 +604,39 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                             p2_name = udata["full_name"]
                             p2_username = udata.get("username")
                         else:
-                            p2_name = f"@{uname}"
-                            p2_username = uname
+                            try:
+                                chat_admins = await bot.get_chat_administrators(chat_id)
+                                for adm in chat_admins:
+                                    if adm.user.username and adm.user.username.lower() == uname.lower():
+                                        p2_id = adm.user.id
+                                        p2_name = adm.user.full_name
+                                        p2_username = adm.user.username
+                                        break
+                            except Exception:
+                                pass
+                            if not p2_id:
+                                p2_name = f"@{uname}"
+                                p2_username = uname
                     elif arg.isdigit() and len(arg) >= 6:
                         p2_id = int(arg)
                         udata = get_user_by_id(p2_id)
                         p2_name = udata["full_name"] if udata else f"O'yinchi [{p2_id}]"
                         p2_username = udata.get("username") if udata else None
+
+        # 2. Taklif qilingan raqib (p2) allaqachon biror faol duelda bo'lsa:
+        if p2_id and p2_id in _user_games:
+            existing_gid = _user_games[p2_id]
+            existing_game = _active_games.get(existing_gid)
+            if existing_game and existing_game.status != "finished":
+                msg = await message.reply(
+                    f"⚠️ <b>{escape(p2_name or 'Foydalanuvchi')}</b> ayni paytda boshqa duelda qatnashmoqda! "
+                    f"Kuting yoki boshqa raqibni chorlang.",
+                    parse_mode="HTML"
+                )
+                asyncio.create_task(delete_message_later(bot, chat_id, msg.message_id, delay=8))
+                return
+            else:
+                _user_games.pop(p2_id, None)
 
         is_open_challenge = not p2_id and not p2_username
 

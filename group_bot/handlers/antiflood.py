@@ -244,6 +244,19 @@ class AntiFloodMiddleware(BaseMiddleware):
         now = time.time()
         key = (event.chat.id, user.id)
 
+        # Faol "Raqamni Top" o'yinidagi raqam taxminlari flood deb hisoblanmaydi
+        clean_text = (event.text or "").strip()
+        if clean_text.isdigit():
+            try:
+                from group_bot.handlers.number_game import _user_games, _active_games
+                gid = _user_games.get(user.id)
+                if gid and gid in _active_games:
+                    game = _active_games[gid]
+                    if game and game.chat_id == event.chat.id and game.status == "playing":
+                        return await handler(event, data)
+            except Exception:
+                pass
+
         # 1. Stiker, GIF, Premium Emoji tekshiruvi:
         if is_media_or_emoji(event):
             history = [(t, m_id) for (t, m_id) in _media_history[key] if now - t <= media_window]
