@@ -71,18 +71,79 @@ class GameState:
         self.p2_attempts = 0
         self.last_activity = time.time()
         self.invite_msg_id: int | None = None
+        self.board_msg_id: int | None = None
+
+        self.last_guess_val: int | None = None
+        self.last_guesser_name: str = ""
+        self.last_hint_icon: str = ""
 
 
 # Faol o'yinlar ro'yxati: game_id -> GameState
 _active_games: Dict[str, GameState] = {}
-# Chatdagi faol o'yin: chat_id -> game_id
-_chat_games: Dict[int, str] = {}
+# Foydalanuvchining faol o'yini: user_id -> game_id (bir vaqtda bir nechta juftlik o'ynashi uchun)
+_user_games: Dict[int, str] = {}
+# Chatdagi barcha faol o'yinlar to'plami: chat_id -> set[str] (game_ids)
+_chat_games: Dict[int, set[str]] = {}
+
+
+def cleanup_game(game_id: str):
+    """O'yinni to'liq tozalash va o'yinchilarni ozod qilish."""
+    game = _active_games.pop(game_id, None)
+    if not game:
+        return
+    _user_games.pop(game.p1_id, None)
+    if game.p2_id:
+        _user_games.pop(game.p2_id, None)
+    c_set = _chat_games.get(game.chat_id)
+    if c_set:
+        c_set.discard(game_id)
+        if not c_set:
+            _chat_games.pop(game.chat_id, None)
 
 
 def cleanup_chat_game(chat_id: int):
-    gid = _chat_games.pop(chat_id, None)
-    if gid:
-        _active_games.pop(gid, None)
+    """Eski muvofiqlik uchun: chatdagi barcha o'yinlarni tozalash."""
+    c_set = list(_chat_games.get(chat_id, set()))
+    for gid in c_set:
+        cleanup_game(gid)
+
+
+def render_game_board(game: GameState) -> tuple[str, InlineKeyboardMarkup]:
+    """Bitta jonli va chiroyli o'yin doskasi matnini va tugmalarini tayyorlash."""
+    p1_tag = f"@{game.p1_username}" if game.p1_username else escape(game.p1_name)
+    p2_tag = f"@{game.p2_username}" if game.p2_username else escape(game.p2_name)
+
+    cur_name = game.p1_name if game.turn_user_id == game.p1_id else game.p2_name
+    cur_tag = f"@{game.p1_username}" if game.turn_user_id == game.p1_id and game.p1_username else (
+        f"@{game.p2_username}" if game.turn_user_id == game.p2_id and game.p2_username else escape(cur_name)
+    )
+
+    last_hint_str = ""
+    if game.last_guess_val is not None:
+        last_hint_str = (
+            f"⚡️ <b>So‘nggi zarba:</b> <b>{escape(game.last_guesser_name)}</b> ➡️ "
+            f"<code>{game.last_guess_val}</code> {game.last_hint_icon}\n"
+        )
+
+    text = (
+        f"🎮 <b>«RAQAMNI TOP» DUELI #{game.game_id.upper()}</b>\n"
+        f"⚔️ <b>{p1_tag}</b> <i>vs</i> <b>{p2_tag}</b>\n"
+        f"🔢 <i>Oraliq: 1 dan {game.max_range} gacha</i>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>{escape(game.p1_name)}</b> qidirmoqda: <code>[{game.p1_min} ... {game.p1_max}]</code>\n"
+        f"👤 <b>{escape(game.p2_name)}</b> qidirmoqda: <code>[{game.p2_min} ... {game.p2_max}]</code>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{last_hint_str}"
+        f"👉 <b>NAVBAT:</b> 🎯 <b>{cur_tag}</b>\n"
+        f"✍️ <i>Raqib yashirgan raqamni topish uchun guruhga son yozing...</i>"
+    )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🛑 O‘yinni to‘xtatish", callback_data=f"g_stop:{game.game_id}")
+        ]
+    ])
+    return text, kb
 
 
 async def delete_message_later(bot: Bot, chat_id: int, message_id: int, delay: int = 7):
@@ -98,7 +159,7 @@ async def auto_expire_invite(bot: Bot, chat_id: int, game_id: str, delay: int = 
     await asyncio.sleep(delay)
     game = _active_games.get(game_id)
     if game and game.status == "invited":
-        cleanup_chat_game(chat_id)
+        cleanup_game(game_id)
         try:
             if game.invite_msg_id:
                 await bot.edit_message_text(
@@ -153,19 +214,16 @@ def is_game_related_message(message: types.Message) -> bool:
     ):
         return True
 
-    chat_id = message.chat.id
-    if chat_id in _chat_games:
-        gid = _chat_games[chat_id]
-        game = _active_games.get(gid)
-        if game:
-            if time.time() - game.last_activity > 300:
-                cleanup_chat_game(chat_id)
-                return False
-            if game.status == "playing" and text.isdigit():
-                if message.from_user and message.from_user.id in (game.p1_id, game.p2_id):
-                    return True
+    # Faqat ayni paytda faol o'yinda qatnashayotgan o'yinchilarning raqam xabarlarini ushlash
+    if text.isdigit() and message.from_user:
+        gid = _user_games.get(message.from_user.id)
+        if gid:
+            game = _active_games.get(gid)
+            if game and game.chat_id == message.chat.id and game.status == "playing":
+                return True
 
     return False
+
 
 
 @router.message(
@@ -302,33 +360,82 @@ async def handle_game_messages(message: types.Message, bot: Bot):
         return
     now = time.time()
 
-    # 1. Eski qotib qolgan o'yinlarni tozalash (5 daqiqa harakatsiz)
-    if chat_id in _chat_games:
-        current_gid = _chat_games[chat_id]
-        game_obj = _active_games.get(current_gid)
-        if game_obj and now - game_obj.last_activity > 300:
-            cleanup_chat_game(chat_id)
+    # 1. Eski qotib qolgan o'yinlarni tozalash (3 daqiqa harakatsiz)
+    stale_gids = [gid for gid, g in _active_games.items() if now - g.last_activity > 180]
+    for gid in stale_gids:
+        g = _active_games.get(gid)
+        if g and g.board_msg_id:
+            try:
+                await bot.edit_message_text(
+                    chat_id=g.chat_id,
+                    message_id=g.board_msg_id,
+                    text="⏱️ <b>«Raqamni Top» dueli vaqt tugashi sababli yakunlandi.</b> (3 daqiqa harakatsizlik)",
+                    reply_markup=None,
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+        cleanup_game(gid)
 
     # 2. O'YINNI TO'XTATISH: /stopgame
     if STOP_CMD_REGEX.match(text):
-        if chat_id in _chat_games:
-            gid = _chat_games[chat_id]
+        u = message.from_user
+        # A) Agar buyruq yuborgan foydalanuvchining o'zi biror faol duelda bo'lsa:
+        if u.id in _user_games:
+            gid = _user_games[u.id]
             game = _active_games.get(gid)
             if game:
-                # O'yinchilar yoki admin to'xtata oladi
-                if message.from_user.id in (game.p1_id, game.p2_id):
-                    cleanup_chat_game(chat_id)
-                    await message.reply("🛑 <b>«Raqamni Top» o‘yini to‘xtatildi.</b>", parse_mode="HTML")
-                    return
-                # Agar boshqa a'zo bo'lsa
-                member = await bot.get_chat_member(chat_id, message.from_user.id)
-                if member.status in ["administrator", "creator"]:
-                    cleanup_chat_game(chat_id)
-                    await message.reply("🛑 <b>Admin tomonidan o‘yin to‘xtatildi.</b>", parse_mode="HTML")
-                    return
-        else:
-            await message.reply("ℹ️ Guruhda ayni paytda faol o‘yin yo‘q.")
-            return
+                cleanup_game(gid)
+                try:
+                    if game.board_msg_id:
+                        await bot.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=game.board_msg_id,
+                            text=f"🛑 <b>«Raqamni Top» dueli {escape(u.full_name)} tomonidan to‘xtatildi.</b>",
+                            reply_markup=None,
+                            parse_mode="HTML"
+                        )
+                except Exception:
+                    pass
+                smsg = await message.reply("🛑 <b>O‘yiningiz to‘xtatildi.</b>", parse_mode="HTML")
+                asyncio.create_task(delete_message_later(bot, chat_id, smsg.message_id, delay=5))
+                return
+
+        # B) Agar guruh admini /stopgame deb yozsa:
+        is_admin = False
+        try:
+            member = await bot.get_chat_member(chat_id, u.id)
+            is_admin = member.status in ["administrator", "creator"]
+        except Exception:
+            pass
+
+        if is_admin:
+            chat_gids = list(_chat_games.get(chat_id, set()))
+            if chat_gids:
+                for gid in chat_gids:
+                    g = _active_games.get(gid)
+                    if g and g.board_msg_id:
+                        try:
+                            await bot.edit_message_text(
+                                chat_id=chat_id,
+                                message_id=g.board_msg_id,
+                                text="🛑 <b>Guruh admini tomonidan barcha o‘yinlar to‘xtatildi.</b>",
+                                reply_markup=None,
+                                parse_mode="HTML"
+                            )
+                        except Exception:
+                            pass
+                    cleanup_game(gid)
+                smsg = await message.reply("🛑 <b>Admin tomonidan guruhdagi barcha o‘yinlar to‘xtatildi.</b>", parse_mode="HTML")
+                asyncio.create_task(delete_message_later(bot, chat_id, smsg.message_id, delay=5))
+                return
+            else:
+                smsg = await message.reply("ℹ️ Guruhda ayni paytda faol o‘yin yo‘q.")
+                asyncio.create_task(delete_message_later(bot, chat_id, smsg.message_id, delay=5))
+                return
+
+        smsg = await message.reply("ℹ️ Siz ayni paytda hech qanday faol o‘yinda emassiz.")
+        asyncio.create_task(delete_message_later(bot, chat_id, smsg.message_id, delay=5))
         return
 
     # 3. ADMIN: G'ALABALARNI O'RNATISH (/setwins @username 3)
@@ -449,14 +556,31 @@ async def handle_game_messages(message: types.Message, bot: Bot):
             asyncio.create_task(delete_message_later(bot, chat_id, msg.message_id, delay=60))
             return
 
-        # Guruhda ayni paytda faol o'yin bormi?
-        if chat_id in _chat_games:
-            gid = _chat_games[chat_id]
-            existing_game = _active_games.get(gid)
-            if existing_game and existing_game.status in ["invited", "range_select", "picking", "playing"]:
-                msg = await message.reply("⚠️ Guruhda ayni paytda faol o‘yin ketmoqda! Avval uni yakunlang yoki /stopgame deb yozing.")
-                asyncio.create_task(delete_message_later(bot, chat_id, msg.message_id, delay=10))
+        # 1. Taklif qiluvchi (p1) allaqachon biror faol duelda qatnashayotgan bo'lsa:
+        if p1.id in _user_games:
+            existing_gid = _user_games[p1.id]
+            existing_game = _active_games.get(existing_gid)
+            if existing_game and existing_game.status != "finished":
+                msg = await message.reply("⚠️ Siz ayni paytda faol duelda qatnashmoqdasiz! Avval uni yakunlang yoki /stopgame deb yozing.")
+                asyncio.create_task(delete_message_later(bot, chat_id, msg.message_id, delay=8))
                 return
+            else:
+                _user_games.pop(p1.id, None)
+
+        # 2. Taklif qilingan raqib (p2) allaqachon biror faol duelda bo'lsa:
+        if p2_id and p2_id in _user_games:
+            existing_gid = _user_games[p2_id]
+            existing_game = _active_games.get(existing_gid)
+            if existing_game and existing_game.status != "finished":
+                msg = await message.reply(
+                    f"⚠️ <b>{escape(p2_name or 'Foydalanuvchi')}</b> ayni paytda boshqa duelda qatnashmoqda! "
+                    f"Kuting yoki boshqa raqibni chorlang.",
+                    parse_mode="HTML"
+                )
+                asyncio.create_task(delete_message_later(bot, chat_id, msg.message_id, delay=8))
+                return
+            else:
+                _user_games.pop(p2_id, None)
 
         p1 = message.from_user
         p2_id = None
@@ -525,7 +649,12 @@ async def handle_game_messages(message: types.Message, bot: Bot):
         )
 
         _active_games[game_id] = new_game
-        _chat_games[chat_id] = game_id
+        _user_games[p1.id] = game_id
+        if p2_id:
+            _user_games[p2_id] = game_id
+        if chat_id not in _chat_games:
+            _chat_games[chat_id] = set()
+        _chat_games[chat_id].add(game_id)
 
         p1_tag = f"@{p1.username}" if p1.username else escape(p1.full_name)
 
@@ -567,32 +696,45 @@ async def handle_game_messages(message: types.Message, bot: Bot):
         return
 
     # 4. O'YIN JARAYONIDAGI RAQAM TAXMINLARI:
-    if chat_id in _chat_games:
-        gid = _chat_games[chat_id]
+    u = message.from_user
+    if u and u.id in _user_games:
+        gid = _user_games[u.id]
         game = _active_games.get(gid)
-        if game and game.status == "playing":
-            # Faqat raqam yozilgan bo'lsa
+        if game and game.status == "playing" and game.chat_id == chat_id:
             clean_num = text.strip()
             if clean_num.isdigit():
                 guess_val = int(clean_num)
-                u = message.from_user
+
+                # Guruhni xabarlar bilan to'ldirmaslik uchun o'yinchining raqam xabarini DARHOL o'chiramiz!
+                try:
+                    await message.delete()
+                    from group_bot.database import delete_message_record
+                    delete_message_record(chat_id, message.message_id)
+                except Exception:
+                    pass
 
                 # Hozirgi navbat kimda?
                 if u.id != game.turn_user_id:
-                    # Agar navbati bo'lmagan 2-o'yinchi raqam yozsa
-                    if u.id in (game.p1_id, game.p2_id):
-                        cur_name = game.p1_name if game.turn_user_id == game.p1_id else game.p2_name
-                        wmsg = await message.reply(f"⏳ Hozir sizning navbatingiz emas! <b>{escape(cur_name)}</b> taxmin qilmoqda.", parse_mode="HTML")
-                        asyncio.create_task(delete_message_later(bot, chat_id, wmsg.message_id, delay=5))
+                    cur_name = game.p1_name if game.turn_user_id == game.p1_id else game.p2_name
+                    wmsg = await message.answer(
+                        f"⏳ <b>{escape(u.full_name)}</b>, hozir sizning navbatingiz emas! <b>{escape(cur_name)}</b> taxmin qilmoqda.",
+                        parse_mode="HTML"
+                    )
+                    asyncio.create_task(delete_message_later(bot, chat_id, wmsg.message_id, delay=3))
                     return
 
                 # Diapazondan chiqib ketgan bo'lsa
                 if guess_val < 1 or guess_val > game.max_range:
-                    wmsg = await message.reply(f"⚠️ Raqam <b>1</b> va <b>{game.max_range}</b> oralig‘ida bo‘lishi kerak!", parse_mode="HTML")
-                    asyncio.create_task(delete_message_later(bot, chat_id, wmsg.message_id, delay=5))
+                    wmsg = await message.answer(
+                        f"⚠️ <b>{escape(u.full_name)}</b>, raqam <b>1</b> va <b>{game.max_range}</b> oralig‘ida bo‘lishi kerak!",
+                        parse_mode="HTML"
+                    )
+                    asyncio.create_task(delete_message_later(bot, chat_id, wmsg.message_id, delay=3))
                     return
 
                 game.last_activity = time.time()
+                game.last_guess_val = guess_val
+                game.last_guesser_name = u.full_name
 
                 # A) P1 taxmin qildi (P2 ning raqamini qidirmoqda):
                 if u.id == game.p1_id:
@@ -602,7 +744,7 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                     # G'ALABA!
                     if guess_val == target_secret:
                         game.status = "finished"
-                        cleanup_chat_game(chat_id)
+                        cleanup_game(game.game_id)
 
                         winner_wins, new_milestones = record_game_result(
                             chat_id=chat_id,
@@ -614,14 +756,35 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                             loser_uname=game.p2_username
                         )
 
-                        await message.answer(
-                            f"🏆 <b>BINGO! G‘ALABA!</b> 🎉🎉🎉\n\n"
-                            f"👑 <b>{escape(game.p1_name)}</b> raqib <b>{escape(game.p2_name)}</b> yashirgan <b>{guess_val}</b> raqamini <b>{game.p1_attempts} ta urinishda</b> topdi va mutlaq g‘olib bo‘ldi! 🥇\n"
-                            f"📊 Jami g‘alabalari: <b>{winner_wins} ta</b>\n"
-                            f"<i>{escape(game.p1_name)}ning o‘z raqami esa: {game.p1_secret} edi.</i>\n"
-                            f"Ajoyib intellektual jang bo‘ldi! 👏",
-                            parse_mode="HTML"
+                        win_text = (
+                            f"🏆 <b>BINGO! G‘ALABA!</b> 🎉🎉🎉\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"👑 <b>{escape(game.p1_name)}</b> raqib <b>{escape(game.p2_name)}</b> yashirgan "
+                            f"<b>{guess_val}</b> raqamini <b>{game.p1_attempts} ta urinishda</b> topdi va mutlaq g‘olib bo‘ldi! 🥇\n\n"
+                            f"📊 <b>{escape(game.p1_name)}</b> jami g‘alabalari: <b>{winner_wins} ta</b>\n"
+                            f"🤫 <b>{escape(game.p1_name)}</b>ning o‘z maxfiy raqami: <b>{game.p1_secret}</b> edi.\n\n"
+                            f"👏 <i>Ajoyib intellektual jang bo‘ldi!</i>"
                         )
+                        win_kb = InlineKeyboardMarkup(inline_keyboard=[
+                            [
+                                InlineKeyboardButton(text="🎮 Yangi o‘yin", callback_data="g_new_quick"),
+                                InlineKeyboardButton(text="🏆 Top o‘yinchilar", callback_data="g_show_top")
+                            ]
+                        ])
+
+                        try:
+                            if game.board_msg_id:
+                                await bot.edit_message_text(
+                                    chat_id=chat_id,
+                                    message_id=game.board_msg_id,
+                                    text=win_text,
+                                    reply_markup=win_kb,
+                                    parse_mode="HTML"
+                                )
+                            else:
+                                await message.answer(win_text, reply_markup=win_kb, parse_mode="HTML")
+                        except Exception:
+                            await message.answer(win_text, reply_markup=win_kb, parse_mode="HTML")
 
                         # Agar yangi sovg'a marrasiga yetgan bo'lsa (30, 50, 100)
                         for m in new_milestones:
@@ -654,23 +817,33 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                     # Topolmadi: Tepa yoki Past
                     if guess_val < target_secret:
                         game.p1_min = max(game.p1_min, guess_val + 1)
-                        hint_icon = "🔼 <b>TEPA (Kattaroq!)</b>"
+                        game.last_hint_icon = "🔼 <b>TEPA (Kattaroq!)</b>"
                     else:
                         game.p1_max = min(game.p1_max, guess_val - 1)
-                        hint_icon = "🔽 <b>PAST (Kichikroq!)</b>"
+                        game.last_hint_icon = "🔽 <b>PAST (Kichikroq!)</b>"
 
                     # Navbat P2 ga o'tadi
                     game.turn_user_id = game.p2_id
-                    next_player_name = game.p2_name
-                    target_player_name = game.p1_name
 
-                    await message.answer(
-                        f"👤 <b>{escape(game.p1_name)}</b>: <code>{guess_val}</code> ➡️ {hint_icon}\n"
-                        f"📊 {escape(game.p1_name)} uchun oraliq: <code>[{game.p1_min} ... {game.p1_max}]</code>\n\n"
-                        f"🎯 <b>Navbat:</b> <b>{escape(next_player_name)}</b>!\n"
-                        f"<i>{escape(target_player_name)} yashirgan raqamni topish uchun raqam yozing:</i>",
-                        parse_mode="HTML"
-                    )
+                    board_text, board_kb = render_game_board(game)
+                    try:
+                        if game.board_msg_id:
+                            await bot.edit_message_text(
+                                chat_id=chat_id,
+                                message_id=game.board_msg_id,
+                                text=board_text,
+                                reply_markup=board_kb,
+                                parse_mode="HTML"
+                            )
+                        else:
+                            bmsg = await message.answer(board_text, reply_markup=board_kb, parse_mode="HTML")
+                            game.board_msg_id = bmsg.message_id
+                    except TelegramBadRequest as e:
+                        if "message is not modified" not in str(e).lower():
+                            bmsg = await message.answer(board_text, reply_markup=board_kb, parse_mode="HTML")
+                            game.board_msg_id = bmsg.message_id
+                    except Exception:
+                        pass
                     return
 
                 # B) P2 taxmin qildi (P1 ning raqamini qidirmoqda):
@@ -681,7 +854,7 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                     # G'ALABA!
                     if guess_val == target_secret:
                         game.status = "finished"
-                        cleanup_chat_game(chat_id)
+                        cleanup_game(game.game_id)
 
                         winner_wins, new_milestones = record_game_result(
                             chat_id=chat_id,
@@ -693,14 +866,35 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                             loser_uname=game.p1_username
                         )
 
-                        await message.answer(
-                            f"🏆 <b>BINGO! G‘ALABA!</b> 🎉🎉🎉\n\n"
-                            f"👑 <b>{escape(game.p2_name)}</b> raqib <b>{escape(game.p1_name)}</b> yashirgan <b>{guess_val}</b> raqamini <b>{game.p2_attempts} ta urinishda</b> topdi va mutlaq g‘olib bo‘ldi! 🥇\n"
-                            f"📊 Jami g‘alabalari: <b>{winner_wins} ta</b>\n"
-                            f"<i>{escape(game.p2_name)}ning o‘z raqami esa: {game.p2_secret} edi.</i>\n"
-                            f"Ajoyib intellektual jang bo‘ldi! 👏",
-                            parse_mode="HTML"
+                        win_text = (
+                            f"🏆 <b>BINGO! G‘ALABA!</b> 🎉🎉🎉\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"👑 <b>{escape(game.p2_name)}</b> raqib <b>{escape(game.p1_name)}</b> yashirgan "
+                            f"<b>{guess_val}</b> raqamini <b>{game.p2_attempts} ta urinishda</b> topdi va mutlaq g‘olib bo‘ldi! 🥇\n\n"
+                            f"📊 <b>{escape(game.p2_name)}</b> jami g‘alabalari: <b>{winner_wins} ta</b>\n"
+                            f"🤫 <b>{escape(game.p2_name)}</b>ning o‘z maxfiy raqami: <b>{game.p2_secret}</b> edi.\n\n"
+                            f"👏 <i>Ajoyib intellektual jang bo‘ldi!</i>"
                         )
+                        win_kb = InlineKeyboardMarkup(inline_keyboard=[
+                            [
+                                InlineKeyboardButton(text="🎮 Yangi o‘yin", callback_data="g_new_quick"),
+                                InlineKeyboardButton(text="🏆 Top o‘yinchilar", callback_data="g_show_top")
+                            ]
+                        ])
+
+                        try:
+                            if game.board_msg_id:
+                                await bot.edit_message_text(
+                                    chat_id=chat_id,
+                                    message_id=game.board_msg_id,
+                                    text=win_text,
+                                    reply_markup=win_kb,
+                                    parse_mode="HTML"
+                                )
+                            else:
+                                await message.answer(win_text, reply_markup=win_kb, parse_mode="HTML")
+                        except Exception:
+                            await message.answer(win_text, reply_markup=win_kb, parse_mode="HTML")
 
                         # Agar yangi sovg'a marrasiga yetgan bo'lsa (30, 50, 100)
                         for m in new_milestones:
@@ -733,23 +927,33 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                     # Topolmadi: Tepa yoki Past
                     if guess_val < target_secret:
                         game.p2_min = max(game.p2_min, guess_val + 1)
-                        hint_icon = "🔼 <b>TEPA (Kattaroq!)</b>"
+                        game.last_hint_icon = "🔼 <b>TEPA (Kattaroq!)</b>"
                     else:
                         game.p2_max = min(game.p2_max, guess_val - 1)
-                        hint_icon = "🔽 <b>PAST (Kichikroq!)</b>"
+                        game.last_hint_icon = "🔽 <b>PAST (Kichikroq!)</b>"
 
                     # Navbat P1 ga o'tadi
                     game.turn_user_id = game.p1_id
-                    next_player_name = game.p1_name
-                    target_player_name = game.p2_name
 
-                    await message.answer(
-                        f"👤 <b>{escape(game.p2_name)}</b>: <code>{guess_val}</code> ➡️ {hint_icon}\n"
-                        f"📊 {escape(game.p2_name)} uchun oraliq: <code>[{game.p2_min} ... {game.p2_max}]</code>\n\n"
-                        f"🎯 <b>Navbat:</b> <b>{escape(next_player_name)}</b>!\n"
-                        f"<i>{escape(target_player_name)} yashirgan raqamni topish uchun raqam yozing:</i>",
-                        parse_mode="HTML"
-                    )
+                    board_text, board_kb = render_game_board(game)
+                    try:
+                        if game.board_msg_id:
+                            await bot.edit_message_text(
+                                chat_id=chat_id,
+                                message_id=game.board_msg_id,
+                                text=board_text,
+                                reply_markup=board_kb,
+                                parse_mode="HTML"
+                            )
+                        else:
+                            bmsg = await message.answer(board_text, reply_markup=board_kb, parse_mode="HTML")
+                            game.board_msg_id = bmsg.message_id
+                    except TelegramBadRequest as e:
+                        if "message is not modified" not in str(e).lower():
+                            bmsg = await message.answer(board_text, reply_markup=board_kb, parse_mode="HTML")
+                            game.board_msg_id = bmsg.message_id
+                    except Exception:
+                        pass
                     return
 
 
@@ -785,10 +989,22 @@ async def on_game_accept(query: CallbackQuery, bot: Bot):
             await query.answer("❌ Bu taklif sizga emas!", show_alert=True)
             return
 
+    # Qabul qilayotgan foydalanuvchi allaqachon boshqa duelda emasmi?
+    if u.id in _user_games:
+        existing_gid = _user_games[u.id]
+        if existing_gid != game_id:
+            existing_game = _active_games.get(existing_gid)
+            if existing_game and existing_game.status != "finished":
+                await query.answer("⚠️ Siz ayni paytda boshqa faol duelda qatnashmoqdasiz!", show_alert=True)
+                return
+            else:
+                _user_games.pop(u.id, None)
+
     # P2 ma'lumotlarini aniqlashtirish
     game.p2_id = u.id
     game.p2_name = u.full_name
     game.p2_username = u.username
+    _user_games[u.id] = game_id
     game.status = "range_select"
     game.last_activity = time.time()
 
@@ -828,7 +1044,7 @@ async def on_game_decline(query: CallbackQuery):
         await query.answer("❌ Siz bu o‘yinda qatnashmaysiz!", show_alert=True)
         return
 
-    cleanup_chat_game(game.chat_id)
+    cleanup_game(game_id)
     await query.message.edit_text(f"❌ <b>{escape(u.full_name)}</b> tomonidan o‘yin bekor qilindi.", parse_mode="HTML")
     await query.answer()
 
@@ -917,15 +1133,17 @@ async def on_secret_pick(query: CallbackQuery, bot: Bot):
     if game.p1_secret and game.p2_secret:
         game.status = "playing"
         game.turn_user_id = game.p1_id  # 1-o'yinchi boshlaydi
+        game.board_msg_id = query.message.message_id
 
-        await query.message.edit_text(
-            f"🚀 <b>O‘YIN BOSHLANDI!</b> (Oraliq: 1 — {game.max_range})\n\n"
-            f"Ikkala o‘yinchi ham o‘z maxfiy raqamini yashirdi! 🤫\n\n"
-            f"🎯 <b>1-navbat:</b> <b>{escape(game.p1_name)}</b>!\n"
-            f"<i>{escape(game.p2_name)} yashirgan raqamni topish uchun guruhga raqam yozing:</i>",
-            reply_markup=None,
-            parse_mode="HTML"
-        )
+        board_text, board_kb = render_game_board(game)
+        try:
+            await query.message.edit_text(
+                board_text,
+                reply_markup=board_kb,
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
     else:
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
@@ -946,3 +1164,56 @@ async def on_secret_pick(query: CallbackQuery, bot: Bot):
             )
         except TelegramBadRequest:
             pass
+
+
+@router.callback_query(F.data.startswith("g_stop:"))
+async def on_game_stop_button(query: CallbackQuery, bot: Bot):
+    game_id = query.data.split(":")[1]
+    game = _active_games.get(game_id)
+    if not game:
+        await query.answer("O‘yin allaqachon yakunlangan.")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        return
+
+    u = query.from_user
+    is_player = u.id in (game.p1_id, game.p2_id)
+    is_admin = False
+    try:
+        member = await bot.get_chat_member(game.chat_id, u.id)
+        is_admin = member.status in ["administrator", "creator"]
+    except Exception:
+        pass
+
+    if not is_player and not is_admin:
+        await query.answer("❌ O‘yinni faqat uning o‘yinchilari yoki guruh admini to‘xtata oladi!", show_alert=True)
+        return
+
+    cleanup_game(game_id)
+    stop_text = f"🛑 <b>«Raqamni Top» dueli {escape(u.full_name)} tomonidan to‘xtatildi.</b>"
+    try:
+        await query.message.edit_text(stop_text, reply_markup=None, parse_mode="HTML")
+    except Exception:
+        pass
+    await query.answer("O‘yin to‘xtatildi.")
+
+
+@router.callback_query(F.data == "g_new_quick")
+async def on_game_new_quick(query: CallbackQuery):
+    await query.answer("🎮 Yangi duel boshlash uchun guruhga: game @do‘stingiz deb yozing!", show_alert=True)
+
+
+@router.callback_query(F.data == "g_show_top")
+async def on_game_show_top(query: CallbackQuery):
+    top_list = get_top_game_players(query.message.chat.id, limit=5)
+    if not top_list:
+        await query.answer("🏆 Guruhda hali hech kim o‘yinda g‘alaba qozonmagan.", show_alert=True)
+        return
+    medals = ["🥇", "🥈", "🥉", "4.", "5."]
+    lines = ["🏆 TOP-5 Kuchli O‘yinchilar:"]
+    for idx, p in enumerate(top_list[:5]):
+        lines.append(f"{medals[idx]} {p['full_name']} — {p['wins']} ta g‘alaba")
+    await query.answer("\n".join(lines), show_alert=True)
+
