@@ -1,4 +1,5 @@
 import asyncio
+import re
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -42,6 +43,9 @@ _slash_history: dict[tuple[int, int], list[tuple[float, int]]] = defaultdict(lis
 _text_history: dict[tuple[int, int], list[tuple[float, int]]] = defaultdict(list)
 _piece_fast_history: dict[tuple[int, int], list[tuple[float, int]]] = defaultdict(list)
 _piece_slow_history: dict[tuple[int, int], list[tuple[float, int]]] = defaultdict(list)
+
+# Adminlar uchun virtual mute (chat_id, user_id) -> unmute_timestamp
+_admin_virtual_mutes: dict[tuple[int, int], float] = {}
 
 
 async def delete_message_later(bot: Bot, chat_id: int, message_id: int, delay: int = 15):
@@ -104,6 +108,52 @@ def is_slash_command(message: Message) -> bool:
     for entity in entities:
         if entity.type == "bot_command":
             return True
+
+    return False
+
+
+def is_gibberish_or_screen_spam(text: str) -> bool:
+    """
+    Chatni ma'nosiz uzun harflar yoki screen-filling mash bilan to'ldirishni aniqlash.
+    Masalan:
+    adawdawkjdbwaijdnwkjabdjawbdjwakdbwa dawbdjhawbdjkwanhcdujabdjabdhjndbmawdbhjawhjawdhjawbdchjavhjawd...
+    """
+    if not text:
+        return False
+
+    clean = text.strip()
+    if not clean:
+        return False
+
+    # 1. 15+ marta ketma-ket bir xil belgi (masalan: aaaaaaaaaaaaaaa yoki ------------)
+    if re.search(r'(.)\1{14,}', clean):
+        return True
+
+    words = clean.split()
+    for w in words:
+        # Havolalar (URL), buyruqlar va @teglarni tekshirmaymiz
+        if (
+            w.startswith(('http://', 'https://', 't.me/', 'tg://', '@', '/'))
+            or '://' in w
+        ):
+            continue
+
+        # 2. 35+ belgidan iborat bitta uzluksiz so'z
+        if len(w) >= 35:
+            return True
+
+        # 3. 8+ ta ketma-ket undosh harflar (uzun so'zlarda keyboard mash)
+        if len(w) >= 12 and re.search(r'[bcdfghjklmnpqrstvwxyzбвгджзйклмнпрстфхцчшщ]{8,}', w.lower()):
+            return True
+
+    # 4. Agar umumiy matn 60+ belgi bo'lib, ichida 30+ belgili so'z bo'lsa
+    if len(clean) >= 60:
+        for w in words:
+            if (
+                not (w.startswith(('http://', 'https://', 't.me/', 'tg://', '@', '/')) or '://' in w)
+                and len(w) >= 30
+            ):
+                return True
 
     return False
 
@@ -190,11 +240,12 @@ async def handle_flood_action(
                     pass
             asyncio.create_task(unmute_after(bot, event.chat.id, event.from_user.id, delay=seconds))
 
-        await bot.send_message(
+        warn_msg = await bot.send_message(
             chat_id=event.chat.id,
             text=f"⚠️ <b>{escape(event.from_user.full_name)}</b>, {reason} uchun <b>{dur_text}ga mute</b> qilindingiz va flood xabarlaringiz o'chirildi!",
             parse_mode="HTML"
         )
+        asyncio.create_task(delete_message_later(bot, event.chat.id, warn_msg.message_id, delay=20))
     except TelegramBadRequest:
         pass
 
@@ -244,6 +295,18 @@ class AntiFloodMiddleware(BaseMiddleware):
         now = time.time()
         key = (event.chat.id, user.id)
 
+        # Adminlar uchun 1 daqiqalik virtual mute tekshiruvi:
+        virtual_until = _admin_virtual_mutes.get(key, 0)
+        if now < virtual_until:
+            try:
+                await bot.delete_message(chat_id=event.chat.id, message_id=event.message_id)
+            except TelegramBadRequest:
+                pass
+            delete_flood_messages(event.chat.id, user.id, [event.message_id])
+            return
+        elif key in _admin_virtual_mutes:
+            del _admin_virtual_mutes[key]
+
         # Faol "Raqamni Top" o'yinidagi raqam taxminlari flood deb hisoblanmaydi
         clean_text = (event.text or "").strip()
         if clean_text.isdigit():
@@ -256,6 +319,55 @@ class AntiFloodMiddleware(BaseMiddleware):
                         return await handler(event, data)
             except Exception:
                 pass
+
+        # 0. Chatni ma'nosiz uzun harflar / screen-filling mash bilan to'ldirish (Screen spam) tekshiruvi:
+        full_text = (event.text or event.caption or "").strip()
+        if full_text and is_gibberish_or_screen_spam(full_text):
+            _media_history[key] = []
+            _media_long_history[key] = []
+            _slash_history[key] = []
+            _text_history[key] = []
+            _piece_fast_history[key] = []
+            _piece_slow_history[key] = []
+
+            # Xabarni darhol Telegramdan o'chirish
+            try:
+                await bot.delete_message(chat_id=event.chat.id, message_id=event.message_id)
+            except TelegramBadRequest:
+                pass
+
+            # Bazadan/statadan o'chirish
+            delete_flood_messages(event.chat.id, user.id, [event.message_id])
+
+            if is_admin_user:
+                # Adminga 1 daqiqalik virtual mute
+                _admin_virtual_mutes[key] = now + 60.0
+                admin_name = f"@{user.username}" if user.username else escape(user.full_name)
+                warn_text = (
+                    f"⚠️ <b>Hurmatli admin {admin_name}</b>, chatni ma'nosiz uzun harflar bilan to'ldirib flood qilganingiz uchun sizga <b>1 daqiqalik virtual mute</b> berildi!\n"
+                    f"Xabaringiz o'chirildi. Keyingi 1 daqiqa ichida yozgan barcha xabarlaringiz avtomatik o'chiriladi!"
+                )
+                try:
+                    w_msg = await bot.send_message(
+                        chat_id=event.chat.id,
+                        text=warn_text,
+                        parse_mode="HTML"
+                    )
+                    asyncio.create_task(delete_message_later(bot, event.chat.id, w_msg.message_id, delay=15))
+                except TelegramBadRequest:
+                    pass
+                return
+
+            # Oddiy foydalanuvchiga Telegramda 1 daqiqa mute
+            await handle_flood_action(
+                event,
+                bot,
+                is_admin_user=False,
+                msg_ids=[event.message_id],
+                duration=timedelta(seconds=60),
+                reason="chatni ma'nosiz uzun harflar bilan to'ldirganingiz (screen spam)"
+            )
+            return
 
         # 1. Stiker, GIF, Premium Emoji tekshiruvi:
         if is_media_or_emoji(event):
