@@ -494,15 +494,13 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                 asyncio.create_task(delete_message_later(bot, chat_id, smsg.message_id, delay=5))
                 return
 
-        # B) Agar guruh admini /stopgame deb yozsa:
-        is_admin = False
-        try:
-            member = await bot.get_chat_member(chat_id, u.id)
-            is_admin = member.status in ["administrator", "creator"]
-        except Exception:
-            pass
+        # B) Faqat bot egasi (@khojayev_ramz / 8594505572) majburiy to'xtatishi mumkin:
+        is_bot_owner = bool(
+            u.id == 8594505572
+            or (u.username and u.username.lower() == "khojayev_ramz")
+        )
 
-        if is_admin:
+        if is_bot_owner:
             chat_gids = list(_chat_games.get(chat_id, set()))
             if chat_gids:
                 for gid in chat_gids:
@@ -512,14 +510,14 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                             await bot.edit_message_text(
                                 chat_id=chat_id,
                                 message_id=g.board_msg_id,
-                                text="🛑 <b>Guruh admini tomonidan barcha o‘yinlar to‘xtatildi.</b>",
+                                text="🛑 <b>Bot egasi tomonidan barcha o‘yinlar to‘xtatildi.</b>",
                                 reply_markup=None,
                                 parse_mode="HTML"
                             )
                         except Exception:
                             pass
                     cleanup_game(gid)
-                smsg = await message.reply("🛑 <b>Admin tomonidan guruhdagi barcha o‘yinlar to‘xtatildi.</b>", parse_mode="HTML")
+                smsg = await message.reply("🛑 <b>Bot egasi tomonidan guruhdagi barcha o‘yinlar to‘xtatildi.</b>", parse_mode="HTML")
                 asyncio.create_task(delete_message_later(bot, chat_id, smsg.message_id, delay=5))
                 return
             else:
@@ -527,7 +525,7 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                 asyncio.create_task(delete_message_later(bot, chat_id, smsg.message_id, delay=5))
                 return
 
-        smsg = await message.reply("ℹ️ Siz ayni paytda hech qanday faol o‘yinda emassiz.")
+        smsg = await message.reply("⛔️ Siz ayni paytda faol o‘yinda emassiz! Boshqa o‘yinchilarning o‘yinini to‘xtatish taqiqlangan.")
         asyncio.create_task(delete_message_later(bot, chat_id, smsg.message_id, delay=5))
         return
 
@@ -1150,21 +1148,37 @@ async def on_game_accept(query: CallbackQuery, bot: Bot):
     game.status = "range_select"
     game.last_activity = time.time()
 
+    p1_tag = f"@{game.p1_username}" if game.p1_username else escape(game.p1_name)
+    p2_tag = f"@{game.p2_username}" if game.p2_username else escape(game.p2_name)
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="🔢 1 — 100", callback_data=f"g_rng:{game_id}:100"),
-            InlineKeyboardButton(text="🔢 1 — 1000", callback_data=f"g_rng:{game_id}:1000")
+            InlineKeyboardButton(text="🔢 1 — 100 (Klassik)", callback_data=f"g_rng:{game_id}:100"),
+            InlineKeyboardButton(text="🔢 1 — 500 (Qiziqarli)", callback_data=f"g_rng:{game_id}:500"),
+            InlineKeyboardButton(text="🔢 1 — 1000 (Megajang)", callback_data=f"g_rng:{game_id}:1000")
         ],
         [
             InlineKeyboardButton(text="❌ Bekor qilish", callback_data=f"g_dec:{game_id}")
         ]
     ])
 
+    rules_text = (
+        f"🎯 <b>Jang taklifi qabul qilindi!</b>\n\n"
+        f"⚔️ <b>{p1_tag}</b> <i>vs</i> <b>{p2_tag}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📖 <b>«RAQAMNI TOP» DUELI QOIDALARI:</b>\n"
+        f"1️⃣ <b>Oraliqni tanlash:</b> Ikkala o‘yinchidan biri pastdagi oraliqlardan birini tanlaydi (masalan: 1 — 100).\n"
+        f"2️⃣ <b>Maxfiy raqam olish:</b> Har ikkala o‘yinchi botdan o‘zining sirli raqamini oladi (buni faqat o‘zingiz bilasiz!).\n"
+        f"3️⃣ <b>Zarbalar berish:</b> Guruhga navbat bilan son yozasiz. Bot radari raqib raqami <b>🔼 TEPA (KATTAROQ)</b> yoki <b>🔽 PAST (KICHIKROQ)</b> ekanligini aytib boradi.\n"
+        f"4️⃣ <b>G‘alaba:</b> Raqib yashirgan raqamni birinchi bo‘lib topgan o‘yinchi mutlaq g‘olib bo‘ladi! 🏆\n"
+        f"🎁 <i>30, 50 va 100 ta g‘alaba uchun Telegram Gift sovg‘alari beriladi!</i>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👇 <b>Oraliqni tanlang (Ikkala o‘yinchidan biri):</b>"
+    )
+
     try:
         await query.message.edit_text(
-            f"🎯 <b>Jang taklifi qabul qilindi!</b>\n\n"
-            f"👤 <b>{escape(game.p1_name)}</b> ⚔️ <b>{escape(game.p2_name)}</b>\n\n"
-            f"Quyidan o‘yin oralig‘ini tanlang:",
+            rules_text,
             reply_markup=kb,
             parse_mode="HTML"
         )
@@ -1182,8 +1196,13 @@ async def on_game_decline(query: CallbackQuery):
         return
 
     u = query.from_user
-    if u.id not in (game.p1_id, game.p2_id):
-        await query.answer("❌ Siz bu o‘yinda qatnashmaysiz!", show_alert=True)
+    is_player = u.id in (game.p1_id, game.p2_id)
+    is_bot_owner = bool(
+        u.id == 8594505572
+        or (u.username and u.username.lower() == "khojayev_ramz")
+    )
+    if not is_player and not is_bot_owner:
+        await query.answer("❌ Bu duelni faqat uning 2 nafar o‘yinchisi bekor qila oladi!", show_alert=True)
         return
 
     cleanup_game(game_id)
@@ -1204,7 +1223,7 @@ async def on_range_select(query: CallbackQuery):
 
     u = query.from_user
     if u.id not in (game.p1_id, game.p2_id):
-        await query.answer("❌ Siz bu o‘yinda qatnashmaysiz!", show_alert=True)
+        await query.answer("❌ Siz bu duelda qatnashmaysiz!", show_alert=True)
         return
 
     game.max_range = range_val
@@ -1214,6 +1233,9 @@ async def on_range_select(query: CallbackQuery):
     game.p2_max = range_val
     game.status = "picking"
     game.last_activity = time.time()
+
+    p1_tag = f"@{game.p1_username}" if game.p1_username else escape(game.p1_name)
+    p2_tag = f"@{game.p2_username}" if game.p2_username else escape(game.p2_name)
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -1225,11 +1247,17 @@ async def on_range_select(query: CallbackQuery):
     ])
 
     await query.message.edit_text(
-        f"🔢 <b>Oraliq tanlandi: 1 dan {range_val} gacha!</b>\n\n"
-        f"Har ikkala o‘yinchi pastdagi <b>«🎲 Maxfiy raqamimni olish»</b> tugmasini bosishi kerak.\n"
-        f"Bot sizga sirli raqam beradi va uni faqat o‘zingiz ekranda ko‘rasiz (hech kim bilmaydi)!\n\n"
-        f"👤 {escape(game.p1_name)}: ⏳ <i>Kutilmoqda...</i>\n"
-        f"👤 {escape(game.p2_name)}: ⏳ <i>Kutilmoqda...</i>",
+        f"🔢 <b>Oraliq tanlandi: 1 dan {range_val} gacha!</b>\n"
+        f"⚔️ <b>{p1_tag}</b> <i>vs</i> <b>{p2_tag}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🤫 <b>MAXFIY RAQAMLARNI OLISH BOSQICHI:</b>\n"
+        f"Har ikkala o‘yinchi pastdagi <b>«🎲 Maxfiy raqamimni olish»</b> tugmasini bosishi shart!\n"
+        f"Bot sizga 1 dan {range_val} gacha sirli raqam beradi (uni faqat o‘zingiz ekranda ko‘rasiz, raqibingiz esa bilmaydi).\n\n"
+        f"💡 <i>Ikkala o‘yinchi ham raqam olib bo‘lgach, jonli o‘yin doskasi ochiladi va duel boshlanadi!</i>\n\n"
+        f"👤 <b>{escape(game.p1_name)}:</b> ⏳ <i>Kutilmoqda...</i>\n"
+        f"👤 <b>{escape(game.p2_name)}:</b> ⏳ <i>Kutilmoqda...</i>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👇 <i>Pastdagi tugmani bosing va o‘z maxfiy raqamingizni oling:</i>",
         reply_markup=kb,
         parse_mode="HTML"
     )
@@ -1246,7 +1274,7 @@ async def on_secret_pick(query: CallbackQuery, bot: Bot):
 
     u = query.from_user
     if u.id not in (game.p1_id, game.p2_id):
-        await query.answer("❌ Siz bu o‘yinda qatnashmaysiz!", show_alert=True)
+        await query.answer("❌ Siz bu duelda qatnashmaysiz!", show_alert=True)
         return
 
     # Raqam tanlash
@@ -1288,12 +1316,19 @@ async def on_secret_pick(query: CallbackQuery, bot: Bot):
                 InlineKeyboardButton(text="❌ Bekor qilish", callback_data=f"g_dec:{game_id}")
             ]
         ])
+        p1_tag = f"@{game.p1_username}" if game.p1_username else escape(game.p1_name)
+        p2_tag = f"@{game.p2_username}" if game.p2_username else escape(game.p2_name)
         try:
             await query.message.edit_text(
-                f"🔢 <b>Oraliq tanlandi: 1 dan {game.max_range} gacha!</b>\n\n"
-                f"Pastdagi tugmani bosib maxfiy raqamingizni oling:\n\n"
-                f"👤 {escape(game.p1_name)}: {p1_status}\n"
-                f"👤 {escape(game.p2_name)}: {p2_status}",
+                f"🔢 <b>Oraliq tanlandi: 1 dan {game.max_range} gacha!</b>\n"
+                f"⚔️ <b>{p1_tag}</b> <i>vs</i> <b>{p2_tag}</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🤫 <b>MAXFIY RAQAMLARNI OLISH BOSQICHI:</b>\n"
+                f"Pastdagi tugmani bosib o‘z maxfiy raqamingizni oling:\n\n"
+                f"👤 <b>{escape(game.p1_name)}:</b> {p1_status}\n"
+                f"👤 <b>{escape(game.p2_name)}:</b> {p2_status}\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"💡 <i>Ikkala o‘yinchi ham raqamini olgandan so‘ng o‘yin avtomatik boshlanadi!</i>",
                 reply_markup=kb,
                 parse_mode="HTML"
             )
@@ -1338,15 +1373,18 @@ async def on_game_stop_button(query: CallbackQuery, bot: Bot):
 
     u = query.from_user
     is_player = u.id in (game.p1_id, game.p2_id)
-    is_admin = False
-    try:
-        member = await bot.get_chat_member(game.chat_id, u.id)
-        is_admin = member.status in ["administrator", "creator"]
-    except Exception:
-        pass
+    is_bot_owner = bool(
+        u.id == 8594505572
+        or (u.username and u.username.lower() == "khojayev_ramz")
+    )
 
-    if not is_player and not is_admin:
-        await query.answer("❌ O‘yinni faqat uning o‘yinchilari yoki guruh admini to‘xtata oladi!", show_alert=True)
+    # Faqat va faqat o'yindagi 2 ta o'yinchidan biri yoki bot egasi to'xtata oladi!
+    if not is_player and not is_bot_owner:
+        await query.answer(
+            "⛔️ Bu o‘yinni to‘xtatishga haqingiz yo‘q!\n"
+            "Faqat o‘yinda qatnashayotgan 2 nafar o‘yinchidan biri to‘xtata oladi.",
+            show_alert=True
+        )
         return
 
     cleanup_game(game_id)
