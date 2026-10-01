@@ -137,6 +137,33 @@ def init_db():
             );
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS group_members (
+                chat_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                full_name TEXT NOT NULL,
+                username TEXT,
+                joined_at TIMESTAMP NOT NULL,
+                first_seen TIMESTAMP NOT NULL,
+                last_seen TIMESTAMP NOT NULL,
+                PRIMARY KEY (chat_id, user_id)
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_punishments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                action_type TEXT NOT NULL,
+                reason TEXT DEFAULT '',
+                duration_seconds INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_punishments_chat_user
+            ON user_punishments(chat_id, user_id);
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS game_stats (
                 chat_id INTEGER NOT NULL,
                 user_id INTEGER NOT NULL,
@@ -386,6 +413,7 @@ def add_message(chat_id: int, user_id: int, full_name: str, username: str | None
     """Yangi kelgan xabarni bazaga yozish va doimiy katalogga muhrlash."""
     now_utc = datetime.now(timezone.utc)
     upsert_known_user(user_id, full_name, username, chat_id)
+    record_member_join(chat_id, user_id, full_name, username)
     with get_connection() as conn:
         conn.execute(
             """
@@ -1480,58 +1508,226 @@ def get_group_details(chat_id: int) -> dict:
     }
 
 
-def add_prank_user(chat_id: int, username: str) -> tuple[bool, str]:
-    """Hazil rejimi (Ghost mode) uchun username qo'shish (ko'pi bilan 5 ta)."""
-    clean_username = username.lstrip("@").strip().lower()
-    if not clean_username:
-        return False, "Username kiritilmadi!"
-    if clean_username in {"khojayev_ramz", "wdablyu"}:
-        return False, "Bot egasini Hazil rejimiga qo'shib bo'lmaydi!"
+def add_prank_user(chat_id: int, target: str) -> tuple[bool, str]:
+    """Hazil rejimi (Ghost mode) uchun username yoki User ID qo'shish (ko'pi bilan 5 ta)."""
+    raw_target = str(target).strip()
+    if not raw_target:
+        return False, "Username yoki User ID kiritilmadi!"
     
+    clean_target = raw_target.lstrip("@").strip()
+    if clean_target.isdigit():
+        uid = int(clean_target)
+        if uid in {8594505572, 7690283463}:
+            return False, "Bot egasini Hazil rejimiga qo'shib bo'lmaydi!"
+        identifier = str(uid)
+        display_label = f"ID: {uid}"
+        known = get_user_by_id(uid)
+        if known and known.get("full_name"):
+            display_label = f"{known['full_name']} (ID: {uid})"
+    else:
+        clean_username = clean_target.lower()
+        if not clean_username:
+            return False, "Username noto'g'ri kiritildi!"
+        if clean_username in {"khojayev_ramz", "wdablyu"}:
+            return False, "Bot egasini Hazil rejimiga qo'shib bo'lmaydi!"
+        identifier = clean_username
+        display_label = f"@{clean_username}"
+
     with get_connection() as conn:
         cur = conn.execute("SELECT count(*) as cnt FROM prank_users WHERE chat_id = ?", (chat_id,))
         count = cur.fetchone()["cnt"]
         if count >= 5:
             return False, "Maksimal 5 ta foydalanuvchi kiritish mumkin!"
         
-        cur = conn.execute("SELECT 1 FROM prank_users WHERE chat_id = ? AND username = ?", (chat_id, clean_username))
+        cur = conn.execute("SELECT 1 FROM prank_users WHERE chat_id = ? AND (username = ? OR username = ?)", (chat_id, identifier, clean_target))
         if cur.fetchone():
-            return False, f"@{clean_username} allaqachon ro'yxatda bor!"
+            return False, f"{display_label} allaqachon ro'yxatda bor!"
             
         conn.execute(
             "INSERT INTO prank_users (chat_id, username) VALUES (?, ?)",
-            (chat_id, clean_username)
+            (chat_id, identifier)
         )
         conn.commit()
-        return True, f"@{clean_username} Hazil rejimiga qo'shildi!"
+        return True, f"{display_label} Hazil rejimiga qo'shildi!"
 
 
-def remove_prank_user(chat_id: int, username: str) -> bool:
-    """Hazil rejimidan usernameni o'chirish."""
-    clean_username = username.lstrip("@").strip().lower()
+def remove_prank_user(chat_id: int, target: str) -> bool:
+    """Hazil rejimidan username yoki User ID ni o'chirish."""
+    clean_target = str(target).lstrip("@").strip().lower()
     with get_connection() as conn:
-        conn.execute("DELETE FROM prank_users WHERE chat_id = ? AND username = ?", (chat_id, clean_username))
+        conn.execute(
+            "DELETE FROM prank_users WHERE chat_id = ? AND (LOWER(username) = ? OR username = ?)",
+            (chat_id, clean_target, str(target).strip())
+        )
         conn.commit()
         return True
 
 
 def get_prank_users(chat_id: int) -> list[str]:
-    """Guruhdagi barcha hazil rejimidagi username'larni olish."""
+    """Guruhdagi barcha hazil rejimidagi username va ID'larni olish."""
     with get_connection() as conn:
         cur = conn.execute("SELECT username FROM prank_users WHERE chat_id = ? ORDER BY created_at ASC", (chat_id,))
         return [row["username"] for row in cur.fetchall()]
 
 
-def is_prank_user(chat_id: int, username: str | None) -> bool:
-    """Foydalanuvchi hazil rejimidami tekshirish."""
-    if not username:
+def is_prank_user(chat_id: int, user_id: int | None = None, username: str | None = None) -> bool:
+    """Foydalanuvchi hazil rejimidami (User ID yoki Username bo'yicha) tekshirish."""
+    if user_id and user_id in {8594505572, 7690283463}:
         return False
-    clean_username = username.lstrip("@").strip().lower()
+    clean_username = (username or "").lstrip("@").strip().lower()
     if clean_username in {"khojayev_ramz", "wdablyu"}:
         return False
+
+    targets = []
+    if clean_username:
+        targets.append(clean_username)
+    if user_id:
+        targets.append(str(user_id))
+
+    if not targets:
+        return False
+
     with get_connection() as conn:
-        cur = conn.execute("SELECT 1 FROM prank_users WHERE chat_id = ? AND username = ?", (chat_id, clean_username))
+        placeholders = ",".join("?" for _ in targets)
+        cur = conn.execute(
+            f"SELECT 1 FROM prank_users WHERE chat_id = ? AND (LOWER(username) IN ({placeholders}) OR username IN ({placeholders}))",
+            [chat_id] + targets + targets
+        )
         return cur.fetchone() is not None
+
+
+def log_user_punishment(chat_id: int, user_id: int, action_type: str, reason: str = "", duration_seconds: int = 0):
+    """Foydalanuvchi jazolanganini (mute, virtual_mute, warn, ban va h.k.) bazaga qayd etish."""
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_punishments (chat_id, user_id, action_type, reason, duration_seconds)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (chat_id, user_id, action_type, reason, duration_seconds)
+        )
+        conn.commit()
+
+
+def get_user_punishments_count(chat_id: int, user_id: int) -> int:
+    """Foydalanuvchi shu guruhda necha marta mute/jazo olganini hisoblash."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT count(*) as cnt 
+            FROM user_punishments 
+            WHERE chat_id = ? AND user_id = ? AND action_type IN ('mute', 'virtual_mute')
+            """,
+            (chat_id, user_id)
+        )
+        row = cur.fetchone()
+        return row["cnt"] if row else 0
+
+
+def record_member_join(chat_id: int, user_id: int, full_name: str, username: str | None = None):
+    """A'zo guruhga qo'shilgan vaqtini qayd etish."""
+    now_utc = datetime.now(timezone.utc)
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO group_members (chat_id, user_id, full_name, username, joined_at, first_seen, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                full_name = excluded.full_name,
+                username = excluded.username,
+                last_seen = excluded.last_seen
+            """,
+            (chat_id, user_id, full_name, username, now_utc, now_utc, now_utc)
+        )
+        conn.commit()
+
+
+def get_user_info_stats(chat_id: int, user_id: int) -> dict:
+    """
+    Foydalanuvchining to'liq hisoboti (.info buyrug'i uchun):
+    - Guruhga qachon qo'shilgan / birinchi ko'rilgan
+    - Necha marta mute olgani
+    - Qo'shilganidan beri jami qancha xabar yozgani
+    - 24 soatlik xabarlari
+    - Ogohlantirishlari
+    - Hazil (Ghost) rejimi holati
+    """
+    with get_connection() as conn:
+        # 1. messages jadvalidan umumiy xabarlar va birinchi/oxirgi xabar vaqti
+        cur = conn.execute(
+            """
+            SELECT count(*) as total, min(created_at) as first_msg, max(created_at) as last_msg
+            FROM messages
+            WHERE chat_id = ? AND user_id = ?
+            """,
+            (chat_id, user_id)
+        )
+        msg_row = cur.fetchone()
+        total_msgs = msg_row["total"] if msg_row else 0
+        first_msg = msg_row["first_msg"] if msg_row else None
+        last_msg = msg_row["last_msg"] if msg_row else None
+
+        # 2. 24 soatlik xabarlar soni
+        cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+        cur = conn.execute(
+            "SELECT count(*) as cnt_24h FROM messages WHERE chat_id = ? AND user_id = ? AND created_at >= ?",
+            (chat_id, user_id, cutoff_24h)
+        )
+        msgs_24h = cur.fetchone()["cnt_24h"]
+
+        # 3. Qo'shilgan vaqti (group_members yoki birinchi xabar vaqti)
+        cur = conn.execute(
+            "SELECT joined_at, first_seen, last_seen, full_name, username FROM group_members WHERE chat_id = ? AND user_id = ?",
+            (chat_id, user_id)
+        )
+        m_row = cur.fetchone()
+        joined_at = None
+        if m_row and m_row["joined_at"]:
+            joined_at = m_row["joined_at"]
+        elif first_msg:
+            joined_at = first_msg
+
+        # 4. Mute jazolari soni
+        cur = conn.execute(
+            """
+            SELECT count(*) as mute_cnt 
+            FROM user_punishments 
+            WHERE chat_id = ? AND user_id = ? AND action_type IN ('mute', 'virtual_mute')
+            """,
+            (chat_id, user_id)
+        )
+        mute_cnt = cur.fetchone()["mute_cnt"]
+
+        # 5. Faol ogohlantirishlar
+        cur = conn.execute("SELECT count FROM warnings WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
+        w_row = cur.fetchone()
+        warn_cnt = w_row["count"] if w_row else 0
+
+        # 6. Profil ma'lumotlari
+        known = get_user_by_id(user_id)
+        full_name = (known.get("full_name") if known else None) or (m_row["full_name"] if m_row else f"Foydalanuvchi {user_id}")
+        username = (known.get("username") if known else None) or (m_row["username"] if m_row else None)
+
+        # 7. Ghost holati
+        ghost_active = is_prank_user(chat_id, user_id=user_id, username=username)
+
+        # 8. Virtual mute holati
+        virt_muted = is_admin_virtually_muted(chat_id, user_id)
+
+        return {
+            "user_id": user_id,
+            "full_name": full_name,
+            "username": username,
+            "joined_at": joined_at,
+            "first_msg": first_msg,
+            "last_msg": last_msg or (m_row["last_seen"] if m_row else None),
+            "total_msgs": total_msgs,
+            "msgs_24h": msgs_24h,
+            "mute_count": mute_cnt,
+            "warn_count": warn_cnt,
+            "is_ghost": ghost_active,
+            "is_virtually_muted": virt_muted
+        }
 
 
 # -------------------------------------------------------------
@@ -1567,6 +1763,7 @@ def set_admin_virtual_mute(chat_id: int, user_id: int, duration_seconds: int) ->
                 created_at = CURRENT_TIMESTAMP
         """, (chat_id, user_id, until_ts, duration_seconds))
         conn.commit()
+    log_user_punishment(chat_id, user_id, action_type="virtual_mute", reason="Admin Virtual Mute", duration_seconds=duration_seconds)
     return until_ts
 
 

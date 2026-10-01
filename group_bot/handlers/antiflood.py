@@ -12,9 +12,9 @@ from aiogram.types import Message, TelegramObject, ChatPermissions
 from aiogram.exceptions import TelegramBadRequest
 
 try:
-    from group_bot.database import delete_flood_messages, is_bot_enabled, get_chat_full_settings, format_duration
+    from group_bot.database import delete_flood_messages, is_bot_enabled, get_chat_full_settings, format_duration, log_user_punishment
 except ImportError:
-    from database import delete_flood_messages, is_bot_enabled, get_chat_full_settings, format_duration
+    from database import delete_flood_messages, is_bot_enabled, get_chat_full_settings, format_duration, log_user_punishment
 
 # Sozlamalar:
 # 1. Stiker, GIF va Premium emoji uchun:
@@ -223,6 +223,7 @@ async def handle_flood_action(
             permissions=permissions,
             until_date=until_date
         )
+        log_user_punishment(event.chat.id, event.from_user.id, action_type="mute", reason=reason, duration_seconds=seconds)
 
         if seconds < 35:
             async def unmute_after(b: Bot, c_id: int, u_id: int, delay: int):

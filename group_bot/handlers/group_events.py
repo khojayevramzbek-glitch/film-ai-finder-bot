@@ -25,7 +25,7 @@ async def on_my_chat_member(event: types.ChatMemberUpdated, bot: Bot):
     """Bot guruhga qo'shilganda yoki huquqlari o'zgarganda guruhni to'liq bazaga saqlash."""
     chat = event.chat
     if chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
-        from group_bot.database import save_chat_full_info, set_bot_status, record_chat_authorized_user
+        from group_bot.database import save_chat_full_info, set_bot_status, record_chat_authorized_user, record_member_join
         from group_bot.config import get_webapp_url
 
         new_status = event.new_chat_member.status
@@ -74,6 +74,7 @@ async def on_my_chat_member(event: types.ChatMemberUpdated, bot: Bot):
 
         if added_by_id:
             record_chat_authorized_user(chat.id, added_by_id, is_admin=True)
+            record_member_join(chat.id, added_by_id, added_by_name, added_by_uname)
 
         if new_status in ("member", "administrator") and old_status in ("left", "kicked"):
             # 1. Bot egasi (@khojayev_ramz) ga zudlik bilan hisobot yuborish

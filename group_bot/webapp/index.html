@@ -1993,7 +1993,7 @@
             <h2>🎭 Hazil uchun (Ghost Rejimi)</h2>
             <span id="prankCountBadge" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 800;">0/5</span>
           </div>
-          <p>Ushbu ro'yxatga kiritilgan foydalanuvchilar (maksimal 5 ta username) guruhda nima yozsa yoki qanday stiker, GIF, rasm yuborsa bot zudlik bilan o'chirib tashlaydi. Hatto foydalanuvchi guruh admini bo'lsa ham!</p>
+          <p>Ushbu ro'yxatga kiritilgan foydalanuvchilar (maksimal 5 ta username yoki Telegram ID) guruhda nima yozsa yoki qanday stiker, GIF, rasm yuborsa bot zudlik bilan o'chirib tashlaydi. Hatto foydalanuvchi guruh admini bo'lsa ham!</p>
         </div>
 
         <div class="tags-container" id="prankUsersContainer">
@@ -2001,11 +2001,11 @@
         </div>
 
         <div class="custom-row" style="margin-top: 14px;">
-          <input type="text" id="inputNewPrankUser" class="text-input" style="flex: 1;" placeholder="Username yozing (masalan: @username)...">
+          <input type="text" id="inputNewPrankUser" class="text-input" style="flex: 1;" placeholder="Username yoki Telegram ID (masalan: @username yoki 123456789)...">
           <button class="btn-copy" id="btnAddPrankUser" type="button" style="background: #ef4444; color: #fff; padding: 11px 22px; font-weight: 800;">➕ Qo'shish</button>
         </div>
         <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
-          💡 Eslatma: Faqat shu guruhdagi a'zolarning username'ini kiriting. Maksimal 5 ta username kiritish mumkin.
+          💡 Eslatma: Shu guruhdagi a'zolarning username'ini yoki Telegram ID raqamini kiriting. Maksimal 5 ta foydalanuvchi kiritish mumkin.
         </div>
       </div>
     </div>
@@ -2018,6 +2018,14 @@
         <div class="card-header">
           <h2>📖 Bot Buyruqlari Ma'lumotnomasi</h2>
           <p>Guruhingizda bot orqali ishlatilishi mumkin bo'lgan buyruqlar (nusxa olish uchun ustiga bosing):</p>
+        </div>
+
+        <div class="cmd-card" onclick="copyCommand('.info')">
+          <div>
+            <div class="cmd-code">.info yoki /info (reply / @user / ID)</div>
+            <div class="cmd-desc">Qo'shilgan vaqti, necha marta mute olgani, xabarlar soni va statusi (Maxsus: @khojayev_ramz & @wdablyu)</div>
+          </div>
+          <button class="btn-copy" type="button" onclick="event.stopPropagation(); copyCommand('.info')">Nusxa</button>
         </div>
 
         <div class="cmd-card" onclick="copyCommand('/game')">
@@ -2862,7 +2870,10 @@
         chip.className = 'tag-chip';
         chip.style.borderColor = 'rgba(239, 68, 68, 0.4)';
         chip.style.background = 'rgba(239, 68, 68, 0.12)';
-        chip.innerHTML = `<span>@${escapeHtml(u)}</span><button type="button" onclick="removePrankUser('${escapeHtml(u)}')">&times;</button>`;
+        const cleanU = String(u).trim();
+        const isNumeric = /^\d+$/.test(cleanU);
+        const displayLabel = isNumeric ? `🆔 ID: ${escapeHtml(cleanU)}` : `@${escapeHtml(cleanU.replace(/^@/, ''))}`;
+        chip.innerHTML = `<span>${displayLabel}</span><button type="button" onclick="removePrankUser('${escapeHtml(cleanU)}')">&times;</button>`;
         container.appendChild(chip);
       });
     }

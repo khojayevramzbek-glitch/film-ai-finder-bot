@@ -12,7 +12,8 @@ from group_bot.database import (
     get_user_24h_stat, get_user_by_username, get_user_by_id,
     upsert_known_user,
     get_chat_full_settings, format_duration,
-    set_admin_virtual_mute, remove_admin_virtual_mute, is_admin_virtually_muted
+    set_admin_virtual_mute, remove_admin_virtual_mute, is_admin_virtually_muted,
+    get_user_info_stats, log_user_punishment
 )
 
 router = Router()
@@ -355,6 +356,7 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
                 permissions=permissions,
                 until_date=until_date
             )
+            log_user_punishment(message.chat.id, target_user.id, action_type="mute", duration_seconds=total_seconds)
             if total_seconds < 35:
                 asyncio.create_task(unmute_after(bot, message.chat.id, target_user.id, delay=total_seconds))
 
@@ -491,6 +493,7 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
                 if warn_action == "ban":
                     try:
                         await bot.ban_chat_member(chat_id=message.chat.id, user_id=target_user.id)
+                        log_user_punishment(message.chat.id, target_user.id, action_type="ban", reason="Warn limit reached")
                         await message.answer(
                             f"🚫 Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} {warn_limit} ta ogohlantirish oldi va guruhdan chiqarildi (Ban)!",
                             parse_mode="HTML"
@@ -513,6 +516,7 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
                             permissions=permissions,
                             until_date=until_date
                         )
+                        log_user_punishment(message.chat.id, target_user.id, action_type="mute", reason="Warn limit reached", duration_seconds=warn_mute_sec)
                         dur_str = format_duration(warn_mute_sec)
                         await message.answer(
                             f"⚠️ Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} {warn_limit} ta ogohlantirish oldi va <b>{dur_str}ga</b> yozishdan cheklandi (Mute)!",
@@ -560,6 +564,7 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
 
         try:
             await bot.ban_chat_member(chat_id=message.chat.id, user_id=target_user.id)
+            log_user_punishment(message.chat.id, target_user.id, action_type="ban", reason="Admin ban")
             u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
             await message.answer(
                 f"🚫 Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} guruhdan chiqarildi va bloklandi.",
@@ -623,3 +628,149 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
                 disable_notification=True
             )
         return
+
+
+INFO_CMD_REGEX = re.compile(r"^[./](info|инфо)\b", re.IGNORECASE)
+
+
+def is_info_command(message: types.Message) -> bool:
+    """Xabar .info yoki /info bilan boshlanganini tekshirish."""
+    text = (message.text or message.caption or "").strip()
+    return bool(INFO_CMD_REGEX.match(text))
+
+
+@router.message(is_info_command)
+async def cmd_user_info(message: types.Message, bot: Bot):
+    """
+    Maxsus .info buyrug'i:
+    Faqat @khojayev_ramz va @wdablyu uchun ruxsat etilgan!
+    Foydalanuvchining:
+    - Guruhga qachon qo'shilgan / birinchi ko'rilgan
+    - Necha marta mute olgani
+    - Qo'shilganidan beri qancha yozishgani (jami va 24h)
+    - Ogohlantirishlari, statusi va xavfsizlik ko'rsatkichlari
+    """
+    sender_id = message.from_user.id if message.from_user else 0
+    sender_uname = (message.from_user.username or "").lower() if message.from_user else ""
+
+    # 1. Ruxsatni qat'iy tekshirish: faqat @khojayev_ramz va @wdablyu (va ularning ID raqamlari)
+    if sender_id not in ALLOWED_USER_IDS and sender_uname not in ALLOWED_USERNAMES:
+        await message.reply(
+            "⛔️ Kechirasiz, <b>.info</b> buyrug'i faqat bot egalari (<b>@khojayev_ramz</b> va <b>@wdablyu</b>) uchun maxsus ruxsat etilgan!",
+            parse_mode="HTML"
+        )
+        return
+
+    if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
+        await message.reply("ℹ️ <code>.info</code> buyrug'i faqat guruhlarda ishlaydi!", parse_mode="HTML")
+        return
+
+    # 2. Maqsadli foydalanuvchini aniqlash (Reply, @username, ID yoki havoladan)
+    target_user, remaining_args, error_msg = await resolve_target_and_args(message, bot)
+
+    if not target_user:
+        text = (message.text or "").strip()
+        parts = text.split(maxsplit=1)
+        if len(parts) == 1 and not message.reply_to_message:
+            target_user = TargetUser(sender_id, message.from_user.full_name, message.from_user.username)
+        else:
+            await message.reply(
+                "ℹ️ <b>Foydalanuvchi ma'lumotlarini tekshirish uchun:</b>\n\n"
+                "• Biror a'zoning xabariga reply qilib: <code>.info</code>\n"
+                "• Yoki username bilan: <code>.info @username</code>\n"
+                "• Yoki Telegram ID bilan: <code>.info 123456789</code>",
+                parse_mode="HTML"
+            )
+            return
+
+    chat_id = message.chat.id
+    target_id = target_user.id
+
+    # 3. Bazadan statistikani olish
+    stats = get_user_info_stats(chat_id, target_id)
+
+    # 4. Telegram API orqali guruhdagi jonli maqomini aniqlash
+    role_str = "👤 Oddiy a'zo"
+    live_status_str = "🟢 Faol (yozishi mumkin)"
+    try:
+        member = await bot.get_chat_member(chat_id, target_id)
+        if member.status == ChatMemberStatus.CREATOR:
+            role_str = "👑 Guruh Asoschisi (Creator)"
+        elif member.status == ChatMemberStatus.ADMINISTRATOR:
+            role_str = "⭐️ Guruh Admini (Admin)"
+        elif member.status == ChatMemberStatus.RESTRICTED:
+            role_str = "⚠️ Cheklangan a'zo"
+            if not getattr(member, "can_send_messages", True):
+                live_status_str = "🔴 Muteda (yozish taqiqlangan)"
+        elif member.status in [ChatMemberStatus.LEFT, ChatMemberStatus.KICKED]:
+            role_str = "🚪 Guruhdan chiqqan / Ban qilingan"
+            live_status_str = "🚫 Guruhda emas"
+    except Exception:
+        pass
+
+    if stats.get("is_virtually_muted"):
+        live_status_str = "👻 Virtual Muteda (xabarlari darhol o'chiriladi)"
+
+    # 5. Qo'shilgan vaqti va davomiyligi
+    joined_text = "Noma'lum"
+    if stats.get("joined_at"):
+        try:
+            dt = stats["joined_at"]
+            if isinstance(dt, str):
+                dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+            tashkent_tz = timezone(timedelta(hours=5))
+            dt_local = dt.astimezone(tashkent_tz)
+            date_str = dt_local.strftime("%d.%m.%Y, %H:%M")
+            now_local = datetime.now(tashkent_tz)
+            delta = now_local - dt_local
+            days = delta.days
+            if days > 0:
+                duration_sub = f"({days} kun oldin)"
+            else:
+                hours = int(delta.total_seconds() // 3600)
+                duration_sub = f"({hours} soat oldin)" if hours > 0 else "(Yaqinda)"
+            joined_text = f"<b>{date_str}</b> {duration_sub}"
+        except Exception:
+            joined_text = str(stats["joined_at"])
+
+    # 6. Oxirgi faolligi
+    last_seen_text = "Noma'lum"
+    if stats.get("last_msg"):
+        try:
+            dt = stats["last_msg"]
+            if isinstance(dt, str):
+                dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+            tashkent_tz = timezone(timedelta(hours=5))
+            dt_local = dt.astimezone(tashkent_tz)
+            last_seen_text = dt_local.strftime("%d.%m.%Y, %H:%M")
+        except Exception:
+            last_seen_text = str(stats["last_msg"])
+
+    name_clean = escape(target_user.full_name or stats.get("full_name") or "Foydalanuvchi")
+    username_clean = f"@{escape(target_user.username)}" if target_user.username else (f"@{escape(stats['username'])}" if stats.get("username") else "<i>Mavjud emas</i>")
+    ghost_status = "🔴 Faol (Ghost rejimida)" if stats.get("is_ghost") else "⚪️ O'chirilgan"
+
+    card_text = (
+        f"<b>📋 FOYDALANUVCHI MA'LUMOTLARI (INFO)</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Ism:</b> {name_clean}\n"
+        f"🆔 <b>Telegram ID:</b> <code>{target_id}</code>\n"
+        f"🔖 <b>Username:</b> {username_clean}\n"
+        f"🎖 <b>Guruhdagi maqomi:</b> {role_str}\n\n"
+        f"📅 <b>Guruhdagi tarixi:</b>\n"
+        f"├ ⏳ <b>Qo'shilgan / Birinchi aniqlangan:</b>\n"
+        f"│   └ {joined_text}\n"
+        f"└ ⏱ <b>So'nggi faolligi:</b> {last_seen_text}\n\n"
+        f"💬 <b>Xabarlar statistikasi:</b>\n"
+        f"├ 📈 <b>Qo'shilganidan beri jami:</b> <code>{stats.get('total_msgs', 0)}</code> ta xabar\n"
+        f"└ ⚡️ <b>So'nggi 24 soatda:</b> <code>{stats.get('msgs_24h', 0)}</code> ta xabar\n\n"
+        f"⚖️ <b>Jazolar va Xavfsizlik:</b>\n"
+        f"├ 🔇 <b>Jami olingan Mute:</b> <code>{stats.get('mute_count', 0)}</code> marta\n"
+        f"├ ⚠️ <b>Faol ogohlantirishlar:</b> <code>{stats.get('warn_count', 0)}/3</code> ta\n"
+        f"├ 🎭 <b>Hazil (Ghost) rejimi:</b> {ghost_status}\n"
+        f"└ 🛡 <b>Hozirgi holati:</b> {live_status_str}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"<i>🔍 Tekshiruvchi: @{escape(sender_uname or str(sender_id))}</i>"
+    )
+
+    await message.reply(card_text, parse_mode="HTML")

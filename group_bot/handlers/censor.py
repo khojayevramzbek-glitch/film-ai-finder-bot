@@ -24,6 +24,7 @@ try:
         reset_warns,
         format_duration,
         delete_message_record,
+        log_user_punishment,
     )
 except ImportError:
     from database import (
@@ -339,6 +340,7 @@ class CensorMiddleware(BaseMiddleware):
                     if warn_action == "ban":
                         try:
                             await bot.ban_chat_member(chat_id=chat_id, user_id=user.id)
+                            log_user_punishment(chat_id, user.id, action_type="ban", reason="Censor warn limit reached")
                             warn_msg = await bot.send_message(
                                 chat_id=chat_id,
                                 text=f"🚫 <b>{escape(user.full_name)}</b> {warn_limit} ta ogohlantirish oldi va guruhdan chiqarildi (Ban)!",
@@ -357,6 +359,7 @@ class CensorMiddleware(BaseMiddleware):
                                 permissions=permissions,
                                 until_date=until_date
                             )
+                            log_user_punishment(chat_id, user.id, action_type="mute", reason="Censor warn limit reached", duration_seconds=warn_mute_sec)
                             dur_str = format_duration(warn_mute_sec)
                             warn_msg = await bot.send_message(
                                 chat_id=chat_id,
@@ -393,6 +396,7 @@ class CensorMiddleware(BaseMiddleware):
                         permissions=permissions,
                         until_date=until_date
                     )
+                    log_user_punishment(chat_id, user.id, action_type="mute", reason="Censor profanity detected", duration_seconds=censor_sec)
                     if censor_sec < 35:
                         asyncio.create_task(unmute_after(bot, chat_id, user.id, delay=censor_sec))
 
