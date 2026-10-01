@@ -10,8 +10,11 @@ env/
 
 # SQLite Database
 *.db
+*.db-wal
+*.db-shm
 *.sqlite3
 users.db
+scratch/
 
 # Downloads & Temp
 downloads/

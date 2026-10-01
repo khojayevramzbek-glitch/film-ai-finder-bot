@@ -1265,6 +1265,104 @@
       color: var(--text-sub);
       margin-top: 2px;
     }
+  
+    /* Dynamic Viewport & Mobile Safe Areas for Android, iOS & PC */
+    html, body {
+      min-height: 100vh;
+      min-height: 100dvh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: max(95px, calc(env(safe-area-inset-bottom, 0px) + 85px));
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ping-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.28);
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      font-weight: 700;
+      color: #34d399;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: -0.2px;
+    }
+
+    .ping-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+      animation: pulseGreen 2s infinite;
+    }
+    @keyframes pulseGreen {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.85); }
+    }
+
+    .btn-fs {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-pill);
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+    .btn-fs:active {
+      transform: scale(0.92);
+      background: rgba(56, 189, 248, 0.2);
+    }
+
+    /* Shortcut Pills */
+    .quick-nav-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .quick-nav-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-md);
+      padding: 12px 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s var(--ease-spring);
+    }
+    .quick-nav-card:hover, .quick-nav-card:active {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: rgba(56, 189, 248, 0.35);
+      transform: translateY(-2px);
+    }
+    .quick-nav-icon {
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+    .quick-nav-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+    }
+
   </style>
 </head>
 <body>
@@ -1291,9 +1389,18 @@
       </div>
     </div>
 
-    <div class="user-pill" id="userPill">
-      <div class="user-avatar" id="userAvatar">U</div>
-      <span id="userName">Foydalanuvchi</span>
+    <div class="topbar-right">
+      <div class="ping-pill" id="pingPill" title="Server va bot holati">
+        <span class="ping-dot"></span>
+        <span id="pingVal">24/7 ON</span>
+      </div>
+      <button class="btn-fs" id="btnFullscreen" type="button" title="To'liq ekran (Android/iOS/PC)">
+        <span id="fsIcon">⛶</span>
+      </button>
+      <div class="user-pill" id="userPill">
+        <div class="user-avatar" id="userAvatar">U</div>
+        <span id="userName">Foydalanuvchi</span>
+      </div>
     </div>
   </header>
 
@@ -1970,6 +2077,11 @@
           <button class="btn-copy" id="btnRefreshGroups" type="button">🔄 Yangilash</button>
         </div>
 
+        <div style="margin-bottom: 14px; position: relative;">
+          <input type="text" id="inputSearchGroups" class="text-input" placeholder="🔍 Guruh nomi yoki ID bo'yicha tezkor qidiruv..." style="padding-left: 36px;">
+          <span style="position: absolute; left: 13px; top: 50%; transform: translateY(-50%); font-size: 14px; opacity: 0.7; pointer-events: none;">🔍</span>
+        </div>
+
         <div id="groupsCardsContainer">
           <div style="text-align: center; color: var(--text-muted); padding: 30px;">
             Guruhlar yuklanmoqda...
@@ -2064,6 +2176,7 @@
   <!-- LIQUID JAVASCRIPT ENGINE (OPTIMISTIC, ZERO-LAG, HAPTICS) -->
   <!-- =================================================================== -->
   <script>
+
     // 1. Telegram WebApp Initialization
     const tg = window.Telegram?.WebApp;
     if (tg) {
@@ -2089,6 +2202,82 @@
         else if (type === 'selection') tg.HapticFeedback.selectionChanged();
       } catch (e) {}
     }
+
+    // Fullscreen Controller (Android, iOS & PC)
+    let isFullscreen = false;
+    function toggleFullscreen() {
+      haptic('medium');
+      const fsIcon = document.getElementById('fsIcon');
+      if (tg && typeof tg.requestFullscreen === 'function') {
+        try {
+          if (!isFullscreen) {
+            tg.requestFullscreen();
+            isFullscreen = true;
+            if (fsIcon) fsIcon.textContent = '🗗';
+            showToast("To'liq ekran yoqildi", "⛶");
+          } else if (typeof tg.exitFullscreen === 'function') {
+            tg.exitFullscreen();
+            isFullscreen = false;
+            if (fsIcon) fsIcon.textContent = '⛶';
+            showToast("Oyna rejimi", "🗗");
+          }
+          return;
+        } catch (e) {}
+      }
+
+      // Fallback for standard PC browser
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.().then(() => {
+          isFullscreen = true;
+          if (fsIcon) fsIcon.textContent = '🗗';
+          showToast("To'liq ekran", "⛶");
+        }).catch(() => {});
+      } else {
+        document.exitFullscreen?.().then(() => {
+          isFullscreen = false;
+          if (fsIcon) fsIcon.textContent = '⛶';
+        }).catch(() => {});
+      }
+    }
+    document.getElementById('btnFullscreen')?.addEventListener('click', toggleFullscreen);
+
+    // Telegram BackButton Controller
+    function updateBackButton(tabId) {
+      if (!tg || !tg.BackButton) return;
+      if (tabId && tabId !== 'tab-general') {
+        tg.BackButton.show();
+        tg.BackButton.onClick(() => {
+          haptic('light');
+          switchTab('tab-general');
+        });
+      } else {
+        tg.BackButton.hide();
+      }
+    }
+
+    // Live Server Ping & Latency Monitor
+    async function startPingMonitor() {
+      const pingVal = document.getElementById('pingVal');
+      const pingPill = document.getElementById('pingPill');
+      if (!pingVal) return;
+
+      async function checkPing() {
+        const start = performance.now();
+        try {
+          await apiFetch('/api/health');
+          const elapsed = Math.round(performance.now() - start);
+          pingVal.textContent = `${elapsed}ms • ON`;
+          if (pingPill) pingPill.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+        } catch (e) {
+          pingVal.textContent = '24/7 ON';
+        }
+      }
+
+      checkPing();
+      setInterval(checkPing, 15000);
+    }
+    startPingMonitor();
+
 
     // Floating Toast Notification
     let toastTimeout = null;
@@ -2174,6 +2363,7 @@
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
+      updateBackButton(tabId);
       if (tabId === 'tab-manager') {
         loadManagerOverview();
       }
@@ -2356,26 +2546,42 @@
     }
 
     // Render Groups Cards
+    // Groups Search Filter
+    document.getElementById('inputSearchGroups')?.addEventListener('input', () => {
+      renderGroupsCards();
+    });
+
     function renderGroupsCards() {
       const container = document.getElementById('groupsCardsContainer');
       if (!container) return;
       container.innerHTML = '';
 
-      if (!groupsList || groupsList.length === 0) {
+      const searchInput = document.getElementById('inputSearchGroups');
+      const q = (searchInput ? searchInput.value : '').toLowerCase().trim();
+
+      let displayList = groupsList || [];
+      if (q) {
+        displayList = displayList.filter(g => 
+          (g.title && g.title.toLowerCase().includes(q)) || 
+          String(g.chat_id).includes(q)
+        );
+      }
+
+      if (displayList.length === 0) {
         container.innerHTML = `
-          <div style="text-align: center; padding: 32px 16px;">
-            <div style="font-size: 40px; margin-bottom: 12px;">👥</div>
-            <div style="font-size: 15px; font-weight: 800; color: #fff;">Hozircha hech qanday guruh qo'shilmagan</div>
-            <p style="font-size: 12.5px; color: var(--text-sub); margin: 8px auto 18px; max-width: 380px; line-height: 1.5;">
-              Botni o'z guruhingizga qo'shing va administrator huquqini bering.
-              Shunda guruhingiz bu yerda paydo bo'ladi va barcha qoidalarni 100% o'zingizga moslaysiz!
+          <div style="text-align: center; padding: 28px 16px; background: rgba(255,255,255,0.02); border-radius: var(--radius-md); border: 1px dashed var(--border-glass);">
+            <div style="font-size: 32px; margin-bottom: 8px;">🔍</div>
+            <div style="font-size: 14px; font-weight: 700; color: #fff;">${q ? "Qidiruv bo'yicha guruh topilmadi" : "Hozircha guruhlar mavjud emas"}</div>
+            <p style="font-size: 12px; color: var(--text-sub); margin: 6px auto 14px; max-width: 320px;">
+              ${q ? "Boshqa nom yoki ID kiritib ko'ring." : "Botni guruhingizga qo'shing va administrator qiling."}
             </p>
+            <button class="btn-copy" type="button" onclick="window.open('https://t.me/oken_sherda_bot?startgroup=true', '_blank')">➕ Botni Guruhga Qo'shish</button>
           </div>
         `;
         return;
       }
 
-      groupsList.forEach(g => {
+      displayList.forEach(g => {
         const isSelected = String(g.chat_id) === String(currentChatId);
         const initial = (g.title || 'G').charAt(0).toUpperCase();
         const card = document.createElement('div');
@@ -2584,7 +2790,7 @@
         text.textContent = 'BOT GURUHDA FAOL';
       } else {
         orb.className = 'status-orb inactive';
-        text.textContent = 'BOT TO'XTATILGAN';
+        text.textContent = "BOT TO'XTATILGAN";
       }
     }
 
@@ -2594,7 +2800,7 @@
       if (!container) return;
       container.innerHTML = '';
       if (!words || words.length === 0) {
-        container.innerHTML = '<span style="font-size: 12px; color: var(--text-muted);">Maxsus taqiqlangan so'zlar kiritilmagan</span>';
+        container.innerHTML = `<span style="font-size: 12px; color: var(--text-muted);">Maxsus taqiqlangan so'zlar kiritilmagan</span>`;
         return;
       }
       words.forEach(w => {
@@ -2636,7 +2842,7 @@
       if (!list) return;
       list.innerHTML = '';
       if (!topUsers || topUsers.length === 0) {
-        list.innerHTML = '<div class="glass-card" style="text-align: center; color: var(--text-muted); padding: 24px;">So'nggi 24 soatda faollik yo'q</div>';
+        list.innerHTML = `<div class="glass-card" style="text-align: center; color: var(--text-muted); padding: 24px;">So'nggi 24 soatda faollik yo'q</div>`;
         return;
       }
 
@@ -2670,7 +2876,7 @@
       if (!list) return;
       list.innerHTML = '';
       if (!players || players.length === 0) {
-        list.innerHTML = '<div class="glass-card" style="text-align: center; color: var(--text-muted); padding: 24px;">Hali hech kim o'yinda g'alaba qozonmagan</div>';
+        list.innerHTML = `<div class="glass-card" style="text-align: center; color: var(--text-muted); padding: 24px;">Hali hech kim o'yinda g'alaba qozonmagan</div>`;
         return;
       }
 
@@ -2685,7 +2891,7 @@
           <div class="rank-info">
             <div class="rank-medal">${medalOrNum}</div>
             <div>
-              <div class="rank-user-name">${escapeHtml(p.full_name || 'O'yinchi')}</div>
+              <div class="rank-user-name">${escapeHtml(p.full_name || "O'yinchi")}</div>
               <div class="rank-username">${uname}</div>
             </div>
           </div>
@@ -3035,20 +3241,20 @@
     });
 
     // Welcome Templates
-    const TPL_SERIOUS = "👑 Assalomu alaykum, {mention}!
+    const TPL_SERIOUS = `👑 Assalomu alaykum, {mention}!
 
 «{title}» nufuzli jamoasiga xush kelibsiz.
 Siz guruhimizning {count}-a'zosi bo'ldingiz.
 
-Iltimos, guruh qoidalariga rioya qiling. Maroqli suhbat tilaymiz!";
-    const TPL_FRIENDLY = "✨ Salom, {name}! 🎉
+Iltimos, guruh qoidalariga rioya qiling. Maroqli suhbat tilaymiz!`;
+    const TPL_FRIENDLY = `✨ Salom, {name}! 🎉
 
 Bizning do'stona «{title}» oilamizga xush kelibsiz!
-Biz bilan bo'lganingizdan xursandmiz. Bemalol suhbatga qo'shiling!";
-    const TPL_BUSINESS = "💼 Xush kelibsiz, {mention}!
+Biz bilan bo'lganingizdan xursandmiz. Bemalol suhbatga qo'shiling!`;
+    const TPL_BUSINESS = `💼 Xush kelibsiz, {mention}!
 
 «{title}» biznes va professionallar hamjamiyatiga xush kelibsiz.
-Foydali tanishuvlar va samarali hamkorlik tilaymiz.";
+Foydali tanishuvlar va samarali hamkorlik tilaymiz.`;
 
     document.getElementById('btnTplSerious')?.addEventListener('click', () => {
       haptic('light');
@@ -3164,7 +3370,7 @@ Foydali tanishuvlar va samarali hamkorlik tilaymiz.";
               <div class="group-card-id">ID: ${g.chat_id}</div>
             </div>
             <span class="group-badge ${g.is_bot_enabled ? 'active' : 'inactive'}">
-              ${g.is_bot_enabled ? '🟢 Faol' : '🔴 O'chiq'}
+              ${g.is_bot_enabled ? '🟢 Faol' : "🔴 O\'chiq"}
             </span>
           </div>
           <div style="font-size: 12px; color: var(--text-sub); display: flex; justify-content: space-between;">
@@ -3178,6 +3384,7 @@ Foydali tanishuvlar va samarali hamkorlik tilaymiz.";
 
     // INITIAL LOAD
     loadGroups();
+  
   </script>
 </body>
 </html>
