@@ -145,9 +145,14 @@ def init_db():
                 joined_at TIMESTAMP NOT NULL,
                 first_seen TIMESTAMP NOT NULL,
                 last_seen TIMESTAMP NOT NULL,
+                is_exact_join INTEGER DEFAULT 0,
                 PRIMARY KEY (chat_id, user_id)
             );
         """)
+        try:
+            conn.execute("ALTER TABLE group_members ADD COLUMN is_exact_join INTEGER DEFAULT 0;")
+        except Exception:
+            pass
         conn.execute("""
             CREATE TABLE IF NOT EXISTS user_punishments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1624,20 +1629,22 @@ def get_user_punishments_count(chat_id: int, user_id: int) -> int:
         return row["cnt"] if row else 0
 
 
-def record_member_join(chat_id: int, user_id: int, full_name: str, username: str | None = None):
+def record_member_join(chat_id: int, user_id: int, full_name: str, username: str | None = None, is_exact: bool = False):
     """A'zo guruhga qo'shilgan vaqtini qayd etish."""
     now_utc = datetime.now(timezone.utc)
+    is_exact_val = 1 if is_exact else 0
     with get_connection() as conn:
         conn.execute(
             """
-            INSERT INTO group_members (chat_id, user_id, full_name, username, joined_at, first_seen, last_seen)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO group_members (chat_id, user_id, full_name, username, joined_at, first_seen, last_seen, is_exact_join)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(chat_id, user_id) DO UPDATE SET
                 full_name = excluded.full_name,
                 username = excluded.username,
-                last_seen = excluded.last_seen
+                last_seen = excluded.last_seen,
+                is_exact_join = MAX(group_members.is_exact_join, excluded.is_exact_join)
             """,
-            (chat_id, user_id, full_name, username, now_utc, now_utc, now_utc)
+            (chat_id, user_id, full_name, username, now_utc, now_utc, now_utc, is_exact_val)
         )
         conn.commit()
 
@@ -1677,13 +1684,18 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
 
         # 3. Qo'shilgan vaqti (group_members yoki birinchi xabar vaqti)
         cur = conn.execute(
-            "SELECT joined_at, first_seen, last_seen, full_name, username FROM group_members WHERE chat_id = ? AND user_id = ?",
+            "SELECT joined_at, first_seen, last_seen, full_name, username, is_exact_join FROM group_members WHERE chat_id = ? AND user_id = ?",
             (chat_id, user_id)
         )
         m_row = cur.fetchone()
         joined_at = None
-        if m_row and m_row["joined_at"]:
+        is_exact = False
+        if m_row:
             joined_at = m_row["joined_at"]
+            try:
+                is_exact = bool(m_row["is_exact_join"])
+            except Exception:
+                is_exact = False
         elif first_msg:
             joined_at = first_msg
         else:
@@ -1724,6 +1736,7 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
             "full_name": full_name,
             "username": username,
             "joined_at": joined_at,
+            "is_exact_join": is_exact,
             "first_msg": first_msg,
             "last_msg": last_msg or (m_row["last_seen"] if m_row else None),
             "total_msgs": total_msgs,

@@ -691,6 +691,7 @@ async def cmd_user_info(message: types.Message, bot: Bot):
 
     # 3. Bazadan statistikani olish
     stats = get_user_info_stats(chat_id, target_id)
+    is_exact_join = stats.get("is_exact_join", False)
 
     # 1) Username
     uname = target_user.username or stats.get("username")
@@ -706,11 +707,7 @@ async def cmd_user_info(message: types.Message, bot: Bot):
     }
 
     raw_dt = stats.get("joined_at")
-    if not raw_dt and message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id == target_id:
-        raw_dt = message.reply_to_message.date
-
-    tashkent_tz = timezone(timedelta(hours=5))
-    if raw_dt:
+    if is_exact_join and raw_dt:
         try:
             if isinstance(raw_dt, str):
                 dt_str = raw_dt.replace("Z", "+00:00")
@@ -723,20 +720,25 @@ async def cmd_user_info(message: types.Message, bot: Bot):
 
             if dt_obj.tzinfo is None:
                 dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+            tashkent_tz = timezone(timedelta(hours=5))
             dt_local = dt_obj.astimezone(tashkent_tz)
+            month_name = UZBEK_MONTHS.get(dt_local.month, "")
+            joined_text = f"{dt_local.day}-{month_name} {dt_local.year}-yil"
         except Exception:
-            dt_local = datetime.now(tashkent_tz)
+            joined_text = "Guruhning eski a'zosi (Botdan oldin qo'shilgan)"
     else:
-        dt_local = datetime.now(tashkent_tz)
+        joined_text = "Guruhning eski a'zosi (Botdan oldin qo'shilgan)"
 
-    month_name = UZBEK_MONTHS.get(dt_local.month, "")
-    joined_text = f"{dt_local.day}-{month_name} {dt_local.year}-yil"
-
-    # 4) Guruhga qo'shilganidan beri yozgan barcha xabarlari soni
+    # 4) Xabarlari soni
     total_msgs = stats.get("total_msgs", 0)
     if total_msgs == 0 and message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id == target_id:
         total_msgs = 1
     total_msgs_text = f"{total_msgs:,}".replace(",", " ")
+
+    if is_exact_join:
+        msgs_line = f"💬 <b>Barcha xabarlari:</b> {total_msgs_text} ta"
+    else:
+        msgs_line = f"💬 <b>Xabarlari (bot hisobida):</b> {total_msgs_text} ta"
 
     # 5) Olgan mutelari
     mute_count = stats.get("mute_count", 0)
@@ -747,7 +749,7 @@ async def cmd_user_info(message: types.Message, bot: Bot):
         f"👤 <b>Username:</b> {username_clean}\n"
         f"🆔 <b>ID:</b> <code>{target_id}</code>\n"
         f"📅 <b>Qo'shilgan sana:</b> {joined_text}\n"
-        f"💬 <b>Barcha xabarlari:</b> {total_msgs_text} ta\n"
+        f"{msgs_line}\n"
         f"🔇 <b>Olgan mutelari:</b> {mute_count} ta"
     )
 

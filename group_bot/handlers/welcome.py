@@ -226,7 +226,7 @@ async def on_user_joined_message(message: types.Message, bot: Bot):
     for u in message.new_chat_members:
         if not u.is_bot:
             upsert_known_user(u.id, u.full_name, u.username, message.chat.id)
-            record_member_join(message.chat.id, u.id, u.full_name, u.username)
+            record_member_join(message.chat.id, u.id, u.full_name, u.username, is_exact=True)
 
     real_users = [u for u in message.new_chat_members if not u.is_bot and _should_welcome_user(message.chat.id, u.id)]
     if not real_users:
@@ -255,7 +255,7 @@ async def on_user_joined_chat_member(event: types.ChatMemberUpdated, bot: Bot):
         return
 
     upsert_known_user(user.id, user.full_name, user.username, event.chat.id)
-    record_member_join(event.chat.id, user.id, user.full_name, user.username)
+    record_member_join(event.chat.id, user.id, user.full_name, user.username, is_exact=True)
 
     if not _should_welcome_user(event.chat.id, user.id):
         return
