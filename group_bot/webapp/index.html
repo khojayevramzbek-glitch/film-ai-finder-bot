@@ -2011,8 +2011,14 @@
           </select>
           <button class="btn-copy" id="btnAddPrankUser" type="button" style="background: #ef4444; color: #fff; padding: 11px 20px; font-weight: 800; border-radius: 12px;">➕ Qo'shish</button>
         </div>
-        <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
-          💡 <b>Maslahat:</b> Ro'yxatdagi foydalanuvchi kartochkasidagi rejim tugmasini (🔄) bosib, uning rejimini istalgan paytda bir zumda almashtirishingiz mumkin.
+        <div id="prankSuggestionsContainer" style="margin-top: 12px; display: none;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-sub); margin-bottom: 6px;">
+            👥 Guruh faol a'zolarini tezkor tanlash (kiritish uchun bosing):
+          </div>
+          <div class="tags-container" id="prankMemberChips" style="max-height: 110px; overflow-y: auto; gap: 6px;"></div>
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 10px;">
+          💡 <b>Maslahat:</b> Har bir foydalanuvchi kartochkasidagi menyu orqali uning rejimini (💩 Emoji, 👻 Ghost, 🔇 Super Mute, 🤡 Troll, 🎲 Chaos) to'g'ridan-to'g'ri tanlashingiz mumkin.
         </div>
       </div>
     </div>
@@ -2816,6 +2822,7 @@
 
         // Render Prank Users
         renderPrankUsers(g.prank_users || []);
+        renderPrankSuggestions(g.stats?.top_users || []);
 
         // Render Leaderboards
         renderLeaderboard(g.stats?.top_users || []);
@@ -2920,15 +2927,52 @@
 
         chip.innerHTML = `
           <span style="font-weight: 600;">${displayLabel}</span>
-          <button type="button" 
-                  onclick="cyclePrankMode('${escapeHtml(targetIdent)}', '${escapeHtml(mode)}')" 
-                  style="background: ${mInfo.bg}; color: ${mInfo.color}; border: 1px solid ${mInfo.color}; border-radius: 12px; font-size: 11px; font-weight: 700; padding: 3px 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" 
-                  title="Rejimni almashtirish uchun bosing">
-            ${mInfo.label} 🔄
-          </button>
+          <select onchange="setPrankMode('${escapeHtml(targetIdent)}', this.value)" 
+                  style="background: ${mInfo.bg}; color: ${mInfo.color}; border: 1px solid ${mInfo.color}; border-radius: 12px; font-size: 11px; font-weight: 700; padding: 4px 8px; cursor: pointer; outline: none;">
+            <option value="emoji" ${mode === 'emoji' ? 'selected' : ''}>💩 Emoji Bomb</option>
+            <option value="ghost" ${mode === 'ghost' ? 'selected' : ''}>👻 Ghost</option>
+            <option value="mute" ${mode === 'mute' ? 'selected' : ''}>🔇 Super Mute</option>
+            <option value="troll" ${mode === 'troll' ? 'selected' : ''}>🤡 Troll</option>
+            <option value="chaos" ${mode === 'chaos' ? 'selected' : ''}>🎲 Chaos</option>
+          </select>
           <button type="button" onclick="removePrankUser('${escapeHtml(targetIdent)}')" style="cursor: pointer; font-size: 18px; margin-left: 4px; line-height: 1; color: #f87171;" title="O'chirish">&times;</button>
         `;
         container.appendChild(chip);
+      });
+    }
+
+    // Quick Suggestions for Prank Mode from group members
+    function renderPrankSuggestions(topUsers) {
+      const container = document.getElementById('prankSuggestionsContainer');
+      const chipsBox = document.getElementById('prankMemberChips');
+      if (!container || !chipsBox) return;
+      chipsBox.innerHTML = '';
+      if (!topUsers || topUsers.length === 0) {
+        container.style.display = 'none';
+        return;
+      }
+      container.style.display = 'block';
+      topUsers.slice(0, 12).forEach(u => {
+        const chip = document.createElement('div');
+        chip.className = 'tag-chip';
+        chip.style.cursor = 'pointer';
+        chip.style.background = 'rgba(255, 255, 255, 0.06)';
+        chip.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+        chip.style.padding = '4px 10px';
+        chip.style.fontSize = '11px';
+        const label = u.full_name || (u.username ? '@' + u.username : String(u.user_id));
+        chip.innerHTML = `<span>👤 ${escapeHtml(label)}</span>`;
+        chip.title = "Kiritish uchun bosing";
+        chip.onclick = () => {
+          haptic('light');
+          const input = document.getElementById('inputNewPrankUser');
+          if (input) {
+            input.value = u.username ? '@' + u.username : String(u.user_id);
+            input.focus();
+            showToast(`${escapeHtml(label)} tanlandi, rejimni tanlab Qo'shishni bosing!`, '✍️');
+          }
+        };
+        chipsBox.appendChild(chip);
       });
     }
 
@@ -3289,6 +3333,32 @@
     document.getElementById('inputNewPrankUser')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') document.getElementById('btnAddPrankUser')?.click();
     });
+
+    window.setPrankMode = async function(target, newMode) {
+      if (!requireCurrentChat()) return;
+      haptic('selection');
+      try {
+        const res = await apiFetch(`/api/group/${currentChatId}/prank_users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: target, mode: newMode })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          renderPrankUsers(data.prank_users);
+          const modeLabels = {
+            'emoji': '💩 Emoji Bomb',
+            'ghost': '👻 Ghost',
+            'mute': '🔇 Super Mute',
+            'troll': '🤡 Troll',
+            'chaos': '🎲 Chaos'
+          };
+          showToast(`Rejim ${modeLabels[newMode] || newMode} ga o'zgartirildi!`, "🎭");
+        }
+      } catch (err) {
+        showToast("Rejimni o'zgartirishda xatolik", "❌");
+      }
+    };
 
     window.cyclePrankMode = async function(target, currentMode) {
       if (!requireCurrentChat()) return;
