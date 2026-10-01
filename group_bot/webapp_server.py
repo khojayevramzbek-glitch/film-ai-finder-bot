@@ -1,3 +1,5 @@
+import os
+import threading
 import json
 import logging
 from pathlib import Path
@@ -71,7 +73,6 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
 
         # Immediate Health Check for Render, Railway, Hugging Face, Docker
         if norm_path in ("/health", "/api/health", "/ping") and request.method == "GET":
-            import threading, os
             return JSONResponse({
                 "status": "online",
                 "ok": True,
