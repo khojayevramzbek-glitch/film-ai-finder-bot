@@ -81,11 +81,10 @@
     }
 
     html {
-      height: 100%;
-      overflow-x: hidden;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      overscroll-behavior-y: contain;
+      width: 100%;
+      min-height: 100%;
+      overflow-x: clip;
+      -webkit-text-size-adjust: 100%;
     }
 
     body {
@@ -97,17 +96,15 @@
         radial-gradient(circle at 50% 85%, rgba(16, 185, 129, 0.08) 0%, transparent 50%);
       background-attachment: fixed;
       color: var(--text-main);
+      width: 100%;
       min-height: 100%;
-      min-height: 100dvh;
-      overflow-x: hidden;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      touch-action: pan-y;
-      overscroll-behavior-y: contain;
+      overflow-x: clip;
       line-height: 1.5;
       font-size: 14px;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: 160px !important;
     }
 
     /* Ambient Lighting Mesh (Animated) */
@@ -1294,18 +1291,7 @@
       margin-top: 2px;
     }
   
-    /* Dynamic Viewport & Mobile Safe Areas for Android, iOS & PC */
-    html, body {
-      min-height: 100vh;
-      min-height: 100dvh;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    body {
-      padding-top: env(safe-area-inset-top, 0px);
-      padding-bottom: max(95px, calc(env(safe-area-inset-bottom, 0px) + 85px));
-    }
+    /* Dynamic Topbar Controls */
 
     .topbar-right {
       display: flex;
@@ -2223,9 +2209,6 @@
       tg.ready();
       tg.expand();
       try {
-        if (typeof tg.disableVerticalSwipes === 'function') {
-          tg.disableVerticalSwipes();
-        }
         if (tg.enableClosingConfirmation) tg.enableClosingConfirmation();
         if (tg.setHeaderColor) tg.setHeaderColor('#060911');
         if (tg.setBackgroundColor) tg.setBackgroundColor('#060911');
