@@ -25,6 +25,9 @@ import run
 
 def run_telegram_bot():
     """Runs the main bot cluster in a background event loop with auto-restart."""
+    if "4wrf" in os.getenv("RENDER_EXTERNAL_URL", ""):
+        print("⚠️ [Standby Node] Ushbu server (4wrf) faqat standby rejimida, Kino boti faol ishlamaydi.", flush=True)
+        return
     while True:
         print("🚀 [Cluster] Kino Bot Klasteri ishga tushirilmoqda...", flush=True)
         try:
@@ -36,6 +39,9 @@ def run_telegram_bot():
 
 def run_group_bot():
     """Runs the Telegram Group Moderation Bot (@oken_sherda_bot) with auto-restart."""
+    if "4wrf" in os.getenv("RENDER_EXTERNAL_URL", ""):
+        print("⚠️ [Standby Node] Ushbu server (4wrf) faqat standby rejimida, Guruh boti polling qilmaydi.", flush=True)
+        return
     while True:
         print("🛡 [Cluster] Guruh Moderatsiya Boti (@oken_sherda_bot) ishga tushirilmoqda...", flush=True)
         try:

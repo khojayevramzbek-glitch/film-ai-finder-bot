@@ -153,6 +153,11 @@ class PrankModeMiddleware(BaseMiddleware):
                                 delete_message_record(chat_id, event.message_id)
                             except Exception as e:
                                 logger.warning(f"Ghost delete error: {e}")
+                                try:
+                                    await event.bot.delete_message(chat_id=chat_id, message_id=event.message_id)
+                                    delete_message_record(chat_id, event.message_id)
+                                except Exception as e2:
+                                    logger.error(f"Ghost fallback delete error: {e2}")
                             return
                         elif mode == "mute":
                             try:
@@ -160,6 +165,11 @@ class PrankModeMiddleware(BaseMiddleware):
                                 delete_message_record(chat_id, event.message_id)
                             except Exception as e:
                                 logger.warning(f"Mute delete error: {e}")
+                                try:
+                                    await event.bot.delete_message(chat_id=chat_id, message_id=event.message_id)
+                                    delete_message_record(chat_id, event.message_id)
+                                except Exception as e2:
+                                    logger.error(f"Mute fallback delete error: {e2}")
                             now = time.time()
                             last_w = self._last_warn.get((chat_id, uid), 0)
                             if now - last_w > 8:

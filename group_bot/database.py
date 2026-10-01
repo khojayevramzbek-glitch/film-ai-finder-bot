@@ -1588,7 +1588,8 @@ def get_prank_user_action(chat_id: int, user_id: int, username: str | None = Non
     """
     Foydalanuvchi Hazil (Prank) rejimida ekanligini tekshirish.
     1. RAM keshdan 0.0001ms da tekshiradi.
-    2. Agar keshda topilmasa, SQLite bazasidan qidiradi va keshni yangilaydi.
+    2. Agar username orqali topilib, user_id 0 bo'lsa, xotira va bazada user_id ni muhrlaydi!
+    3. Agar keshda topilmasa, SQLite bazasidan qidiradi va keshni yangilaydi.
     """
     clean_username = (username or "").lstrip("@").strip().lower()
 
@@ -1599,8 +1600,18 @@ def get_prank_user_action(chat_id: int, user_id: int, username: str | None = Non
     # 2. Username bo'yicha RAM keshdan qidirish
     if clean_username and (chat_id, clean_username) in _prank_usernames_cache:
         info = _prank_usernames_cache[(chat_id, clean_username)]
-        if user_id and (chat_id, user_id) not in _prank_users_cache:
+        if user_id:
+            info["user_id"] = user_id
             _prank_users_cache[(chat_id, user_id)] = info
+            try:
+                with get_connection() as conn:
+                    conn.execute(
+                        "UPDATE prank_users SET user_id = ? WHERE chat_id = ? AND (LOWER(REPLACE(username, '@', '')) = ? OR username = ?) AND (user_id = 0 OR user_id IS NULL)",
+                        (user_id, chat_id, clean_username, str(user_id))
+                    )
+                    conn.commit()
+            except Exception:
+                pass
         return info
 
     # 3. Agar RAM keshda bo'lmasa -> Baza (SQLite) orqali tekshirish
@@ -1612,11 +1623,15 @@ def get_prank_user_action(chat_id: int, user_id: int, username: str | None = Non
                 FROM prank_users 
                 WHERE chat_id = ? AND (
                     (user_id > 0 AND user_id = ?) 
-                    OR (username != '' AND (username = ? OR username = ?))
+                    OR (username != '' AND (
+                        LOWER(REPLACE(username, '@', '')) = ? 
+                        OR LOWER(username) = ? 
+                        OR username = ?
+                    ))
                 )
                 LIMIT 1
                 """,
-                (chat_id, user_id or 0, clean_username, str(user_id) if user_id else "")
+                (chat_id, user_id or 0, clean_username, clean_username, str(user_id) if user_id else "")
             )
             row = cur.fetchone()
             if row:
@@ -1628,7 +1643,14 @@ def get_prank_user_action(chat_id: int, user_id: int, username: str | None = Non
                     "full_name": str(row["full_name"] or "")
                 }
                 if user_id:
+                    info["user_id"] = user_id
                     _prank_users_cache[(chat_id, user_id)] = info
+                    if int(row["user_id"] or 0) == 0:
+                        conn.execute(
+                            "UPDATE prank_users SET user_id = ? WHERE chat_id = ? AND username = ?",
+                            (user_id, chat_id, row["username"])
+                        )
+                        conn.commit()
                 if clean_username:
                     _prank_usernames_cache[(chat_id, clean_username)] = info
                 return info
@@ -1641,6 +1663,112 @@ def get_prank_user_action(chat_id: int, user_id: int, username: str | None = Non
 def is_prank_user(chat_id: int, user_id: int | None = None, username: str | None = None) -> bool:
     """Eski kodlar uchun moslik: foydalanuvchi hazildami tekshirish."""
     return get_prank_user_action(chat_id, user_id or 0, username) is not None
+
+
+def resolve_member_identity(chat_id: int, target: str) -> tuple[int, str, str]:
+    """
+    Foydalanuvchini 100% aniqlik bilan aniqlash:
+    1. Telegram Bot API: jonli getChatAdministrators tekshiruvi (Adminlar uchun 100% aniqlik)
+    2. Agar to'g'ridan-to'g'ri User ID raqam bo'lsa -> known_users / Telegram API getChatMember
+    3. Username yoki ism bo'lsa -> known_users va messages dan qidiradi
+    """
+    clean_target = str(target).strip()
+    for prefix in ("id:", "id ", "id-", "user_id:", "@"):
+        if clean_target.lower().startswith(prefix):
+            clean_target = clean_target[len(prefix):].strip()
+
+    clean_name = clean_target.lower()
+
+    # 1. Telegram Bot API: jonli getChatAdministrators tekshiruvi (Adminlar uchun 100% aniqlik)
+    try:
+        from group_bot.config import BOT_TOKEN
+        import urllib.request, json
+        api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getChatAdministrators?chat_id={chat_id}"
+        req = urllib.request.Request(api_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data.get("ok"):
+                for admin in data.get("result", []):
+                    u = admin.get("user", {})
+                    u_id = int(u.get("id", 0))
+                    u_uname = (u.get("username") or "").lower()
+                    u_fname = (u.get("first_name") or "") + (" " + u.get("last_name") if u.get("last_name") else "")
+                    u_fname_clean = u_fname.strip().lower()
+                    fname_parts = [p for p in u_fname_clean.split() if len(p) >= 2]
+
+                    if (
+                        (u_uname and clean_name == u_uname)
+                        or clean_name == str(u_id)
+                        or (u_fname_clean and clean_name == u_fname_clean)
+                        or any(clean_name == part for part in fname_parts)
+                    ):
+                        upsert_known_user(u_id, u_fname.strip() or f"Admin {u_id}", u_uname, chat_id)
+                        return u_id, u_uname, u_fname.strip() or f"Admin {u_id}"
+    except Exception as e:
+        logger.warning(f"resolve_member_identity Telegram getChatAdministrators error: {e}")
+
+    # 2. Agar to'g'ridan-to'g'ri User ID raqam bo'lsa
+    if clean_target.isdigit():
+        uid = int(clean_target)
+        known = get_user_by_id(uid)
+        if known and known.get("full_name"):
+            return uid, (known.get("username") or "").lower(), known.get("full_name")
+        # Jonli Telegram getChatMember orqali tekshirish
+        try:
+            from group_bot.config import BOT_TOKEN
+            import urllib.request, json
+            api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getChatMember?chat_id={chat_id}&user_id={uid}"
+            req = urllib.request.Request(api_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                if data.get("ok"):
+                    u = data.get("result", {}).get("user", {})
+                    u_uname = (u.get("username") or "").lower()
+                    u_fname = (u.get("first_name") or "") + (" " + u.get("last_name") if u.get("last_name") else "")
+                    upsert_known_user(uid, u_fname.strip() or f"User {uid}", u_uname, chat_id)
+                    return uid, u_uname, u_fname.strip() or f"User {uid}"
+        except Exception:
+            pass
+        return uid, "", f"ID {uid}"
+
+    # 3. known_users va messages dan tekshirish
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT user_id, username, full_name FROM known_users 
+            WHERE last_chat_id = ? AND (
+                LOWER(REPLACE(username, '@', '')) = ? 
+                OR LOWER(full_name) = ?
+            ) LIMIT 1
+            """,
+            (chat_id, clean_name, clean_name)
+        )
+        row = cur.fetchone()
+        if not row:
+            cur = conn.execute(
+                """
+                SELECT user_id, username, full_name FROM known_users 
+                WHERE LOWER(REPLACE(username, '@', '')) = ? OR LOWER(full_name) = ? LIMIT 1
+                """,
+                (clean_name, clean_name)
+            )
+            row = cur.fetchone()
+        if not row:
+            cur = conn.execute(
+                """
+                SELECT user_id, username, full_name FROM messages 
+                WHERE chat_id = ? AND (
+                    LOWER(REPLACE(username, '@', '')) = ? 
+                    OR LOWER(full_name) = ?
+                ) ORDER BY id DESC LIMIT 1
+                """,
+                (chat_id, clean_name, clean_name)
+            )
+            row = cur.fetchone()
+        if row:
+            return int(row["user_id"]), (row["username"] or "").lower(), row["full_name"] or clean_target
+
+    return 0, clean_name, f"@{clean_name}"
 
 
 def add_prank_user(chat_id: int, target: str, mode: str = "emoji") -> tuple[bool, str]:
@@ -1657,68 +1785,9 @@ def add_prank_user(chat_id: int, target: str, mode: str = "emoji") -> tuple[bool
     if clean_mode not in valid_modes:
         clean_mode = "emoji"
 
-    # Matnni tozalash: "ID: 12345", "id 12345", "@username"
-    clean_target = raw_target.lower()
-    for prefix in ("id:", "id ", "id-", "user_id:", "@"):
-        if clean_target.startswith(prefix):
-            clean_target = clean_target[len(prefix):].strip()
-
-    uid = 0
-    clean_username = ""
-    full_name = ""
-
-    if clean_target.isdigit():
-        uid = int(clean_target)
-        # Bazadan username va ismini qidirib topish
-        known = get_user_by_id(uid)
-        if known:
-            full_name = known.get("full_name") or f"ID {uid}"
-            clean_username = (known.get("username") or "").lower()
-        else:
-            full_name = f"ID {uid}"
-        display_label = f"{full_name} (ID: {uid})"
-        identifier = str(uid)
-    else:
-        clean_username = clean_target.lstrip("@").strip().lower()
-        if not clean_username:
-            return False, "Username yoki ID noto'g'ri kiritildi!"
-        # Username bo'yicha qidiramiz
-        user_info = get_user_by_username(chat_id, clean_username)
-        if not user_info:
-            # Agar username bo'yicha topilmasa, ism (full_name) bo'yicha qidiramiz
-            with get_connection() as conn:
-                cur = conn.execute(
-                    "SELECT user_id, full_name, username FROM known_users WHERE last_chat_id = ? AND LOWER(full_name) = ? LIMIT 1",
-                    (chat_id, clean_username)
-                )
-                row = cur.fetchone()
-                if not row:
-                    cur = conn.execute(
-                        "SELECT user_id, full_name, username FROM known_users WHERE LOWER(full_name) = ? LIMIT 1",
-                        (clean_username,)
-                    )
-                    row = cur.fetchone()
-                if not row:
-                    cur = conn.execute(
-                        "SELECT user_id, full_name, username FROM messages WHERE chat_id = ? AND LOWER(full_name) = ? ORDER BY id DESC LIMIT 1",
-                        (chat_id, clean_username)
-                    )
-                    row = cur.fetchone()
-                if row:
-                    user_info = dict(row)
-
-        if user_info:
-            uid = user_info.get("user_id", 0)
-            full_name = user_info.get("full_name") or f"@{clean_username}"
-            resolved_uname = (user_info.get("username") or "").lstrip("@").strip().lower()
-            if resolved_uname:
-                clean_username = resolved_uname
-            display_label = f"{full_name} (@{clean_username})" if clean_username else f"{full_name} (ID: {uid})"
-            identifier = clean_username or str(uid)
-        else:
-            full_name = f"@{clean_username}"
-            display_label = f"@{clean_username}"
-            identifier = clean_username
+    uid, clean_username, full_name = resolve_member_identity(chat_id, raw_target)
+    display_label = f"{full_name} (@{clean_username})" if clean_username else (f"{full_name} (ID: {uid})" if uid > 0 else f"@{clean_username}")
+    identifier = clean_username or str(uid)
 
     with get_connection() as conn:
         cur = conn.execute("SELECT count(*) as cnt FROM prank_users WHERE chat_id = ?", (chat_id,))
@@ -1726,15 +1795,30 @@ def add_prank_user(chat_id: int, target: str, mode: str = "emoji") -> tuple[bool
 
         # Allaqachon bormi tekshirish
         cur = conn.execute(
-            "SELECT 1 FROM prank_users WHERE chat_id = ? AND (username = ? OR (user_id > 0 AND user_id = ?))",
-            (chat_id, identifier, uid)
+            """
+            SELECT 1 FROM prank_users 
+            WHERE chat_id = ? AND (
+                (user_id > 0 AND user_id = ?) 
+                OR (username != '' AND (username = ? OR username = ? OR LOWER(username) = ?))
+            )
+            """,
+            (chat_id, uid, identifier, f"@{identifier}", identifier.lower())
         )
         existing = cur.fetchone()
         if existing:
             # Rejimini yangilash
             conn.execute(
-                "UPDATE prank_users SET mode = ?, user_id = CASE WHEN user_id = 0 THEN ? ELSE user_id END, full_name = ? WHERE chat_id = ? AND (username = ? OR (user_id > 0 AND user_id = ?))",
-                (clean_mode, uid, full_name, chat_id, identifier, uid)
+                """
+                UPDATE prank_users 
+                SET mode = ?, 
+                    user_id = CASE WHEN user_id = 0 THEN ? ELSE user_id END, 
+                    full_name = ? 
+                WHERE chat_id = ? AND (
+                    (user_id > 0 AND user_id = ?) 
+                    OR (username != '' AND (username = ? OR username = ? OR LOWER(username) = ?))
+                )
+                """,
+                (clean_mode, uid, full_name, chat_id, uid, identifier, f"@{identifier}", identifier.lower())
             )
             conn.commit()
             init_prank_users_cache()
@@ -1779,12 +1863,13 @@ def remove_prank_user(chat_id: int, target: str) -> bool:
             DELETE FROM prank_users
             WHERE chat_id = ? AND (
                 LOWER(username) = ? 
+                OR LOWER(REPLACE(username, '@', '')) = ?
                 OR username = ? 
                 OR (user_id > 0 AND user_id = ?)
                 OR (? > 0 AND username = ?)
             )
             """,
-            (chat_id, clean_uname, raw_target, uid, uid, str(uid))
+            (chat_id, clean_uname, clean_uname, raw_target, uid, uid, str(uid))
         )
         conn.commit()
 
