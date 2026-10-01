@@ -212,7 +212,6 @@ async def main():
     web_runner = None
     if os.getenv("RUN_WEB_SERVER", "true").lower() == "true":
         try:
-            import os
             from aiohttp import web
             from group_bot.webapp_server import attach_aiohttp_routes
             app = web.Application()
