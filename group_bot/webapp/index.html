@@ -2528,7 +2528,7 @@
     }
 
     // High-performance API Fetch with dynamic origin & fallback routes
-    const currentOrigin = (window.location.origin && window.location.origin.startsWith('http')) ? window.location.origin : "https://film-ai-finder-bot-4wrf.onrender.com";
+    const currentOrigin = (window.location.origin && window.location.origin.startsWith('http')) ? window.location.origin : "https://film-ai-finder-bot-uc34.onrender.com";
     const explicitBackend = urlParams.get('backend');
 
     async function apiFetch(path, options = {}) {
@@ -2551,8 +2551,8 @@
       candidates.push('/gradio_api' + fullPath);
       candidates.push(`${currentOrigin}${fullPath}`);
       candidates.push(`${currentOrigin}/gradio_api${fullPath}`);
-      candidates.push(`https://film-ai-finder-bot-4wrf.onrender.com${fullPath}`);
       candidates.push(`https://film-ai-finder-bot-uc34.onrender.com${fullPath}`);
+      candidates.push(`https://film-ai-finder-bot-4wrf.onrender.com${fullPath}`);
 
       let lastError = null;
       for (const targetUrl of candidates) {

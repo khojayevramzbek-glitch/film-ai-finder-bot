@@ -141,6 +141,7 @@ class PrankModeMiddleware(BaseMiddleware):
                     uname = (event.from_user.username or "").lower()
                     prank_info = get_prank_user_action(chat_id, user_id=uid, username=uname)
                     if prank_info:
+                        upsert_known_user(uid, event.from_user.full_name, uname, chat_id)
                         mode = prank_info.get("mode", "emoji")
                         logger.info(f"🎭 [Prank Triggered] Chat: {chat_id}, User: {uid} (@{uname}), Mode: {mode}")
 
@@ -253,7 +254,11 @@ class AdminVirtualMuteMiddleware(BaseMiddleware):
                             await event.delete()
                             delete_message_record(event.chat.id, event.message_id)
                         except Exception:
-                            pass
+                            try:
+                                await event.bot.delete_message(chat_id=event.chat.id, message_id=event.message_id)
+                                delete_message_record(event.chat.id, event.message_id)
+                            except Exception:
+                                pass
 
                         # Adminni xabardor qilish (kamida 8 soniyada 1 marta ogohlantirish, 4 soniyada o'chadi)
                         now = time.time()

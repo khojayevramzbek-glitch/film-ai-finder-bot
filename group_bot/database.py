@@ -142,6 +142,10 @@ def init_db():
         except Exception:
             pass
         conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_prank_users_chat_uid
+            ON prank_users(chat_id, user_id);
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS admin_virtual_mutes (
                 chat_id INTEGER NOT NULL,
                 user_id INTEGER NOT NULL,

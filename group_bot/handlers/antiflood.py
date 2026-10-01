@@ -12,9 +12,9 @@ from aiogram.types import Message, TelegramObject, ChatPermissions
 from aiogram.exceptions import TelegramBadRequest
 
 try:
-    from group_bot.database import delete_flood_messages, is_bot_enabled, get_chat_full_settings, format_duration, log_user_punishment
+    from group_bot.database import delete_flood_messages, is_bot_enabled, get_chat_full_settings, format_duration, log_user_punishment, set_admin_virtual_mute, is_admin_virtually_muted
 except ImportError:
-    from database import delete_flood_messages, is_bot_enabled, get_chat_full_settings, format_duration, log_user_punishment
+    from database import delete_flood_messages, is_bot_enabled, get_chat_full_settings, format_duration, log_user_punishment, set_admin_virtual_mute, is_admin_virtually_muted
 
 # Sozlamalar:
 # 1. Stiker, GIF va Premium emoji uchun:
@@ -343,6 +343,10 @@ class AntiFloodMiddleware(BaseMiddleware):
             if is_admin_user:
                 # Adminga 1 daqiqalik virtual mute
                 _admin_virtual_mutes[key] = now + 60.0
+                try:
+                    set_admin_virtual_mute(event.chat.id, user.id, 60)
+                except Exception:
+                    pass
                 admin_name = f"@{user.username}" if user.username else escape(user.full_name)
                 warn_text = (
                     f"⚠️ <b>Hurmatli admin {admin_name}</b>, chatni ma'nosiz uzun harflar bilan to'ldirib flood qilganingiz uchun sizga <b>1 daqiqalik virtual mute</b> berildi!\n"
