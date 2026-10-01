@@ -1904,7 +1904,7 @@
             <div class="cmd-code">/game yoki /oyin</div>
             <div class="cmd-desc">1 dan 100 gacha son o'ylash dueli (Floating doska, radar ko'rsatkichlari)</div>
           </div>
-          <button class="btn-copy" type="button">Nusxa</button>
+          <button class="btn-copy" type="button" onclick="event.stopPropagation(); copyCommand('/game')">Nusxa</button>
         </div>
 
         <div class="cmd-card" onclick="copyCommand('/stata')">
@@ -1912,7 +1912,7 @@
             <div class="cmd-code">/stata</div>
             <div class="cmd-desc">Guruhdagi 24 soatlik eng faol 10 ta a'zoning jonli reytingi</div>
           </div>
-          <button class="btn-copy" type="button">Nusxa</button>
+          <button class="btn-copy" type="button" onclick="event.stopPropagation(); copyCommand('/stata')">Nusxa</button>
         </div>
 
         <div class="cmd-card" onclick="copyCommand('/rules')">
@@ -1920,7 +1920,7 @@
             <div class="cmd-code">/rules yoki /qoidalar</div>
             <div class="cmd-desc">Guruh qoidalarini chiroyli formatda a'zolarga chiqarish</div>
           </div>
-          <button class="btn-copy" type="button">Nusxa</button>
+          <button class="btn-copy" type="button" onclick="event.stopPropagation(); copyCommand('/rules')">Nusxa</button>
         </div>
 
         <div class="cmd-card" onclick="copyCommand('/warn')">
@@ -1928,7 +1928,7 @@
             <div class="cmd-code">/warn (reply qilib)</div>
             <div class="cmd-desc">Qoida buzgan a'zoga admin tomonidan ogohlantirish berish</div>
           </div>
-          <button class="btn-copy" type="button">Nusxa</button>
+          <button class="btn-copy" type="button" onclick="event.stopPropagation(); copyCommand('/warn')">Nusxa</button>
         </div>
 
         <div class="cmd-card" onclick="copyCommand('/mute 15m')">
@@ -1936,7 +1936,7 @@
             <div class="cmd-code">/mute &lt;vaqt&gt; (reply)</div>
             <div class="cmd-desc">A'zoga vaqtinchalik yozishni taqiqlash (masalan: 10m, 1h, 1d)</div>
           </div>
-          <button class="btn-copy" type="button">Nusxa</button>
+          <button class="btn-copy" type="button" onclick="event.stopPropagation(); copyCommand('/mute 15m')">Nusxa</button>
         </div>
 
         <div class="cmd-card" onclick="copyCommand('/unmute')">
@@ -1944,7 +1944,7 @@
             <div class="cmd-code">/unmute (reply)</div>
             <div class="cmd-desc">A'zodan barcha taqiqlarni darhol yechish</div>
           </div>
-          <button class="btn-copy" type="button">Nusxa</button>
+          <button class="btn-copy" type="button" onclick="event.stopPropagation(); copyCommand('/unmute')">Nusxa</button>
         </div>
 
         <div class="cmd-card" onclick="copyCommand('/ban')">
@@ -1952,7 +1952,7 @@
             <div class="cmd-code">/ban (reply)</div>
             <div class="cmd-desc">A'zoni guruhdan butunlay haydash</div>
           </div>
-          <button class="btn-copy" type="button">Nusxa</button>
+          <button class="btn-copy" type="button" onclick="event.stopPropagation(); copyCommand('/ban')">Nusxa</button>
         </div>
       </div>
     </div>
@@ -2380,6 +2380,8 @@
         const initial = (g.title || 'G').charAt(0).toUpperCase();
         const card = document.createElement('div');
         card.className = `group-item-card ${isSelected ? 'selected' : ''}`;
+        card.style.cursor = 'pointer';
+        card.onclick = () => selectAndManageGroup(g.chat_id);
         card.innerHTML = `
           <div>
             <div class="group-card-header">
@@ -2392,13 +2394,13 @@
 
             <div class="group-card-badges" style="margin-top: 10px;">
               <span class="group-badge ${g.is_bot_enabled ? 'active' : 'inactive'}">
-                ${g.is_bot_enabled ? '🟢 Bot Faol' : '🔴 Bot O'chirilgan'}
+                ${g.is_bot_enabled ? '🟢 Bot Faol' : '🔴 Bot O\'chirilgan'}
               </span>
               <span class="group-badge ${g.is_censor_enabled ? 'active' : ''}">
-                ${g.is_censor_enabled ? '🤬 So'kinish: Faol' : '🤬 So'kinish: O'chiq'}
+                ${g.is_censor_enabled ? '🤬 So\'kinish: Faol' : '🤬 So\'kinish: O\'chiq'}
               </span>
               <span class="group-badge ${g.is_game_enabled !== false ? 'active' : 'inactive'}">
-                ${g.is_game_enabled !== false ? '🎮 O'yin: Faol' : '🛑 O'yin: O'chiq'}
+                ${g.is_game_enabled !== false ? '🎮 O\'yin: Faol' : '🛑 O\'yin: O\'chiq'}
               </span>
               <span class="group-badge">
                 💬 ${g.msg_count_24h || 0} xabar / 24h
@@ -2406,7 +2408,7 @@
             </div>
           </div>
 
-          <button class="btn-select-group" onclick="selectAndManageGroup('${g.chat_id}')">
+          <button class="btn-select-group" onclick="event.stopPropagation(); selectAndManageGroup('${g.chat_id}')">
             <span>⚙️ Guruhni Sozlash (Mute, Ban, Qoidalar) &rarr;</span>
           </button>
         `;

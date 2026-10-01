@@ -218,10 +218,11 @@ async def cmd_start(message: types.Message, bot: Bot):
             return
 
         text = get_welcome_text(message.from_user.full_name)
+        caller_id = message.from_user.id if message.from_user else None
         await message.answer(
             text,
             parse_mode="HTML",
-            reply_markup=get_main_menu_keyboard(bot_username)
+            reply_markup=get_main_menu_keyboard(bot_username, user_id=caller_id)
         )
     else:
         try:

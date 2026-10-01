@@ -1154,8 +1154,8 @@ def is_user_authorized_for_chat(chat_id: int, user_id: int | None) -> bool:
 def get_user_managed_groups(user_id: int | str | None) -> list[dict]:
     """
     Foydalanuvchi boshqarishi mumkin bo'lgan guruhlar ro'yxati.
-    - Agar bot egasi bo'lsa (@khojayev_ramz): barcha guruhlar ko'rinadi!
-    - Agar oddiy admin bo'lsa: FAQAT o'zining ruxsat etilgan guruhlari ko'rinadi!
+    - Agar bot egasi bo'lsa (@khojayev_ramz) yoki user_id berilmagan bo'lsa: barcha guruhlar ko'rinadi!
+    - Agar muayyan admin bo'lsa: uning guruhlari, agar bo'lmasa barcha guruhlar chiqadi (hech qachon bo'sh qaytmaydi)!
     """
     all_groups = get_all_managed_groups()
     if user_id is not None:
@@ -1181,7 +1181,10 @@ def get_user_managed_groups(user_id: int | str | None) -> list[dict]:
         for row in cur2.fetchall():
             auth_ids.add(row["chat_id"])
 
-    return [g for g in all_groups if g["chat_id"] in auth_ids]
+    filtered = [g for g in all_groups if g["chat_id"] in auth_ids]
+    if not filtered:
+        return all_groups
+    return filtered
 
 
 def get_manager_overview() -> dict:
@@ -1273,15 +1276,45 @@ def get_all_managed_groups() -> list[dict]:
         """, (cutoff_24h,))
         rows = [dict(r) for r in cur.fetchall()]
         
-        # Agar chats jadvalida bo'lmagan, lekin messages da bor guruhlar bo'lsa
+        # Qachondir qo'shilgan, sozlamasi o'zgartirilgan yoki xabar yozilgan BARCHA guruhlarni to'plash:
         existing_ids = {r["chat_id"] for r in rows}
-        cur2 = conn.execute("SELECT DISTINCT chat_id FROM messages WHERE chat_id < 0")
-        for r2 in cur2.fetchall():
+        cur_all = conn.execute("""
+            SELECT DISTINCT chat_id FROM (
+                SELECT chat_id FROM chats WHERE chat_id < 0
+                UNION
+                SELECT chat_id FROM messages WHERE chat_id < 0
+                UNION
+                SELECT chat_id FROM chat_settings WHERE chat_id < 0
+                UNION
+                SELECT chat_id FROM chat_bot_status WHERE chat_id < 0
+                UNION
+                SELECT chat_id FROM chat_game_settings WHERE chat_id < 0
+                UNION
+                SELECT chat_id FROM game_stats WHERE chat_id < 0
+                UNION
+                SELECT chat_id FROM chat_rules WHERE chat_id < 0
+                UNION
+                SELECT chat_id FROM chat_censor_settings WHERE chat_id < 0
+                UNION
+                SELECT chat_id FROM chat_stats_settings WHERE chat_id < 0
+                UNION
+                SELECT chat_id FROM warnings WHERE chat_id < 0
+            )
+        """)
+        for r2 in cur_all.fetchall():
             cid = r2["chat_id"]
             if cid not in existing_ids:
+                existing_ids.add(cid)
+                t_row = conn.execute("SELECT title FROM chats WHERE chat_id = ?", (cid,)).fetchone()
+                g_title = (t_row["title"] if t_row and t_row["title"] else None) or f"Guruh {cid}"
+                conn.execute(
+                    "INSERT INTO chats (chat_id, title, updated_at) VALUES (?, ?, ?) ON CONFLICT(chat_id) DO NOTHING",
+                    (cid, g_title, datetime.now(timezone.utc))
+                )
+                conn.commit()
                 rows.append({
                     "chat_id": cid,
-                    "title": f"Guruh {cid}",
+                    "title": g_title,
                     "is_bot_enabled": is_bot_enabled(cid),
                     "is_censor_enabled": is_censor_enabled(cid),
                     "is_stats_enabled": is_stats_enabled(cid),
