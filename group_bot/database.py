@@ -1,7 +1,10 @@
+import logging
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = Path(__file__).resolve().parent / "bot_data.db"
 

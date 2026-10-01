@@ -3,6 +3,7 @@ import sys
 import time
 import threading
 import asyncio
+import traceback
 import psutil
 from fastapi import Request
 from fastapi.responses import HTMLResponse
@@ -25,23 +26,18 @@ import run
 
 def run_telegram_bot():
     """Runs the main bot cluster in a background event loop with auto-restart."""
-    if "4wrf" in os.getenv("RENDER_EXTERNAL_URL", ""):
-        print("⚠️ [Standby Node] Ushbu server (4wrf) faqat standby rejimida, Kino boti faol ishlamaydi.", flush=True)
-        return
     while True:
         print("🚀 [Cluster] Kino Bot Klasteri ishga tushirilmoqda...", flush=True)
         try:
             asyncio.run(run.main())
         except Exception as e:
             print(f"❌ [Film Bot Error] {e}. 3 soniyadan so'ng qayta ishga tushadi...", flush=True)
+            traceback.print_exc()
         time.sleep(3)
 
 
 def run_group_bot():
     """Runs the Telegram Group Moderation Bot (@oken_sherda_bot) with auto-restart."""
-    if "4wrf" in os.getenv("RENDER_EXTERNAL_URL", ""):
-        print("⚠️ [Standby Node] Ushbu server (4wrf) faqat standby rejimida, Guruh boti polling qilmaydi.", flush=True)
-        return
     while True:
         print("🛡 [Cluster] Guruh Moderatsiya Boti (@oken_sherda_bot) ishga tushirilmoqda...", flush=True)
         try:
@@ -49,6 +45,7 @@ def run_group_bot():
             asyncio.run(group_bot_module.main())
         except Exception as e:
             print(f"❌ [Group Bot Error] {e}. 3 soniyadan so'ng qayta ishga tushadi...", flush=True)
+            traceback.print_exc()
         time.sleep(3)
 
 

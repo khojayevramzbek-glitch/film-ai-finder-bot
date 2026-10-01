@@ -2546,19 +2546,28 @@
         candidates.push(`${cleanBackend}/gradio_api${fullPath}`);
       }
 
-      // 1. Same-Origin relative call (fastest & bypasses CORS / Same-Origin restrictions)
-      candidates.push(fullPath);
-      candidates.push('/gradio_api' + fullPath);
-      candidates.push(`${currentOrigin}${fullPath}`);
-      candidates.push(`${currentOrigin}/gradio_api${fullPath}`);
+      const isRender = window.location.origin && window.location.origin.includes('onrender.com');
+
+      if (isRender) {
+        candidates.push(fullPath);
+        candidates.push('/gradio_api' + fullPath);
+        candidates.push(`${currentOrigin}${fullPath}`);
+      }
+
+      // Always prioritize active Render backend
       candidates.push(`https://film-ai-finder-bot-uc34.onrender.com${fullPath}`);
-      candidates.push(`https://film-ai-finder-bot-4wrf.onrender.com${fullPath}`);
+      candidates.push(`https://film-ai-finder-bot-uc34.onrender.com/gradio_api${fullPath}`);
+
+      if (!isRender) {
+        candidates.push(fullPath);
+        candidates.push(`${currentOrigin}${fullPath}`);
+      }
 
       let lastError = null;
       for (const targetUrl of candidates) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4500);
+          const timeoutId = setTimeout(() => controller.abort(), 9000);
           const res = await fetch(targetUrl, { ...options, headers, signal: controller.signal });
           clearTimeout(timeoutId);
           if (res.status < 500) return res;

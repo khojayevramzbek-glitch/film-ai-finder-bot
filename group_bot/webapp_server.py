@@ -71,11 +71,14 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
 
         # Immediate Health Check for Render, Railway, Hugging Face, Docker
         if norm_path in ("/health", "/api/health", "/ping") and request.method == "GET":
+            import threading, os
             return JSONResponse({
                 "status": "online",
                 "ok": True,
                 "service": "Blizkiy Moderatsiya & FilmFinder Cluster",
                 "version": "2026.10-pro",
+                "render_url": os.getenv("RENDER_EXTERNAL_URL", ""),
+                "threads": [t.name for t in threading.enumerate()],
                 "top_game_players": group_db.get_top_game_players(-1003834509976)
             }, headers=RESPONSE_HEADERS)
 
