@@ -1586,15 +1586,11 @@ def init_prank_users_cache():
 
 def get_prank_user_action(chat_id: int, user_id: int, username: str | None = None) -> dict | None:
     """
-    Foydalanuvchi Hazil (Prank) rejimida ekanligini RAM keshdan 0.0001ms da tekshirish.
-    Topilsa uning rejim ma'lumotlarini qaytaradi: {"mode": "emoji"|"ghost"|"troll"|"chaos", ...}
-    Topilmasa: None
+    Foydalanuvchi Hazil (Prank) rejimida ekanligini tekshirish.
+    1. RAM keshdan 0.0001ms da tekshiradi.
+    2. Agar keshda topilmasa, SQLite bazasidan qidiradi va keshni yangilaydi.
     """
-    if user_id in {8594505572, 7690283463}:
-        return None
     clean_username = (username or "").lstrip("@").strip().lower()
-    if clean_username in {"khojayev_ramz", "wdablyu"}:
-        return None
 
     # 1. User ID bo'yicha RAM keshdan qidirish (Eng aniq va tezkor)
     if user_id and (chat_id, user_id) in _prank_users_cache:
@@ -1603,10 +1599,41 @@ def get_prank_user_action(chat_id: int, user_id: int, username: str | None = Non
     # 2. Username bo'yicha RAM keshdan qidirish
     if clean_username and (chat_id, clean_username) in _prank_usernames_cache:
         info = _prank_usernames_cache[(chat_id, clean_username)]
-        # Agar user_id keshda hali bog'lanmagan bo'lsa, uni bog'lab qo'yish
         if user_id and (chat_id, user_id) not in _prank_users_cache:
             _prank_users_cache[(chat_id, user_id)] = info
         return info
+
+    # 3. Agar RAM keshda bo'lmasa -> Baza (SQLite) orqali tekshirish
+    try:
+        with get_connection() as conn:
+            cur = conn.execute(
+                """
+                SELECT chat_id, user_id, username, mode, full_name 
+                FROM prank_users 
+                WHERE chat_id = ? AND (
+                    (user_id > 0 AND user_id = ?) 
+                    OR (username != '' AND (username = ? OR username = ?))
+                )
+                LIMIT 1
+                """,
+                (chat_id, user_id or 0, clean_username, str(user_id) if user_id else "")
+            )
+            row = cur.fetchone()
+            if row:
+                info = {
+                    "chat_id": int(row["chat_id"]),
+                    "user_id": int(row["user_id"] or 0),
+                    "username": str(row["username"] or ""),
+                    "mode": str(row["mode"] or "emoji").lower(),
+                    "full_name": str(row["full_name"] or "")
+                }
+                if user_id:
+                    _prank_users_cache[(chat_id, user_id)] = info
+                if clean_username:
+                    _prank_usernames_cache[(chat_id, clean_username)] = info
+                return info
+    except Exception as e:
+        logger.error(f"get_prank_user_action db fallback error: {e}")
 
     return None
 
@@ -1619,7 +1646,7 @@ def is_prank_user(chat_id: int, user_id: int | None = None, username: str | None
 def add_prank_user(chat_id: int, target: str, mode: str = "emoji") -> tuple[bool, str]:
     """
     Hazil rejimiga foydalanuvchi qo'shish (ko'pi bilan 5 ta).
-    mode: 'emoji' (Emoji Bomb), 'ghost' (Arvoh), 'troll' (Masxarachi), 'chaos' (Aralash)
+    mode: 'emoji' (Emoji Bomb), 'ghost' (Arvoh), 'mute' (Super Mute), 'troll' (Masxarachi), 'chaos' (Aralash)
     """
     raw_target = str(target).strip()
     if not raw_target:
@@ -1642,8 +1669,6 @@ def add_prank_user(chat_id: int, target: str, mode: str = "emoji") -> tuple[bool
 
     if clean_target.isdigit():
         uid = int(clean_target)
-        if uid in {8594505572, 7690283463}:
-            return False, "Bot egasini Hazil rejimiga qo'shib bo'lmaydi!"
         # Bazadan username va ismini qidirib topish
         known = get_user_by_id(uid)
         if known:
@@ -1657,8 +1682,6 @@ def add_prank_user(chat_id: int, target: str, mode: str = "emoji") -> tuple[bool
         clean_username = clean_target.lstrip("@").strip().lower()
         if not clean_username:
             return False, "Username yoki ID noto'g'ri kiritildi!"
-        if clean_username in {"khojayev_ramz", "wdablyu"}:
-            return False, "Bot egasini Hazil rejimiga qo'shib bo'lmaydi!"
         # Username bo'yicha user_id topishga harakat qilamiz
         user_info = get_user_by_username(chat_id, clean_username)
         if user_info:

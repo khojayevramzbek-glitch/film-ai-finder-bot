@@ -2003,7 +2003,7 @@
         <div class="custom-row" style="margin-top: 14px; gap: 8px; flex-wrap: wrap;">
           <input type="text" id="inputNewPrankUser" class="text-input" style="flex: 2; min-width: 180px;" placeholder="Username yoki Telegram ID (masalan: @user yoki 7054013538)...">
           <select id="selectPrankMode" class="text-input" style="flex: 1; min-width: 160px; font-weight: 700; background: var(--bg-card); color: var(--text-main);">
-            <option value="emoji">💩 Emoji Bomb (🤡,💩,🗿,🍌,🥱)</option>
+            <option value="emoji">💩 Emoji Bomb (💩,🗿,🥱,🤣,🌚)</option>
             <option value="ghost">👻 Ghost (Xabarni o'chirish)</option>
             <option value="mute">🔇 Super Mute (Adminni ham o'chirish)</option>
             <option value="troll">🤡 Troll (Masxara qilib reply)</option>
@@ -2561,7 +2561,7 @@
           const timeoutId = setTimeout(() => controller.abort(), 4500);
           const res = await fetch(targetUrl, { ...options, headers, signal: controller.signal });
           clearTimeout(timeoutId);
-          if (res.ok) return res;
+          if (res.status < 500) return res;
         } catch (e) {
           lastError = e;
         }

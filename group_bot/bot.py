@@ -139,12 +139,11 @@ class PrankModeMiddleware(BaseMiddleware):
                 if event.from_user:
                     uid = event.from_user.id
                     uname = (event.from_user.username or "").lower()
-                    if uid in {8594505572, 7690283463} or uname in {"khojayev_ramz", "wdablyu"}:
-                        return await handler(event, data)
-
                     prank_info = get_prank_user_action(chat_id, user_id=uid, username=uname)
                     if prank_info:
                         mode = prank_info.get("mode", "emoji")
+                        logger.info(f"🎭 [Prank Triggered] Chat: {chat_id}, User: {uid} (@{uname}), Mode: {mode}")
+
                         if mode == "chaos":
                             mode = random.choice(["emoji", "ghost", "troll"])
 
@@ -152,15 +151,15 @@ class PrankModeMiddleware(BaseMiddleware):
                             try:
                                 await event.delete()
                                 delete_message_record(chat_id, event.message_id)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning(f"Ghost delete error: {e}")
                             return
                         elif mode == "mute":
                             try:
                                 await event.delete()
                                 delete_message_record(chat_id, event.message_id)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning(f"Mute delete error: {e}")
                             now = time.time()
                             last_w = self._last_warn.get((chat_id, uid), 0)
                             if now - last_w > 8:
@@ -176,11 +175,17 @@ class PrankModeMiddleware(BaseMiddleware):
                                     pass
                             return
                         elif mode == "emoji":
-                            chosen_emoji = random.choice(["🤡", "💩", "🗿", "🍌", "🥱"])
+                            # Telegram guruhda 100% ruxsat berilgan emojilar ro'yxati
+                            group_emojis = ["💩", "🗿", "🥱", "🤣", "🌚", "🤨", "🤓", "🔥", "💯"]
+                            chosen_emoji = random.choice(group_emojis)
                             try:
                                 await event.react([ReactionTypeEmoji(emoji=chosen_emoji)])
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning(f"Reaction error with {chosen_emoji}: {e}, falling back to 💩")
+                                try:
+                                    await event.react([ReactionTypeEmoji(emoji="💩")])
+                                except Exception:
+                                    pass
                             return await handler(event, data)
                         elif mode == "troll":
                             troll_replies = [
@@ -199,8 +204,8 @@ class PrankModeMiddleware(BaseMiddleware):
                                 reply_text = random.choice(troll_replies)
                             try:
                                 await event.reply(reply_text)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning(f"Troll reply error: {e}")
                             return await handler(event, data)
         return await handler(event, data)
 
