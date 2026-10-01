@@ -196,9 +196,10 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
                         elif request.method == "POST":
                             data = await request.json()
                             username = str(data.get("username", "")).strip()
-                            ok, msg = group_db.add_prank_user(chat_id, username)
+                            mode = str(data.get("mode", "emoji")).strip()
+                            ok, msg = group_db.add_prank_user(chat_id, username, mode=mode)
                             users = group_db.get_prank_users(chat_id)
-                            return JSONResponse({"ok": ok, "message": msg, "prank_users": users}, status_code=200 if ok else 400, headers=RESPONSE_HEADERS)
+                            return JSONResponse({"ok": ok, "message": msg, "prank_users": users}, status_code=200, headers=RESPONSE_HEADERS)
                         elif request.method == "DELETE":
                             data = await request.json()
                             username = str(data.get("username", "")).strip()

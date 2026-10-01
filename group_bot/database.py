@@ -1682,15 +1682,43 @@ def add_prank_user(chat_id: int, target: str, mode: str = "emoji") -> tuple[bool
         clean_username = clean_target.lstrip("@").strip().lower()
         if not clean_username:
             return False, "Username yoki ID noto'g'ri kiritildi!"
-        # Username bo'yicha user_id topishga harakat qilamiz
+        # Username bo'yicha qidiramiz
         user_info = get_user_by_username(chat_id, clean_username)
+        if not user_info:
+            # Agar username bo'yicha topilmasa, ism (full_name) bo'yicha qidiramiz
+            with get_connection() as conn:
+                cur = conn.execute(
+                    "SELECT user_id, full_name, username FROM known_users WHERE last_chat_id = ? AND LOWER(full_name) = ? LIMIT 1",
+                    (chat_id, clean_username)
+                )
+                row = cur.fetchone()
+                if not row:
+                    cur = conn.execute(
+                        "SELECT user_id, full_name, username FROM known_users WHERE LOWER(full_name) = ? LIMIT 1",
+                        (clean_username,)
+                    )
+                    row = cur.fetchone()
+                if not row:
+                    cur = conn.execute(
+                        "SELECT user_id, full_name, username FROM messages WHERE chat_id = ? AND LOWER(full_name) = ? ORDER BY id DESC LIMIT 1",
+                        (chat_id, clean_username)
+                    )
+                    row = cur.fetchone()
+                if row:
+                    user_info = dict(row)
+
         if user_info:
             uid = user_info.get("user_id", 0)
             full_name = user_info.get("full_name") or f"@{clean_username}"
+            resolved_uname = (user_info.get("username") or "").lstrip("@").strip().lower()
+            if resolved_uname:
+                clean_username = resolved_uname
+            display_label = f"{full_name} (@{clean_username})" if clean_username else f"{full_name} (ID: {uid})"
+            identifier = clean_username or str(uid)
         else:
             full_name = f"@{clean_username}"
-        display_label = f"@{clean_username}"
-        identifier = clean_username
+            display_label = f"@{clean_username}"
+            identifier = clean_username
 
     with get_connection() as conn:
         cur = conn.execute("SELECT count(*) as cnt FROM prank_users WHERE chat_id = ?", (chat_id,))
