@@ -2,34 +2,54 @@
 <html lang="uz">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Blizkiy Bot — Guruh Boshqaruv Markazi</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Blizkiy Bot — Professional Guruh Boshqaruv Markazi</title>
   <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <!-- Google Fonts: Plus Jakarta Sans -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 
   <style>
     :root {
-      --bg-primary: #0b0f19;
-      --bg-card: rgba(22, 31, 51, 0.85);
-      --bg-card-hover: rgba(30, 42, 69, 0.95);
-      --accent-blue: #38bdf8;
+      --bg-base: #060911;
+      --bg-surface: #0c1222;
+      --bg-card: rgba(16, 24, 44, 0.72);
+      --bg-card-hover: rgba(24, 36, 66, 0.88);
+      --bg-input: rgba(8, 14, 28, 0.85);
+
+      --accent-cyan: #38bdf8;
+      --accent-cyan-glow: rgba(56, 189, 248, 0.35);
       --accent-indigo: #6366f1;
-      --accent-green: #10b981;
-      --accent-red: #f43f5e;
+      --accent-indigo-glow: rgba(99, 102, 241, 0.35);
+      --accent-emerald: #10b981;
+      --accent-emerald-glow: rgba(16, 185, 129, 0.35);
+      --accent-rose: #f43f5e;
+      --accent-rose-glow: rgba(244, 63, 94, 0.35);
       --accent-amber: #f59e0b;
-      --text-primary: #f8fafc;
-      --text-secondary: #94a3b8;
+      --accent-amber-glow: rgba(245, 158, 11, 0.35);
+
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
       --text-muted: #64748b;
-      --border-color: rgba(255, 255, 255, 0.08);
-      --border-focus: rgba(56, 189, 248, 0.5);
-      --radius-sm: 8px;
-      --radius-md: 14px;
-      --radius-lg: 20px;
-      --shadow-glow: 0 0 35px rgba(56, 189, 248, 0.18);
+
+      --border-glass: rgba(255, 255, 255, 0.08);
+      --border-glass-hover: rgba(255, 255, 255, 0.16);
+      --border-active: rgba(56, 189, 248, 0.45);
+
+      --radius-xs: 6px;
+      --radius-sm: 10px;
+      --radius-md: 16px;
+      --radius-lg: 22px;
+      --radius-pill: 9999px;
+
+      --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
+      --shadow-card: 0 12px 36px -8px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
+      --shadow-glow: 0 0 35px var(--accent-cyan-glow);
+
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     * {
@@ -37,128 +57,287 @@
       margin: 0;
       padding: 0;
       -webkit-tap-highlight-color: transparent;
+      user-select: none;
     }
 
-    /* Custom Desktop Scrollbar */
+    input, textarea, select {
+      user-select: auto;
+    }
+
+    /* Scrollbars */
     ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
     }
     ::-webkit-scrollbar-track {
-      background: rgba(11, 15, 25, 0.6);
+      background: transparent;
     }
     ::-webkit-scrollbar-thumb {
-      background: rgba(56, 189, 248, 0.2);
-      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.14);
+      border-radius: var(--radius-pill);
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: rgba(56, 189, 248, 0.5);
+      background: rgba(56, 189, 248, 0.4);
     }
 
     body {
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: radial-gradient(circle at top right, #172554, #0b0f19 70%);
-      color: var(--text-primary);
+      background-color: var(--bg-base);
+      background-image: 
+        radial-gradient(circle at 10% 0%, rgba(56, 189, 248, 0.14) 0%, transparent 45%),
+        radial-gradient(circle at 90% 15%, rgba(99, 102, 241, 0.14) 0%, transparent 45%),
+        radial-gradient(circle at 50% 85%, rgba(16, 185, 129, 0.08) 0%, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text-main);
       min-height: 100vh;
       overflow-x: hidden;
       line-height: 1.5;
+      font-size: 14px;
+    }
+
+    /* Ambient Lighting Mesh (Animated) */
+    .ambient-glow {
+      position: fixed;
+      width: 450px;
+      height: 450px;
+      border-radius: 50%;
+      filter: blur(120px);
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.45;
+      animation: floatOrb 18s ease-in-out infinite alternate;
+    }
+    .ambient-glow-1 {
+      top: -120px;
+      left: -120px;
+      background: radial-gradient(circle, #38bdf8, #2563eb);
+    }
+    .ambient-glow-2 {
+      bottom: 5%;
+      right: -120px;
+      background: radial-gradient(circle, #6366f1, #a855f7);
+      animation-duration: 22s;
+    }
+    @keyframes floatOrb {
+      0% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(60px, 40px) scale(1.15); }
+      100% { transform: translate(-30px, 70px) scale(0.95); }
     }
 
     /* Top App Bar */
     .topbar {
       position: sticky;
       top: 0;
-      z-index: 50;
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      background: rgba(11, 15, 25, 0.92);
-      border-bottom: 1px solid var(--border-color);
-      padding: 14px 20px;
+      z-index: 60;
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      background: rgba(6, 9, 17, 0.85);
+      border-bottom: 1px solid var(--border-glass);
+      padding: 12px 18px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      transition: all 0.25s ease;
     }
 
     .brand-box {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
     }
 
     .brand-logo {
-      width: 44px;
-      height: 44px;
-      border-radius: 14px;
-      background: linear-gradient(135deg, #38bdf8, #6366f1);
+      width: 42px;
+      height: 42px;
+      border-radius: 13px;
+      background: linear-gradient(135deg, #0284c7, #4f46e5);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
-      box-shadow: 0 4px 16px rgba(56, 189, 248, 0.35);
+      font-size: 22px;
+      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.35);
       flex-shrink: 0;
+      position: relative;
+    }
+    .brand-logo::after {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.4), transparent);
+      pointer-events: none;
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      padding: 1px;
     }
 
     .brand-info h1 {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 800;
       color: #fff;
       display: flex;
       align-items: center;
       gap: 6px;
+      letter-spacing: -0.3px;
     }
-
     .brand-info p {
-      font-size: 12px;
-      color: var(--text-secondary);
+      font-size: 11px;
+      color: var(--text-sub);
+      font-weight: 500;
     }
 
     .user-pill {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 9px;
       background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-color);
-      border-radius: 30px;
-      padding: 5px 14px 5px 5px;
-      font-size: 13px;
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-pill);
+      padding: 4px 12px 4px 4px;
+      font-size: 12px;
       font-weight: 700;
+      backdrop-filter: blur(10px);
+      transition: all 0.2s ease;
+    }
+    .user-pill:active {
+      transform: scale(0.97);
     }
 
     .user-avatar {
       width: 28px;
       height: 28px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #f59e0b, #f43f5e);
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
       color: #fff;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 12px;
-      font-weight: bold;
+      font-weight: 800;
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
     }
 
     /* Container */
     .container {
-      max-width: 920px;
+      max-width: 940px;
       margin: 0 auto;
-      padding: 20px;
+      padding: 16px;
+      position: relative;
+      z-index: 10;
     }
 
-    /* Desktop Navigation (Top Pills on PC) */
+    /* Active Group Banner (Interactive Switcher) */
+    .active-group-banner {
+      background: linear-gradient(135deg, rgba(30, 41, 69, 0.7), rgba(15, 23, 42, 0.85));
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      cursor: pointer;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.4);
+      transition: all 0.22s var(--ease-spring);
+    }
+    .active-group-banner:hover {
+      border-color: rgba(56, 189, 248, 0.45);
+      transform: translateY(-1px);
+      box-shadow: 0 12px 30px -6px rgba(56, 189, 248, 0.2);
+    }
+    .active-group-banner:active {
+      transform: scale(0.985);
+    }
+
+    .banner-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .banner-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+    }
+    .banner-text {
+      min-width: 0;
+    }
+    .banner-subtitle {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .banner-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .banner-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .btn-switch-group-pill {
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: var(--accent-cyan);
+      border-radius: var(--radius-pill);
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-switch-group-pill:hover {
+      background: var(--accent-cyan);
+      color: #000;
+    }
+
+    /* Hidden native select for form compatibility */
+    #groupSelect {
+      display: none;
+    }
+
+    /* Desktop Navigation (Top Pills) */
     .desktop-nav-wrap {
       display: none;
       position: sticky;
-      top: 73px;
-      z-index: 45;
-      background: rgba(11, 15, 25, 0.92);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border-bottom: 1px solid var(--border-color);
-      padding: 10px 20px;
+      top: 67px;
+      z-index: 55;
+      background: rgba(6, 9, 17, 0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-glass);
+      padding: 8px 18px;
     }
-
     .desktop-nav {
-      max-width: 920px;
+      max-width: 940px;
       margin: 0 auto;
       display: flex;
       align-items: center;
@@ -169,52 +348,49 @@
     .desktop-nav::-webkit-scrollbar {
       display: none;
     }
-
     .desktop-nav-item {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 7px;
       background: rgba(255, 255, 255, 0.04);
-      border: 1px solid var(--border-color);
-      color: var(--text-secondary);
-      border-radius: 30px;
-      padding: 9px 18px;
-      font-size: 13px;
+      border: 1px solid var(--border-glass);
+      color: var(--text-sub);
+      border-radius: var(--radius-pill);
+      padding: 8px 16px;
+      font-size: 12.5px;
       font-weight: 700;
       cursor: pointer;
       white-space: nowrap;
-      transition: all 0.2s ease;
+      transition: all 0.2s var(--ease-spring);
     }
-
     .desktop-nav-item:hover {
-      background: rgba(56, 189, 248, 0.12);
+      background: rgba(56, 189, 248, 0.1);
       color: #fff;
       border-color: rgba(56, 189, 248, 0.3);
     }
-
     .desktop-nav-item.active {
       background: linear-gradient(135deg, #0284c7, #2563eb);
       color: #fff;
-      border-color: var(--accent-blue);
-      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 4px 16px rgba(2, 132, 199, 0.4);
     }
 
-    /* Mobile Bottom Navigation */
+    /* Mobile Bottom Navigation (Ultra Glass) */
     .bottom-nav {
       display: flex;
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
-      z-index: 50;
-      background: rgba(11, 15, 25, 0.96);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border-top: 1px solid var(--border-color);
+      z-index: 70;
+      background: rgba(6, 9, 17, 0.92);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      border-top: 1px solid var(--border-glass);
       justify-content: space-around;
-      padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0px));
+      padding: 6px 4px calc(8px + env(safe-area-inset-bottom, 0px));
+      box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.5);
     }
-
     .nav-item {
       display: flex;
       flex-direction: column;
@@ -228,15 +404,34 @@
       cursor: pointer;
       padding: 6px 8px;
       border-radius: var(--radius-sm);
-      transition: color 0.2s;
+      transition: all 0.2s var(--ease-spring);
+      position: relative;
+      flex: 1;
+      max-width: 72px;
     }
-
+    .nav-item:active {
+      transform: scale(0.9);
+    }
     .nav-item.active {
-      color: var(--accent-blue);
+      color: var(--accent-cyan);
     }
-
     .nav-icon {
-      font-size: 19px;
+      font-size: 20px;
+      line-height: 1;
+      transition: transform 0.2s var(--ease-spring);
+    }
+    .nav-item.active .nav-icon {
+      transform: translateY(-2px) scale(1.12);
+    }
+    .nav-item.active::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      width: 14px;
+      height: 3px;
+      border-radius: var(--radius-pill);
+      background: var(--accent-cyan);
+      box-shadow: 0 0 8px var(--accent-cyan);
     }
 
     /* Responsive Breakpoints */
@@ -250,20 +445,6 @@
       .bottom-nav {
         display: none !important;
       }
-      .hero-card {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 24px;
-        padding: 28px !important;
-      }
-      .hero-content {
-        flex: 1;
-      }
-      .hero-btn-wrap {
-        width: 300px;
-        flex-shrink: 0;
-      }
       .grid-2-col {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -273,7 +454,6 @@
         grid-template-columns: repeat(4, 1fr) !important;
       }
     }
-
     @media (max-width: 767px) {
       body {
         padding-bottom: 95px;
@@ -284,649 +464,699 @@
       .grid-2-col {
         display: flex;
         flex-direction: column;
-        gap: 12px;
-      }
-      .number-input, .text-input, .field-select {
-        font-size: 16px !important;
+        gap: 14px;
       }
     }
 
-    /* Hero Card */
-    .hero-card {
-      background: linear-gradient(135deg, rgba(30, 58, 138, 0.75), rgba(15, 23, 42, 0.95));
-      border: 1px solid rgba(56, 189, 248, 0.35);
-      border-radius: var(--radius-lg);
-      padding: 22px;
-      position: relative;
-      overflow: hidden;
-      box-shadow: var(--shadow-glow);
-      margin-bottom: 22px;
+    /* Tab Panes (Hardware-accelerated slide-in) */
+    .tab-pane {
+      display: none;
+      opacity: 0;
+      transform: translateY(8px);
     }
-
-    .hero-card::before {
-      content: '';
-      position: absolute;
-      top: -50px;
-      right: -50px;
-      width: 180px;
-      height: 180px;
-      background: radial-gradient(circle, rgba(56, 189, 248, 0.4), transparent 70%);
-      pointer-events: none;
+    .tab-pane.active {
+      display: block;
+      animation: tabEnter 0.24s var(--ease-smooth) forwards;
     }
-
-    .hero-title {
-      font-size: 20px;
-      font-weight: 800;
-      color: #fff;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .hero-desc {
-      font-size: 13px;
-      color: #cbd5e1;
-      margin-bottom: 16px;
-      line-height: 1.6;
-    }
-
-    .btn-add-group {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      background: linear-gradient(135deg, #0284c7, #2563eb);
-      color: #ffffff;
-      border: none;
-      border-radius: var(--radius-md);
-      padding: 15px 22px;
-      font-size: 15px;
-      font-weight: 800;
-      cursor: pointer;
-      box-shadow: 0 6px 24px rgba(37, 99, 235, 0.45);
-      transition: all 0.2s ease;
-    }
-
-    .btn-add-group:hover {
-      filter: brightness(1.08);
-      transform: translateY(-1px);
-    }
-
-    .btn-add-group:active {
-      transform: scale(0.98);
-    }
-
-    /* Section Title */
-    .section-title {
-      font-size: 13px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.9px;
-      color: var(--text-secondary);
-      margin: 18px 0 10px 4px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    /* Group Selector */
-    .group-selector-wrap {
-      position: relative;
-      margin-bottom: 22px;
-    }
-
-    .group-select {
-      width: 100%;
-      background: var(--bg-card);
-      color: var(--text-primary);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      padding: 14px 18px;
-      font-size: 15px;
-      font-weight: 700;
-      appearance: none;
-      outline: none;
-      cursor: pointer;
-      transition: border-color 0.2s, background 0.2s;
-    }
-
-    .group-select:focus, .group-select:hover {
-      border-color: var(--accent-blue);
-      background: var(--bg-card-hover);
-    }
-
-    .group-selector-arrow {
-      position: absolute;
-      right: 18px;
-      top: 50%;
-      transform: translateY(-50%);
-      pointer-events: none;
-      color: var(--text-secondary);
-      font-size: 12px;
+    @keyframes tabEnter {
+      from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.995);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
     }
 
     /* Glass Cards */
     .glass-card {
       background: var(--bg-card);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border: 1px solid var(--border-color);
+      border: 1px solid var(--border-glass);
       border-radius: var(--radius-lg);
       padding: 20px;
+      backdrop-filter: blur(24px);
+      box-shadow: var(--shadow-card);
       margin-bottom: 16px;
-      transition: border-color 0.2s;
+      transition: all 0.24s ease;
+      position: relative;
+      overflow: hidden;
     }
-
     .glass-card:hover {
-      border-color: rgba(56, 189, 248, 0.25);
+      border-color: var(--border-glass-hover);
     }
 
     .card-header {
       margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border-color);
     }
-
     .card-header h2 {
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 800;
       color: #fff;
       display: flex;
       align-items: center;
       gap: 8px;
+      margin-bottom: 4px;
+      letter-spacing: -0.2px;
     }
-
     .card-header p {
-      font-size: 13px;
-      color: var(--text-secondary);
-      margin-top: 4px;
-      line-height: 1.5;
+      font-size: 12.5px;
+      color: var(--text-sub);
+      line-height: 1.45;
     }
 
-    /* Switch Rows */
-    .switch-row {
+    /* Hero Card */
+    .hero-card {
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.18), rgba(99, 102, 241, 0.12), rgba(15, 23, 42, 0.95));
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: var(--radius-lg);
+      padding: 22px;
+      margin-bottom: 18px;
+      box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.6), 0 0 35px rgba(56, 189, 248, 0.12);
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-card::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -20%;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(56, 189, 248, 0.25), transparent 70%);
+      pointer-events: none;
+    }
+
+    .status-orb {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      font-weight: 800;
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+    .status-orb.active {
+      background: rgba(16, 185, 129, 0.18);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .status-orb.inactive {
+      background: rgba(244, 63, 94, 0.18);
+      color: #fb7185;
+      border: 1px solid rgba(244, 63, 94, 0.4);
+    }
+    .status-orb-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+      animation: pulseDot 1.8s infinite;
+    }
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.85); }
+    }
+
+    /* Metric Badges Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .stat-badge {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      text-align: center;
+      transition: all 0.2s ease;
+    }
+    .stat-badge:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--border-glass-hover);
+    }
+    .stat-badge-num {
+      font-size: 22px;
+      font-weight: 800;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: -0.5px;
+    }
+    .stat-badge-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sub);
+      margin-top: 2px;
+    }
+
+    /* Setting Item with Switch Toggle */
+    .setting-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      padding: 12px 0;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
-
-    .switch-row:not(:last-child) {
-      border-bottom: 1px solid var(--border-color);
-      margin-bottom: 10px;
-      padding-bottom: 14px;
+    .setting-item:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
     }
-
-    .switch-info h3 {
-      font-size: 15px;
+    .setting-item:first-child {
+      padding-top: 0;
+    }
+    .setting-info {
+      flex: 1;
+    }
+    .setting-title {
+      font-size: 14px;
       font-weight: 700;
       color: #fff;
       display: flex;
       align-items: center;
       gap: 6px;
     }
-
-    .switch-info p {
+    .setting-desc {
       font-size: 12px;
-      color: var(--text-secondary);
-      margin-top: 4px;
-      line-height: 1.5;
+      color: var(--text-sub);
+      margin-top: 3px;
+      line-height: 1.4;
     }
 
-    /* Modern Toggle Switch */
-    .toggle {
+    /* Ultra Liquid Switch Toggle */
+    .switch {
       position: relative;
       display: inline-block;
-      width: 54px;
+      width: 52px;
       height: 30px;
       flex-shrink: 0;
     }
-
-    .toggle input {
+    .switch input {
       opacity: 0;
       width: 0;
       height: 0;
     }
-
     .slider {
       position: absolute;
       cursor: pointer;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background-color: #334155;
-      border-radius: 34px;
-      transition: 0.3s;
+      inset: 0;
+      background-color: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: all 0.28s var(--ease-spring);
+      border-radius: var(--radius-pill);
     }
-
     .slider:before {
       position: absolute;
       content: "";
       height: 22px;
       width: 22px;
-      left: 4px;
-      bottom: 4px;
-      background-color: white;
+      left: 3px;
+      bottom: 3px;
+      background-color: #fff;
       border-radius: 50%;
-      transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+      transition: all 0.28s var(--ease-spring);
     }
-
     input:checked + .slider {
-      background: linear-gradient(135deg, #10b981, #059669);
-    }
-
-    input:checked + .slider:before {
-      transform: translateX(24px);
-    }
-
-    /* Preset Buttons for Mute Times */
-    .preset-group {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin: 10px 0 14px;
-    }
-
-    .preset-btn {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-color);
-      color: #cbd5e1;
-      padding: 9px 16px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .preset-btn:hover {
-      background: rgba(56, 189, 248, 0.15);
-      color: #fff;
-    }
-
-    .preset-btn.active {
       background: linear-gradient(135deg, #0284c7, #2563eb);
-      color: #fff;
-      border-color: var(--accent-blue);
-      box-shadow: 0 3px 12px rgba(2, 132, 199, 0.4);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 16px rgba(2, 132, 199, 0.5);
+    }
+    input:checked + .slider:before {
+      transform: translateX(22px);
+      background-color: #ffffff;
+    }
+    .switch:active .slider:before {
+      width: 26px;
     }
 
-    /* Inputs and Selects */
-    .custom-row {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      margin-top: 6px;
-    }
-
-    .number-input, .text-input, .field-select {
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      padding: 12px 14px;
-      color: #fff;
-      font-size: 14px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .number-input:focus, .text-input:focus, .field-select:focus {
-      border-color: var(--accent-blue);
-    }
-
-    .field-select {
-      cursor: pointer;
-    }
-
-    .field-label {
-      font-size: 13px;
-      font-weight: 700;
-      color: #e2e8f0;
-      margin-bottom: 6px;
-      display: block;
-    }
-
-    /* Save Button */
-    .btn-save {
-      width: 100%;
-      background: linear-gradient(135deg, #10b981, #059669);
-      color: #ffffff;
-      border: none;
-      border-radius: var(--radius-md);
-      padding: 14px 20px;
-      font-size: 14px;
-      font-weight: 800;
-      cursor: pointer;
-      box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
-      margin-top: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      transition: all 0.2s;
-    }
-
-    .btn-save:hover {
-      filter: brightness(1.08);
-      transform: translateY(-1px);
-    }
-
-    .btn-save:active {
-      transform: scale(0.98);
-    }
-
-    /* Bad Words Tags */
-    .tags-container {
+    /* Preset Chips Buttons */
+    .preset-container {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       margin: 12px 0;
-      min-height: 44px;
+    }
+    .preset-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-glass);
+      color: var(--text-sub);
+      border-radius: var(--radius-pill);
+      padding: 7px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.18s var(--ease-spring);
+    }
+    .preset-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+    .preset-btn:active {
+      transform: scale(0.95);
+    }
+    .preset-btn.active {
+      background: linear-gradient(135deg, var(--accent-cyan), #2563eb);
+      color: #fff;
+      border-color: var(--accent-cyan);
+      box-shadow: 0 4px 14px rgba(56, 189, 248, 0.35);
     }
 
+    /* Form Fields */
+    .custom-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .field-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      display: block;
+    }
+    .text-input, .field-select, .custom-textarea {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-sm);
+      color: #fff;
+      padding: 11px 14px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+    .text-input:focus, .field-select:focus, .custom-textarea:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
+    }
+    .custom-textarea {
+      min-height: 110px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    /* Tag Chips for Badwords & Prank Users */
+    .tags-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-height: 44px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-sm);
+      align-items: center;
+    }
     .tag-chip {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      background: rgba(244, 63, 94, 0.15);
-      border: 1px solid rgba(244, 63, 94, 0.35);
-      color: #fda4af;
-      padding: 7px 14px;
-      border-radius: 20px;
-      font-size: 13px;
+      gap: 6px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: var(--accent-cyan);
+      padding: 5px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
       font-weight: 700;
+      animation: popIn 0.2s var(--ease-spring);
     }
-
+    @keyframes popIn {
+      from { transform: scale(0.7); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
     .tag-chip button {
       background: none;
       border: none;
-      color: #fda4af;
-      font-size: 16px;
+      color: inherit;
       cursor: pointer;
+      font-size: 14px;
       line-height: 1;
+      padding: 0 2px;
+      opacity: 0.7;
+      transition: opacity 0.15s;
+    }
+    .tag-chip button:hover {
+      opacity: 1;
     }
 
-    /* Leaderboard */
+    /* Buttons */
+    .btn-save {
+      width: 100%;
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 13px 20px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s var(--ease-spring);
+      margin-top: 14px;
+    }
+    .btn-save:hover {
+      box-shadow: 0 8px 26px rgba(2, 132, 199, 0.55);
+      transform: translateY(-1px);
+    }
+    .btn-save:active {
+      transform: scale(0.97);
+    }
+
+    .btn-copy {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border-glass);
+      color: #fff;
+      border-radius: var(--radius-sm);
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.18s var(--ease-spring);
+    }
+    .btn-copy:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+    .btn-copy:active {
+      transform: scale(0.95);
+    }
+
+    .btn-add-group {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 13px 20px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s var(--ease-spring);
+      width: 100%;
+    }
+    .btn-add-group:active {
+      transform: scale(0.97);
+    }
+
+    /* Leaderboard & Rank Rows */
     .leaderboard-list {
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
-
     .user-rank-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid var(--border-color);
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-glass);
       border-radius: var(--radius-md);
       padding: 12px 16px;
-      transition: background 0.2s;
+      transition: all 0.18s ease;
     }
-
     .user-rank-row:hover {
-      background: rgba(255, 255, 255, 0.05);
+      background: rgba(255, 255, 255, 0.06);
+      transform: translateX(3px);
     }
-
     .rank-info {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
+      min-width: 0;
     }
-
     .rank-medal {
       font-size: 20px;
-      width: 32px;
-      text-align: center;
       font-weight: 800;
-      color: var(--text-secondary);
+      width: 28px;
+      text-align: center;
+      flex-shrink: 0;
     }
-
     .rank-user-name {
       font-size: 14px;
-      font-weight: 700;
+      font-weight: 800;
       color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-
     .rank-username {
-      font-size: 12px;
-      color: var(--text-muted);
+      font-size: 11px;
+      color: var(--text-sub);
     }
-
     .rank-count {
       text-align: right;
+      flex-shrink: 0;
     }
-
     .rank-msgs {
       font-size: 16px;
       font-weight: 800;
-      color: var(--accent-blue);
+      color: var(--accent-cyan);
+      font-family: 'JetBrains Mono', monospace;
     }
-
     .rank-unit {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--text-muted);
-      text-transform: uppercase;
     }
 
-    /* Textareas */
-    .custom-textarea {
-      width: 100%;
-      min-height: 130px;
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      padding: 14px;
-      color: #fff;
-      font-size: 14px;
-      line-height: 1.6;
-      font-family: inherit;
-      resize: vertical;
-      outline: none;
-      margin-bottom: 8px;
+    /* Raqamni Top Game Leaderboard Card */
+    .game-champ-card {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(217, 119, 6, 0.05), rgba(15, 23, 42, 0.7));
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 10px 30px rgba(245, 158, 11, 0.15);
     }
 
-    .custom-textarea:focus {
-      border-color: var(--accent-blue);
-    }
-
-    /* Commands Card */
-    .cmd-card {
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
+    /* Telegram Native Chat Bubble Simulator */
+    .tg-bubble-sim {
+      background: #182533;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px 16px 16px 4px;
       padding: 14px 16px;
-      margin-bottom: 8px;
+      max-width: 90%;
+      margin: 12px 0;
+      position: relative;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    }
+    .tg-bubble-sender {
+      font-size: 13px;
+      font-weight: 800;
+      color: #5bb3f8;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      transition: background 0.2s;
+      gap: 6px;
+      margin-bottom: 6px;
     }
-
-    .cmd-card:hover {
-      background: rgba(255, 255, 255, 0.04);
+    .tg-bubble-badge {
+      background: rgba(91, 179, 248, 0.2);
+      color: #5bb3f8;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 10px;
     }
-
-    .cmd-code {
-      font-family: monospace;
-      color: var(--accent-blue);
-      font-size: 14px;
-      font-weight: 700;
-    }
-
-    .cmd-desc {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-top: 2px;
-    }
-
-    .btn-copy {
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid var(--border-color);
+    .tg-bubble-body {
+      font-size: 13.5px;
       color: #fff;
-      border-radius: 8px;
-      padding: 7px 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .tg-bubble-time {
+      font-size: 11px;
+      color: #708499;
+      text-align: right;
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 3px;
+    }
+
+    /* Segmented Tab Switcher (Inside Stats / Punishments) */
+    .segmented-control {
+      display: flex;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-pill);
+      padding: 3px;
+      margin-bottom: 14px;
+      gap: 4px;
+    }
+    .segmented-btn {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--text-sub);
       font-size: 12px;
       font-weight: 700;
+      padding: 8px 12px;
+      border-radius: var(--radius-pill);
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.2s var(--ease-spring);
+      text-align: center;
     }
-
-    .btn-copy:hover {
-      background: var(--accent-blue);
-      color: #000;
-    }
-
-    .btn-copy:active {
-      transform: scale(0.95);
-    }
-
-    /* Toast Notification */
-    .toast {
-      position: fixed;
-      bottom: 95px;
-      left: 50%;
-      transform: translateX(-50%) translateY(20px);
-      background: #1e293b;
+    .segmented-btn.active {
+      background: linear-gradient(135deg, var(--accent-cyan), #2563eb);
       color: #fff;
-      border: 1px solid var(--accent-blue);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-      border-radius: 30px;
-      padding: 12px 24px;
-      font-size: 14px;
-      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(56, 189, 248, 0.35);
+    }
+
+    /* Toast Notification (High-end Liquid Floating) */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-30px);
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s var(--ease-spring);
+    }
+    .toast-container.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+    .toast-card {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      backdrop-filter: blur(28px);
+      border-radius: var(--radius-pill);
+      padding: 10px 20px;
       display: flex;
       align-items: center;
       gap: 10px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 25px rgba(56, 189, 248, 0.25);
+      white-space: nowrap;
+    }
+    .toast-icon {
+      font-size: 18px;
+    }
+    .toast-msg {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Group Switcher Bottom Sheet Modal */
+    .bottom-sheet-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(12px);
+      z-index: 90;
       opacity: 0;
       pointer-events: none;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      z-index: 100;
+      transition: opacity 0.26s ease;
     }
-
-    @media (min-width: 768px) {
-      .toast {
-        bottom: 40px;
-      }
-    }
-
-    .toast.show {
+    .bottom-sheet-overlay.open {
       opacity: 1;
-      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+    .bottom-sheet {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(11, 16, 30, 0.98);
+      border-top: 1px solid var(--border-glass-hover);
+      border-radius: 28px 28px 0 0;
+      padding: 20px;
+      max-height: 80vh;
+      overflow-y: auto;
+      z-index: 95;
+      transform: translateY(105%);
+      transition: transform 0.3s var(--ease-spring);
+      box-shadow: 0 -16px 45px rgba(0, 0, 0, 0.7);
+    }
+    .bottom-sheet-overlay.open .bottom-sheet {
+      transform: translateY(0);
+    }
+    .bottom-sheet-handle {
+      width: 44px;
+      height: 5px;
+      border-radius: var(--radius-pill);
+      background: rgba(255, 255, 255, 0.2);
+      margin: 0 auto 16px;
     }
 
-    .tab-pane {
-      display: none;
-    }
-
-    .tab-pane.active {
-      display: block;
-      animation: fadeIn 0.25s ease;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Stat Badges Grid */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-      margin-bottom: 18px;
-    }
-
-    .stat-badge {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      padding: 14px 16px;
-    }
-
-    .stat-badge .stat-label {
+    /* Screen-Spam Feature Card Highlight */
+    .screen-spam-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
       font-size: 11px;
-      color: var(--text-muted);
-      font-weight: 700;
-      text-transform: uppercase;
-    }
-
-    .stat-badge .stat-value {
-      font-size: 20px;
       font-weight: 800;
-      color: #fff;
-      margin-top: 4px;
     }
 
-    /* Groups Cards Grid */
-    .groups-cards-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 14px;
-      margin-top: 10px;
-    }
-
-    @media (min-width: 768px) {
-      .groups-cards-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: 16px;
-      }
-    }
-
+    /* Group Item Cards in "Qo'shilgan Guruhlar" */
     .group-item-card {
-      background: rgba(15, 23, 42, 0.75);
-      border: 1px solid var(--border-color);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-glass);
       border-radius: var(--radius-md);
-      padding: 18px;
+      padding: 16px;
+      margin-bottom: 12px;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
-      gap: 14px;
-      transition: all 0.2s ease;
-      position: relative;
-      overflow: hidden;
+      gap: 12px;
+      transition: all 0.2s var(--ease-spring);
     }
-
     .group-item-card:hover {
-      border-color: rgba(56, 189, 248, 0.4);
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--border-glass-hover);
       transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     }
-
     .group-item-card.selected {
-      border-color: var(--accent-blue);
-      background: rgba(14, 34, 61, 0.85);
-      box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+      border-color: var(--accent-cyan);
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(15, 23, 42, 0.5));
+      box-shadow: 0 8px 24px rgba(56, 189, 248, 0.15);
     }
-
     .group-card-header {
       display: flex;
       align-items: center;
       gap: 12px;
     }
-
     .group-card-avatar {
-      width: 48px;
-      height: 48px;
+      width: 44px;
+      height: 44px;
       border-radius: 14px;
-      background: linear-gradient(135deg, #0284c7, #6366f1);
-      color: #fff;
+      background: linear-gradient(135deg, #0284c7, #2563eb);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 800;
+      color: #fff;
       flex-shrink: 0;
-      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
     }
-
     .group-card-info {
       flex: 1;
       min-width: 0;
     }
-
     .group-card-title {
       font-size: 15px;
       font-weight: 800;
@@ -935,577 +1165,356 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-
     .group-card-id {
       font-size: 11px;
       color: var(--text-muted);
-      margin-top: 2px;
-      font-family: monospace;
+      font-family: 'JetBrains Mono', monospace;
     }
-
     .group-card-badges {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      margin-top: 10px;
     }
-
     .group-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 10px;
-      border-radius: 20px;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 700;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-color);
-      color: var(--text-secondary);
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-sub);
+      border: 1px solid var(--border-glass);
     }
-
     .group-badge.active {
       background: rgba(16, 185, 129, 0.15);
-      border-color: rgba(16, 185, 129, 0.35);
-      color: #6ee7b7;
+      color: #34d399;
+      border-color: rgba(16, 185, 129, 0.3);
     }
-
     .group-badge.inactive {
       background: rgba(244, 63, 94, 0.15);
-      border-color: rgba(244, 63, 94, 0.35);
-      color: #fda4af;
+      color: #fb7185;
+      border-color: rgba(244, 63, 94, 0.3);
     }
-
     .btn-select-group {
-      width: 100%;
-      background: linear-gradient(135deg, #0284c7, #2563eb);
-      color: #ffffff;
-      border: none;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: var(--accent-cyan);
       border-radius: var(--radius-sm);
-      padding: 12px 16px;
-      font-size: 13px;
+      padding: 9px;
+      font-size: 12.5px;
       font-weight: 800;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      transition: all 0.2s;
-      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.3);
-    }
-
-    .btn-select-group:hover {
-      filter: brightness(1.1);
-      transform: translateY(-1px);
-    }
-
-    .btn-select-group:active {
-      transform: scale(0.98);
-    }
-
-    /* Empty State */
-    .groups-empty-state {
+      transition: all 0.2s var(--ease-spring);
       text-align: center;
-      padding: 40px 20px;
+    }
+    .btn-select-group:hover {
+      background: var(--accent-cyan);
+      color: #000;
+    }
+    .btn-select-group:active {
+      transform: scale(0.97);
     }
 
-    .groups-empty-icon {
-      font-size: 48px;
-      margin-bottom: 12px;
-    }
-
-    .groups-empty-title {
-      font-size: 18px;
-      font-weight: 800;
-      color: #fff;
-      margin-bottom: 8px;
-    }
-
-    .groups-empty-desc {
-      font-size: 13px;
-      color: var(--text-secondary);
-      max-width: 440px;
-      margin: 0 auto 20px;
-      line-height: 1.6;
-    }
-
-    /* Active Group Banner */
-    .active-group-banner {
-      background: rgba(30, 41, 59, 0.7);
-      border: 1px solid var(--border-color);
+    /* Command Reference Cards */
+    .cmd-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-glass);
       border-radius: var(--radius-md);
-      padding: 12px 16px;
-      margin-bottom: 16px;
+      padding: 14px;
+      margin-bottom: 10px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      transition: all 0.18s ease;
     }
-
-    .active-group-banner-info {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 0;
-    }
-
-    .active-group-banner-avatar {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      background: linear-gradient(135deg, #0284c7, #6366f1);
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-      font-weight: 800;
-      flex-shrink: 0;
-    }
-
-    .active-group-banner-title {
-      font-size: 14px;
-      font-weight: 800;
-      color: #fff;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .active-group-banner-sub {
-      font-size: 11px;
-      color: var(--accent-blue);
-    }
-
-    .btn-switch-group {
+    .cmd-card:hover {
       background: rgba(255, 255, 255, 0.06);
-      border: 1px solid var(--border-color);
-      color: #fff;
-      border-radius: 20px;
-      padding: 6px 14px;
-      font-size: 12px;
+    }
+    .cmd-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
       font-weight: 700;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: all 0.2s;
+      color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+    }
+    .cmd-desc {
+      font-size: 12px;
+      color: var(--text-sub);
+      margin-top: 3px;
     }
 
-    .btn-switch-group:hover {
-      background: var(--accent-blue);
-      color: #000;
+    /* Manager Dashboard Cards */
+    .mgr-stat-box {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      text-align: center;
+    }
+    .mgr-stat-val {
+      font-size: 22px;
+      font-weight: 800;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .mgr-stat-lbl {
+      font-size: 11px;
+      color: var(--text-sub);
+      margin-top: 2px;
     }
   </style>
 </head>
 <body>
+
+  <!-- Ambient Light Orbs -->
+  <div class="ambient-glow ambient-glow-1"></div>
+  <div class="ambient-glow ambient-glow-2"></div>
+
+  <!-- Toast Notification System -->
+  <div class="toast-container" id="toast">
+    <div class="toast-card">
+      <span class="toast-icon" id="toastIcon">✨</span>
+      <span class="toast-msg" id="toastMsg">Amal bajarildi</span>
+    </div>
+  </div>
 
   <!-- Top App Bar -->
   <header class="topbar">
     <div class="brand-box">
       <div class="brand-logo">🔰</div>
       <div class="brand-info">
-        <h1>Blizkiy Moderatsiya</h1>
-        <p>Guruh Boshqaruv Markazi (PC & Mobile)</p>
+        <h1>Blizkiy Bot <span style="font-size: 10px; font-weight: 800; background: linear-gradient(135deg, #0284c7, #6366f1); color: #fff; padding: 2px 6px; border-radius: 6px;">PRO v3.6</span></h1>
+        <p>Guruh Boshqaruv & Xavfsizlik</p>
       </div>
     </div>
+
     <div class="user-pill" id="userPill">
-      <div class="user-avatar" id="userAvatar">A</div>
-      <span id="userName">Admin</span>
+      <div class="user-avatar" id="userAvatar">U</div>
+      <span id="userName">Foydalanuvchi</span>
     </div>
   </header>
 
-  <!-- Desktop Top Navigation Bar (PC) -->
+  <!-- Desktop Navigation Bar -->
   <div class="desktop-nav-wrap">
     <nav class="desktop-nav">
-      <button class="desktop-nav-item" data-tab="tab-manager" id="navItemManager" style="display: none; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; font-weight: 800;">
-        <span>👑 Bot Manager</span>
-      </button>
-      <button class="desktop-nav-item active" data-tab="tab-groups">
-        <span>👥 Qo'shilgan Guruhlar</span>
-      </button>
-      <button class="desktop-nav-item" data-tab="tab-general">
-        <span>🎛 Asosiy Boshqaruv</span>
-      </button>
-      <button class="desktop-nav-item" data-tab="tab-punishments">
-        <span>⏱ Jazolar & Vaqtlar</span>
-      </button>
-      <button class="desktop-nav-item" data-tab="tab-flood">
-        <span>⚡️ Toshqin (Anti-Flood)</span>
-      </button>
-      <button class="desktop-nav-item" data-tab="tab-badwords">
-        <span>🤬 Taqiqlangan So'zlar</span>
-      </button>
-      <button class="desktop-nav-item" data-tab="tab-prank">
-        <span>🎭 Hazil uchun</span>
-      </button>
-      <button class="desktop-nav-item" data-tab="tab-stats">
-        <span>📊 Statistika</span>
-      </button>
-      <button class="desktop-nav-item" data-tab="tab-rules">
-        <span>📜 Qoidalar & Salom</span>
-      </button>
-      <button class="desktop-nav-item" data-tab="tab-commands">
-        <span>📋 Buyruqlar</span>
-      </button>
+      <button class="desktop-nav-item active" data-tab="tab-general">⚙️ Asosiy</button>
+      <button class="desktop-nav-item" data-tab="tab-flood">🛡 Anti-Flood</button>
+      <button class="desktop-nav-item" data-tab="tab-badwords">🤬 So'kinish</button>
+      <button class="desktop-nav-item" data-tab="tab-punishments">⚖️ Jazolar</button>
+      <button class="desktop-nav-item" data-tab="tab-stats">🏆 Statistika & O'yin</button>
+      <button class="desktop-nav-item" data-tab="tab-rules">📜 Qoidalar & Welcome</button>
+      <button class="desktop-nav-item" data-tab="tab-prank">🎭 Hazil (Ghost)</button>
+      <button class="desktop-nav-item" data-tab="tab-commands">ℹ️ Buyruqlar</button>
+      <button class="desktop-nav-item" data-tab="tab-groups">👥 Guruhlar</button>
+      <button class="desktop-nav-item" data-tab="tab-manager" id="navItemManager" style="display: none;">👑 Boshqaruv</button>
     </nav>
   </div>
 
+  <!-- Main Container -->
   <main class="container">
 
-    <!-- ➕ Guruhga Qo'shish Hero Card (Adaptive for PC & Phone) -->
-    <div class="hero-card">
-      <div class="hero-content">
-        <div class="hero-title">
-          <span>🚀 Botni Guruhingizga Qo'shing</span>
+    <!-- Active Group Banner (Interactive Switcher) -->
+    <div class="active-group-banner" id="activeGroupBanner" title="Guruhni almashtirish uchun bosing">
+      <div class="banner-left">
+        <div class="banner-avatar" id="activeGroupBannerAvatar">G</div>
+        <div class="banner-text">
+          <div class="banner-subtitle">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981;"></span>
+            Faol Boshqaruvdagi Guruh
+          </div>
+          <div class="banner-title" id="activeGroupBannerName">Yuklanmoqda...</div>
         </div>
-        <p class="hero-desc">
-          <b>1.</b> Quyidagi tugmani bosing va guruhingizni tanlang.<br>
-          <b>2.</b> Botga guruhda <b>Administrator</b> huquqini bering.<br>
-          <b>3.</b> Guruhingiz pastdagi ro'yxatda paydo bo'ladi va barcha qoidalarni 100% o'zingizga moslaysiz!
-        </p>
       </div>
-      <div class="hero-btn-wrap">
-        <button class="btn-add-group" id="btnAddGroup">
-          <span>➕ Guruhingizga Qo'shish</span>
+      <div class="banner-right">
+        <button class="btn-switch-group-pill" id="btnSwitchToGroupsTab" type="button">
+          <span>Guruhlar</span>
+          <span>▾</span>
         </button>
       </div>
     </div>
 
-    <!-- Active Group Banner -->
-    <div class="active-group-banner" id="activeGroupBanner">
-      <div class="active-group-banner-info">
-        <div class="active-group-banner-avatar" id="activeGroupBannerAvatar">G</div>
-        <div>
-          <div class="active-group-banner-title" id="activeGroupBannerName">Guruh yuklanmoqda...</div>
-          <div class="active-group-banner-sub">Sozlamalar shu guruhga qo'llanadi</div>
-        </div>
-      </div>
-      <button class="btn-switch-group" id="btnSwitchToGroupsTab">
-        👥 Guruhlar Ro'yxati
-      </button>
-    </div>
-
-    <!-- Active Group Selector Dropdown -->
-    <div class="section-title">
-      <span>⚙️ Tanlangan Guruh (Tezkor tanlash)</span>
-    </div>
-    <div class="group-selector-wrap">
-      <select id="groupSelect" class="group-select">
-        <option value="">Guruhlar yuklanmoqda...</option>
-      </select>
-      <div class="group-selector-arrow">▼</div>
-    </div>
+    <!-- Hidden compatibility select -->
+    <select id="groupSelect"></select>
 
     <!-- =================================================================== -->
-    <!-- TAB M: BOT MANAGER (SUPER-ADMIN PANEL ONLY FOR @khojayev_ramz) -->
+    <!-- TAB 1: ASOSIY SOZLAMALAR (GENERAL) -->
     <!-- =================================================================== -->
-    <div id="tab-manager" class="tab-pane" style="display: none;">
-      <div class="glass-card" style="border-color: rgba(245, 158, 11, 0.4); box-shadow: 0 0 35px rgba(245, 158, 11, 0.15);">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+    <div id="tab-general" class="tab-pane active">
+
+      <!-- Hero Card with Live Status Orb -->
+      <div class="hero-card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
           <div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 24px;">👑</span>
-              <h2>Bot Boshqaruv Markazi (Manager)</h2>
+            <div class="status-orb active" id="heroStatusOrb">
+              <span class="status-orb-dot"></span>
+              <span id="heroStatusText">BOT GURUHDA FAOL</span>
             </div>
-            <p style="color: #fbbf24; font-weight: 600; margin-top: 4px;">
-              Faqat @khojayev_ramz uchun maxsus monitoring paneli. Bot qo'shilgan barcha guruhlar, ularning silkalari, a'zolari va holati:
+            <h2 style="font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 6px; letter-spacing: -0.3px;">
+              Blizkiy Guruh Himoyachi Qalqoni
+            </h2>
+            <p style="font-size: 13px; color: var(--text-sub); max-width: 520px; line-height: 1.5;">
+              Spam, haqorat, toshqin va noqobil reklamalarni 24/7 avtomatik tozalaydi, guruh a'zolarini intizomda saqlaydi va qiziqarli o'yinlar taqdim etadi.
             </p>
           </div>
-          <button class="btn-copy" id="btnRefreshManager" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; font-weight: 800; padding: 10px 18px;">
-            🔄 Yangilash
-          </button>
         </div>
 
-        <!-- Manager Quick Summary Grid -->
-        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-top: 14px;">
-          <div class="stat-badge" style="border-color: rgba(245, 158, 11, 0.3);">
-            <div class="stat-label">👥 Jami Guruhlar</div>
-            <div class="stat-value" id="mgrTotalGroups" style="color: #fbbf24;">0 ta</div>
+        <!-- Metric Badges Grid -->
+        <div class="stats-grid">
+          <div class="stat-badge">
+            <div class="stat-badge-num" id="badgeTotalMsgs">0</div>
+            <div class="stat-badge-label">💬 24h Xabarlar</div>
           </div>
-          <div class="stat-badge" style="border-color: rgba(16, 185, 129, 0.3);">
-            <div class="stat-label">🟢 Faol Guruhlar</div>
-            <div class="stat-value" id="mgrActiveGroups" style="color: #34d399;">0 ta</div>
+          <div class="stat-badge">
+            <div class="stat-badge-num" id="badgeActiveUsers">0</div>
+            <div class="stat-badge-label">👥 Faol A'zolar</div>
           </div>
-          <div class="stat-badge" style="border-color: rgba(56, 189, 248, 0.3);">
-            <div class="stat-label">👤 Jami Qamrov (A'zolar)</div>
-            <div class="stat-value" id="mgrTotalMembers" style="color: #38bdf8;">0 kishi</div>
-          </div>
-          <div class="stat-badge" style="border-color: rgba(99, 102, 241, 0.3);">
-            <div class="stat-label">💬 24h Xabarlar</div>
-            <div class="stat-value" id="mgrTotalMsgs" style="color: #818cf8;">0 ta</div>
-          </div>
-        </div>
-
-        <!-- Search Bar -->
-        <div style="margin: 16px 0 12px; display: flex; gap: 10px;">
-          <input type="text" id="inputSearchManagerGroups" class="text-input" placeholder="🔍 Guruh nomi yoki ID bo'yicha qidirish..." style="flex: 1;">
-        </div>
-
-        <!-- Manager Groups Cards Container -->
-        <div id="managerGroupsContainer" class="groups-cards-grid">
-          <!-- Populated dynamically by JavaScript -->
         </div>
       </div>
-    </div>
 
-    <!-- =================================================================== -->
-    <!-- TAB 0: QO'SHILGAN GURUHLAR (MY GROUPS LIST) -->
-    <!-- =================================================================== -->
-    <div id="tab-groups" class="tab-pane active">
-      <div class="glass-card">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-          <div>
-            <h2>👥 Qo'shilgan Guruhlar Ro'yxati</h2>
-            <p>Bot qo'shilgan guruhlaringiz ro'yxati. Kerakli guruhni tanlang va barcha qoidalarni (mute, ban, anti-flood) unga moslang:</p>
-          </div>
-          <button class="btn-copy" id="btnRefreshGroups" style="background: var(--accent-blue); color: #000; font-weight: 800; padding: 10px 18px;">
-            🔄 Yangilash
-          </button>
-        </div>
-
-        <!-- Dynamic Groups Grid / Cards List -->
-        <div id="groupsCardsContainer" class="groups-cards-grid">
-          <!-- Populated dynamically by JavaScript -->
-        </div>
-      </div>
-    </div>
-
-    <!-- =================================================================== -->
-    <!-- TAB 1: ASOSIY TEZKOR SWITCHLAR (GENERAL) -->
-    <!-- =================================================================== -->
-    <div id="tab-general" class="tab-pane">
+      <!-- General Toggles Card -->
       <div class="glass-card">
         <div class="card-header">
-          <h2>🎛 Asosiy Boshqaruv Qalampiri</h2>
-          <p>Guruhingizdagi asosiy modullarni bitta bosish bilan yoqing yoki o'chiring. Har bir modul vazifasi aniq tushuntirilgan:</p>
+          <h2>⚡️ Tezkor Boshqaruv Tugmalari</h2>
+          <p>Guruhingiz uchun eng asosiy himoya va o'yin mexanizmlarini bir zumda yoqing yoki o'chiring:</p>
         </div>
 
-        <div class="switch-row">
-          <div class="switch-info">
-            <h3>🔘 Bot Umumiy Holati</h3>
-            <p>Agar guruhingizda vaqtincha bot ishlashini to'xtatmoqchi bo'lsangiz, bitta tugma bilan pauzaga qo'yasiz. O'chirilganda bot barcha xabarlarga sukut saqlaydi, hech kimni jazolamaydi.</p>
+        <!-- 1. Bot Status -->
+        <div class="setting-item">
+          <div class="setting-info">
+            <div class="setting-title">
+              <span>🤖 Botning Umumiy Faolligi</span>
+            </div>
+            <div class="setting-desc">Bot guruhdagi barcha xabarlarni kuzatishi va qoidalarni nazorat qilishi</div>
           </div>
-          <label class="toggle">
-            <input type="checkbox" id="toggleBotStatus">
+          <label class="switch">
+            <input type="checkbox" id="toggleBotStatus" checked>
             <span class="slider"></span>
           </label>
         </div>
 
-        <div class="switch-row">
-          <div class="switch-info">
-            <h3>🤬 So'kinish & Haqoratdan Himoya</h3>
-            <p>Guruhda a'zolar nojo'ya yoki haqoratli so'z yozganda bot uning xabarini avtomatik o'chiradi va siz belgilagan jazoni qo'llaydi.</p>
+        <!-- 2. Censor Filter -->
+        <div class="setting-item">
+          <div class="setting-info">
+            <div class="setting-title">
+              <span>🤬 So'kinish va Haqorat Himoyasi</span>
+            </div>
+            <div class="setting-desc">Uyatsiz va taqiqlangan so'zlarni zudlik bilan o'chirish va a'zoni jazolash</div>
           </div>
-          <label class="toggle">
-            <input type="checkbox" id="toggleCensor">
+          <label class="switch">
+            <input type="checkbox" id="toggleCensor" checked>
             <span class="slider"></span>
           </label>
         </div>
 
-        <div class="switch-row">
-          <div class="switch-info">
-            <h3>🔗 Reklama & Havolalar Filtri</h3>
-            <p>Guruhda ruxsatsiz Telegram kanallar, guruhlar yoki veb-sayt havolalarini (t.me/, http) tarqatishni darhol to'xtatadi va xabarni o'chiradi.</p>
+        <!-- 3. Link & Ad Filter -->
+        <div class="setting-item">
+          <div class="setting-info">
+            <div class="setting-title">
+              <span>🔗 Havola va Reklama Filtrlash</span>
+            </div>
+            <div class="setting-desc">Tashqi havolalar (t.me, http://, @username) orqali spam qilinganda xabarni o'chirish</div>
           </div>
-          <label class="toggle">
+          <label class="switch">
             <input type="checkbox" id="toggleLinkFilter">
             <span class="slider"></span>
           </label>
         </div>
 
-        <div class="switch-row">
-          <div class="switch-info">
-            <h3>👋 Yangi A'zolar Bilan Salomlashish</h3>
-            <p>Guruhga yangi a'zo qo'shilganda bot chiroyli xush kelibsiz xabari bilan kutib oladi.</p>
+        <!-- 4. Number Game ("Raqamni Top" 🎯) -->
+        <div class="setting-item">
+          <div class="setting-info">
+            <div class="setting-title">
+              <span>🎯 «Raqamni Top» O'yin Rejimi</span>
+            </div>
+            <div class="setting-desc">Guruhda duel o'yini, radar ko'rsatkichlari va sovg'ali reytingni faollashtirish</div>
           </div>
-          <label class="toggle">
-            <input type="checkbox" id="toggleWelcome">
+          <label class="switch">
+            <input type="checkbox" id="toggleGameStatus" checked>
             <span class="slider"></span>
           </label>
         </div>
 
-        <div class="switch-row">
-          <div class="switch-info">
-            <h3>📊 Guruh Statistikasi (Stata)</h3>
-            <p>Guruh a'zolarining 24 soatlik xabarlari hisobi va eng faol a'zolar reytingini yuritish.</p>
+        <!-- 5. Welcome Message -->
+        <div class="setting-item">
+          <div class="setting-info">
+            <div class="setting-title">
+              <span>✨ Yangi A'zolarni Qutlash (Welcome)</span>
+            </div>
+            <div class="setting-desc">Guruhga yangi kirgan a'zolarga chiroyli, jiddiy yoki do'stona tabrik yuborish</div>
           </div>
-          <label class="toggle">
-            <input type="checkbox" id="toggleStats">
+          <label class="switch">
+            <input type="checkbox" id="toggleWelcome" checked>
             <span class="slider"></span>
           </label>
         </div>
 
-        <div class="switch-row">
-          <div class="switch-info">
-            <h3>👥 Statani Ommaga Ko'rsatish</h3>
-            <p>Yoqilgan bo'lsa barcha oddiy a'zolar ham reytingni ko'ra oladi, o'chirilgan bo'lsa faqat adminlar ko'radi.</p>
+        <!-- 6. Group Statistics -->
+        <div class="setting-item">
+          <div class="setting-info">
+            <div class="setting-title">
+              <span>📊 24 Soatlik Guruh Statistikasi</span>
+            </div>
+            <div class="setting-desc">Guruhdagi eng faol yozuvchilarni hisoblab borish</div>
           </div>
-          <label class="toggle">
+          <label class="switch">
+            <input type="checkbox" id="toggleStats" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <!-- 7. Public Stats -->
+        <div class="setting-item">
+          <div class="setting-info">
+            <div class="setting-title">
+              <span>🌐 Statistikani Barcha A'zolarga Ko'rsatish</span>
+            </div>
+            <div class="setting-desc">Yoqilsa barcha a'zolar /stata buyrug'idan foydalana oladi, o'chirilsa faqat adminlar</div>
+          </div>
+          <label class="switch">
             <input type="checkbox" id="toggleStatsPublic">
             <span class="slider"></span>
           </label>
         </div>
-
-        <div class="switch-row" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
-          <div class="switch-info">
-            <h3>🎮 «Raqamni Top» O‘yin Rejimi</h3>
-            <p>Guruhda <code>game @user</code> duellari, reyting (/topgame) va Telegram Gift sovg‘alari (25⭐, 50⭐, 100⭐) tizimini yoqish yoki to‘xtatish.</p>
-          </div>
-          <label class="toggle">
-            <input type="checkbox" id="toggleGameStatus">
-            <span class="slider"></span>
-          </label>
-        </div>
-      </div>
-
-      <!-- Quick Metrics -->
-      <div class="section-title">
-        <span>📈 24 Soatlik Guruh Ko'rsatkichi</span>
-      </div>
-      <div class="stats-grid">
-        <div class="stat-badge">
-          <div class="stat-label">Jami Xabarlar (24h)</div>
-          <div class="stat-value" id="badgeTotalMsgs">0 ta</div>
-        </div>
-        <div class="stat-badge">
-          <div class="stat-label">Faol A'zolar (24h)</div>
-          <div class="stat-value" id="badgeActiveUsers">0 kishi</div>
-        </div>
-        <div class="stat-badge">
-          <div class="stat-label">Himoya Darajasi</div>
-          <div class="stat-value" style="color: var(--accent-green);">100% FAOL</div>
-        </div>
-        <div class="stat-badge">
-          <div class="stat-label">Bot Versiyasi</div>
-          <div class="stat-value" style="color: var(--accent-blue);">v3.5 PRO</div>
-        </div>
       </div>
     </div>
 
     <!-- =================================================================== -->
-    <!-- TAB 2: JAZOLAR VA DAQIQALARNI SOZLASH (PUNISHMENTS & MUTE TIMES) -->
-    <!-- =================================================================== -->
-    <div id="tab-punishments" class="tab-pane">
-      <div class="grid-2-col">
-        <!-- So'kinish jazosi va vaqti -->
-        <div class="glass-card">
-          <div class="card-header">
-            <h2>🤬 So'kinish Uchun Jazo & Vaqt</h2>
-            <p>A'zo nojo'ya so'z yozganda unga qanday jazo berilishi va yozishdan cheklash (mute) vaqtini shaxsan belgilang:</p>
-          </div>
-
-          <label class="field-label">Jazo Turi:</label>
-          <select id="selectCensorAction" class="field-select" style="width: 100%; margin-bottom: 14px;">
-            <option value="mute">Mute (Yozishni vaqtincha cheklash)</option>
-            <option value="delete">Faqat xabarni o'chirish (Mute qilmasdan)</option>
-            <option value="warn">Ogohlantirish (Warn berish)</option>
-          </select>
-
-          <label class="field-label">Mute Vaqtini Tanlang:</label>
-          <div class="preset-group" id="censorMutePresets">
-            <button class="preset-btn" data-sec="15">15 sek</button>
-            <button class="preset-btn" data-sec="60">1 daq</button>
-            <button class="preset-btn" data-sec="300">5 daq</button>
-            <button class="preset-btn" data-sec="900">15 daq</button>
-            <button class="preset-btn" data-sec="3600">1 soat</button>
-            <button class="preset-btn" data-sec="86400">1 kun</button>
-          </div>
-
-          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color);">
-            <label class="field-label">⏱ Ixtiyoriy vaqt kiritish (Sekunddan Yilgacha):</label>
-            <div class="custom-row">
-              <input type="number" id="inputCensorCustomVal" class="number-input" style="width: 100px;" min="1" placeholder="15">
-              <select id="selectCensorCustomUnit" class="field-select" style="flex: 1;">
-                <option value="1">Soniya (sekund)</option>
-                <option value="60">Daqiqa (minut)</option>
-                <option value="3600">Soat</option>
-                <option value="86400">Kun</option>
-                <option value="604800">Hafta</option>
-                <option value="2592000">Oy (30 kun)</option>
-                <option value="31536000">Yil (365 kun)</option>
-              </select>
-            </div>
-            <div id="censorPreviewText" style="font-size: 12px; color: var(--accent-blue); margin-top: 6px; font-weight: 700;">
-              Joriy vaqt: 15 soniya
-            </div>
-          </div>
-        </div>
-
-        <!-- Anti-Flood mute vaqti -->
-        <div class="glass-card">
-          <div class="card-header">
-            <h2>⚡️ Toshqin (Flood) Mute Vaqti</h2>
-            <p>Ketma-ket xabar yoki stiker tashlagan a'zoni qancha muddatga yozishdan cheklashni belgilang:</p>
-          </div>
-
-          <label class="field-label">Toshqin Uchun Mute Vaqti:</label>
-          <div class="preset-group" id="floodMutePresets">
-            <button class="preset-btn" data-sec="60">1 daq</button>
-            <button class="preset-btn" data-sec="300">5 daq</button>
-            <button class="preset-btn" data-sec="900">15 daq</button>
-            <button class="preset-btn" data-sec="3600">1 soat</button>
-            <button class="preset-btn" data-sec="86400">1 kun</button>
-            <button class="preset-btn" data-sec="604800">7 kun</button>
-          </div>
-
-          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color);">
-            <label class="field-label">⏱ Ixtiyoriy vaqt kiritish (Sekunddan Yilgacha):</label>
-            <div class="custom-row">
-              <input type="number" id="inputFloodCustomVal" class="number-input" style="width: 100px;" min="1" placeholder="15">
-              <select id="selectFloodCustomUnit" class="field-select" style="flex: 1;">
-                <option value="1">Soniya (sekund)</option>
-                <option value="60">Daqiqa (minut)</option>
-                <option value="3600">Soat</option>
-                <option value="86400">Kun</option>
-                <option value="604800">Hafta</option>
-                <option value="2592000">Oy (30 kun)</option>
-                <option value="31536000">Yil (365 kun)</option>
-              </select>
-            </div>
-            <div id="floodPreviewText" style="font-size: 12px; color: var(--accent-blue); margin-top: 6px; font-weight: 700;">
-              Joriy vaqt: 15 daqiqa
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Warn (Ogohlantirish) Sozlamasi -->
-      <div class="glass-card">
-        <div class="card-header">
-          <h2>⚠️ Ogohlantirishlar (Warn) Tizimi</h2>
-          <p>Qoidabuzarlarga ogohlantirish beriladi. Limit to'lganda bot avtomatik qat'iy jazo qo'llaydi:</p>
-        </div>
-
-        <div class="grid-2-col">
-          <div>
-            <label class="field-label">Nechta Ogohlantirishda Jazo:</label>
-            <select id="selectWarnLimit" class="field-select" style="width: 100%;">
-              <option value="10" selected>10 ta ogohlantirishda jazo (Tavsiya etiladi)</option>
-              <option value="5">5 ta ogohlantirishda jazo</option>
-              <option value="3">3 ta ogohlantirishda jazo</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="field-label">Chegara To'lganda Qo'llanadigan Jazo:</label>
-            <select id="selectWarnAction" class="field-select" style="width: 100%;">
-              <option value="smart" selected>Aqlli: Oddiy a'zoga 1s mute / Adminga lavozimdan olish</option>
-              <option value="mute">Mute (1 soat yozishni cheklash)</option>
-              <option value="mute_7d">Mute (7 kun yozishni cheklash)</option>
-              <option value="ban">Ban (Guruhdan chiqarish va bloklash)</option>
-            </select>
-          </div>
-        </div>
-
-        <button class="btn-save" id="btnSavePunishments">
-          <span>💾 Jazolar & Vaqtlar Sozlamasini Saqlash</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- =================================================================== -->
-    <!-- TAB 3: ANTI-FLOOD & TOSH QIN CHEKLOVLARI (FLOOD LIMITS) -->
+    <!-- TAB 2: ANTI-FLOOD & SCREEN SPAM SHIELD -->
     <!-- =================================================================== -->
     <div id="tab-flood" class="tab-pane">
+
+      <!-- NEW: Advanced Screen-Spam & Virtual Mute Shield Banner -->
+      <div class="glass-card" style="background: linear-gradient(135deg, rgba(2, 132, 199, 0.15), rgba(99, 102, 241, 0.1), rgba(15, 23, 42, 0.8)); border-color: rgba(56, 189, 248, 0.4);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px;">
+          <div class="screen-spam-badge">
+            <span>🛡</span>
+            <span>SCREEN-SPAM & VIRTUAL MUTE SHIELD (FAOL)</span>
+          </div>
+          <span style="font-size: 11px; color: #38bdf8; font-weight: 800;">2026 Yangilanish</span>
+        </div>
+        <h3 style="font-size: 15px; font-weight: 800; color: #fff; margin-bottom: 6px;">
+          Ma'nosiz Harflar va Ekran Toldiruvchi Spamga Qarshi Avtomatik Qalqon
+        </h3>
+        <p style="font-size: 12.5px; color: var(--text-sub); line-height: 1.5;">
+          A'zolar yoki adminlar chatni ma'nosiz uzun harflar (masalan: <code>adawdawkjdbwaijdnw...</code>), ketma-ket bir xil belgilar (15+) yoki 4+ qatorli screen-filler matnlar bilan to'ldirsa:
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #e2e8f0;">
+            <span style="color: #38bdf8; font-weight: 800;">👤 Oddiy A'zoga:</span>
+            <span>Xabar darhol o'chiriladi, statadan tozalanadi va <b>1 daqiqa mute</b> beriladi.</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #e2e8f0;">
+            <span style="color: #f59e0b; font-weight: 800;">👑 Adminlarga:</span>
+            <span>Xabar darhol o'chiriladi va <b>1 daqiqalik virtual mute</b> qo'llanadi (keyingi 60 soniya yozgan barcha xabari bot tomonidan avtomatik o'chiriladi).</span>
+          </div>
+        </div>
+      </div>
+
       <div class="grid-2-col">
+        <!-- 1. Text Message Flood -->
         <div class="glass-card">
           <div class="card-header">
             <h2>⚡️ Ketma-ket Xabarlar Toshqini</h2>
@@ -1515,26 +1524,27 @@
           <div class="custom-row" style="margin-bottom: 16px;">
             <div style="flex: 1;">
               <label class="field-label">Nechta Xabar:</label>
-              <select id="selectFloodMsgLimit" class="field-select" style="width: 100%;">
+              <select id="selectFloodMsgLimit" class="field-select">
                 <option value="3">3 ta xabar</option>
                 <option value="4">4 ta xabar</option>
-                <option value="5">5 ta xabar (Standart)</option>
+                <option value="5" selected>5 ta xabar (Standart)</option>
                 <option value="7">7 ta xabar</option>
                 <option value="10">10 ta xabar</option>
               </select>
             </div>
             <div style="flex: 1;">
               <label class="field-label">Necha Soniyada:</label>
-              <select id="selectFloodMsgWindow" class="field-select" style="width: 100%;">
+              <select id="selectFloodMsgWindow" class="field-select">
                 <option value="2">2 soniyada</option>
                 <option value="3">3 soniyada</option>
-                <option value="4">4 soniyada (Standart)</option>
+                <option value="4" selected>4 soniyada (Standart)</option>
                 <option value="5">5 soniyada</option>
               </select>
             </div>
           </div>
         </div>
 
+        <!-- 2. Sticker & GIF Flood -->
         <div class="glass-card">
           <div class="card-header">
             <h2>🖼 Stiker & GIF Toshqini</h2>
@@ -1544,19 +1554,19 @@
           <div class="custom-row" style="margin-bottom: 16px;">
             <div style="flex: 1;">
               <label class="field-label">Nechta Stiker:</label>
-              <select id="selectFloodStickerLimit" class="field-select" style="width: 100%;">
+              <select id="selectFloodStickerLimit" class="field-select">
                 <option value="2">2 ta stiker</option>
-                <option value="3">3 ta stiker (Standart)</option>
+                <option value="3" selected>3 ta stiker (Standart)</option>
                 <option value="4">4 ta stiker</option>
                 <option value="5">5 ta stiker</option>
               </select>
             </div>
             <div style="flex: 1;">
               <label class="field-label">Necha Soniyada:</label>
-              <select id="selectFloodStickerWindow" class="field-select" style="width: 100%;">
+              <select id="selectFloodStickerWindow" class="field-select">
                 <option value="2">2 soniyada</option>
                 <option value="3">3 soniyada</option>
-                <option value="4">4 soniyada (Standart)</option>
+                <option value="4" selected>4 soniyada (Standart)</option>
                 <option value="5">5 soniyada</option>
               </select>
             </div>
@@ -1564,18 +1574,18 @@
         </div>
       </div>
 
-      <button class="btn-save" id="btnSaveFloodLimits" style="margin-top: 0;">
+      <button class="btn-save" id="btnSaveFloodLimits" type="button">
         <span>💾 Anti-Flood Cheklovlarini Saqlash</span>
       </button>
     </div>
 
     <!-- =================================================================== -->
-    <!-- TAB 4: TAQIQLANGAN SO'ZLAR (BADWORDS) -->
+    <!-- TAB 3: TAQIQLANGAN SO'ZLAR (BADWORDS) -->
     <!-- =================================================================== -->
     <div id="tab-badwords" class="tab-pane">
       <div class="glass-card">
         <div class="card-header">
-          <h2>🚫 Maxsus Taqiqlangan So'zlar</h2>
+          <h2>🚫 Maxsus Taqiqlangan So'zlar Filtrlari</h2>
           <p>Guruhingizda taqiqlanadigan so'zlarni o'z qo'lingiz bilan kiriting. A'zolar bu so'zlarni yozsa bot darhol xabarni o'chiradi va jazolaydi:</p>
         </div>
 
@@ -1585,13 +1595,275 @@
 
         <div class="custom-row" style="margin-top: 14px;">
           <input type="text" id="inputNewBadWord" class="text-input" style="flex: 1;" placeholder="Yangi taqiqlangan so'zni yozing...">
-          <button class="btn-copy" id="btnAddBadWord" style="background: var(--accent-blue); color: #000; padding: 12px 22px; font-weight: 800;">+ Qo'shish</button>
+          <button class="btn-copy" id="btnAddBadWord" type="button" style="background: var(--accent-cyan); color: #000; padding: 11px 22px; font-weight: 800;">+ Qo'shish</button>
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
+          💡 Klaviatura «Enter» tugmasini bosib ham tezkor so'z qo'sha olasiz.
         </div>
       </div>
     </div>
 
     <!-- =================================================================== -->
-    <!-- TAB 4.5: HAZIL UCHUN (PRANK / GHOST MODE) -->
+    <!-- TAB 4: JAZOLAR VA VAQTLAR (PUNISHMENTS) -->
+    <!-- =================================================================== -->
+    <div id="tab-punishments" class="tab-pane">
+      <div class="grid-2-col">
+        <!-- 1. So'kinish jazosi va vaqti -->
+        <div class="glass-card">
+          <div class="card-header">
+            <h2>🤬 So'kinish uchun Jazo</h2>
+            <p>Haqoratli so'z yozgan a'zoga qo'llanadigan avtomatik chora:</p>
+          </div>
+
+          <label class="field-label">Jazo Turi:</label>
+          <select id="selectCensorAction" class="field-select" style="margin-bottom: 14px;">
+            <option value="mute" selected>🔇 Mute (Yozishni taqiqlash)</option>
+            <option value="warn">⚠️ Ogohlantirish berish (Warn)</option>
+            <option value="delete">🗑 Faqat xabarni o'chirish</option>
+            <option value="ban">🚫 Guruhdan butunlay haydash (Ban)</option>
+          </select>
+
+          <label class="field-label">Mute Muddati (Tezkor Tanlash):</label>
+          <div class="preset-container" id="censorMutePresets">
+            <button type="button" class="preset-btn active" data-sec="15">15 soniya</button>
+            <button type="button" class="preset-btn" data-sec="60">1 daqiqa</button>
+            <button type="button" class="preset-btn" data-sec="900">15 daqiqa</button>
+            <button type="button" class="preset-btn" data-sec="3600">1 soat</button>
+            <button type="button" class="preset-btn" data-sec="86400">1 kun</button>
+            <button type="button" class="preset-btn" data-sec="604800">1 hafta</button>
+          </div>
+
+          <div style="font-size: 12px; color: var(--accent-cyan); font-weight: 700; margin-bottom: 12px;" id="censorPreviewText">
+            Joriy vaqt: 15 soniya
+          </div>
+
+          <label class="field-label">Yoki O'zingiz Istagan Vaqtni Kiriting:</label>
+          <div class="custom-row">
+            <input type="number" id="inputCensorCustomVal" class="text-input" placeholder="Raqam..." min="1" value="15" style="flex: 1;">
+            <select id="selectCensorCustomUnit" class="field-select" style="flex: 1.2;">
+              <option value="1" selected>Soniya</option>
+              <option value="60">Daqiqa</option>
+              <option value="3600">Soat</option>
+              <option value="86400">Kun</option>
+              <option value="604800">Hafta</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 2. Flood jazosi va vaqti -->
+        <div class="glass-card">
+          <div class="card-header">
+            <h2>⚡️ Toshqin (Flood) uchun Jazo</h2>
+            <p>Ketma-ket xabarlar yoki stikerlar bilan flood qilgan oddiy a'zoga mute muddati:</p>
+          </div>
+
+          <label class="field-label">Mute Muddati (Tezkor Tanlash):</label>
+          <div class="preset-container" id="floodMutePresets">
+            <button type="button" class="preset-btn" data-sec="60">1 daqiqa</button>
+            <button type="button" class="preset-btn" data-sec="300">5 daqiqa</button>
+            <button type="button" class="preset-btn active" data-sec="900">15 daqiqa</button>
+            <button type="button" class="preset-btn" data-sec="3600">1 soat</button>
+            <button type="button" class="preset-btn" data-sec="86400">1 kun</button>
+          </div>
+
+          <div style="font-size: 12px; color: var(--accent-cyan); font-weight: 700; margin-bottom: 12px;" id="floodPreviewText">
+            Joriy vaqt: 15 daqiqa
+          </div>
+
+          <label class="field-label">Yoki O'zingiz Istagan Vaqtni Kiriting:</label>
+          <div class="custom-row">
+            <input type="number" id="inputFloodCustomVal" class="text-input" placeholder="Raqam..." min="1" value="15" style="flex: 1;">
+            <select id="selectFloodCustomUnit" class="field-select" style="flex: 1.2;">
+              <option value="1">Soniya</option>
+              <option value="60" selected>Daqiqa</option>
+              <option value="3600">Soat</option>
+              <option value="86400">Kun</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Ogohlantirishlar (Warn Limits) -->
+      <div class="glass-card">
+        <div class="card-header">
+          <h2>⚠️ Ogohlantirishlar Chegarasi (Warn System)</h2>
+          <p>A'zo qoida buzganida beriladigan ogohlantirishlar limiti va chegaraga yetgandagi chora:</p>
+        </div>
+
+        <div class="custom-row">
+          <div style="flex: 1;">
+            <label class="field-label">Maksimal Ogohlantirishlar:</label>
+            <select id="selectWarnLimit" class="field-select">
+              <option value="3">3 ta ogohlantirish</option>
+              <option value="5">5 ta ogohlantirish</option>
+              <option value="10" selected>10 ta ogohlantirish (Standart)</option>
+            </select>
+          </div>
+
+          <div style="flex: 1;">
+            <label class="field-label">Limitga Yetganda:</label>
+            <select id="selectWarnAction" class="field-select">
+              <option value="smart" selected>⚡️ Qadam-baqadam Mute (Aqlli)</option>
+              <option value="mute">🔇 1 kunga Mute</option>
+              <option value="ban">🚫 Guruhdan Butunlay Ban</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-save" id="btnSavePunishments" type="button">
+        <span>💾 Barcha Jazolar va Muddatlarni Saqlash</span>
+      </button>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- TAB 5: STATISTIKA VA O'YIN CHEMPIONLARI (STATS & GAME) -->
+    <!-- =================================================================== -->
+    <div id="tab-stats" class="tab-pane">
+
+      <!-- Segmented View Toggle: 24h Chat Activity vs Raqamni Top Game Winners -->
+      <div class="segmented-control">
+        <button class="segmented-btn active" id="btnStatsTabChat" type="button">
+          💬 24h Faol Suhbatdoshlar
+        </button>
+        <button class="segmented-btn" id="btnStatsTabGame" type="button">
+          🎯 «Raqamni Top» Chempionlari
+        </button>
+      </div>
+
+      <!-- View 1: 24h Chat Activity -->
+      <div id="viewStatsChat">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <div style="font-size: 13px; font-weight: 800; color: #fff;">
+            🏆 24 Soatlik Eng Faol Yozuvchilar Reytingi
+          </div>
+          <button class="btn-copy" id="btnRefreshStats" type="button">🔄 Yangilash</button>
+        </div>
+
+        <div class="leaderboard-list" id="leaderboardList">
+          <div class="glass-card" style="text-align: center; color: var(--text-muted); padding: 24px;">
+            Statistika yuklanmoqda...
+          </div>
+        </div>
+      </div>
+
+      <!-- View 2: Raqamni Top Game Champions -->
+      <div id="viewStatsGame" style="display: none;">
+        <div class="game-champ-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="font-size: 14px; font-weight: 800; color: #fbbf24; display: flex; align-items: center; gap: 6px;">
+              <span>👑</span>
+              <span>«Raqamni Top» Duel Qahramonlari</span>
+            </div>
+            <span style="font-size: 11px; background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); padding: 2px 8px; border-radius: 12px; font-weight: 800;">
+              G'alabalar Bo'yicha
+            </span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-sub); line-height: 1.45;">
+            Guruhda <code>/game</code> yoki <code>/oyin</code> buyrug'i orqali o'ynalgan duellarda eng ko'p g'alaba qozongan chempionlar:
+          </p>
+        </div>
+
+        <div class="leaderboard-list" id="gameLeaderboardList">
+          <div class="glass-card" style="text-align: center; color: var(--text-muted); padding: 24px;">
+            O'yin chempionlari yuklanmoqda...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- TAB 6: QOIDALAR VA SALOMLASHISH (RULES & WELCOME) -->
+    <!-- =================================================================== -->
+    <div id="tab-rules" class="tab-pane">
+      <div class="grid-2-col">
+        <!-- 1. Rules -->
+        <div class="glass-card">
+          <div class="card-header">
+            <h2>📜 Guruh Qoidalarini Sozlash</h2>
+            <p>Guruhda <code>/rules</code> yoki <code>/qoidalar</code> yozilganda a'zolarga aynan shu siz kiritgan qoidalar ko'rsatiladi:</p>
+          </div>
+
+          <textarea id="textareaRules" class="custom-textarea" placeholder="Guruh qoidalarini bu yerga yozing..."></textarea>
+          
+          <button class="btn-save" id="btnSaveRules" type="button">
+            <span>💾 Qoidalarni Saqlash</span>
+          </button>
+        </div>
+
+        <!-- 2. Welcome Message -->
+        <div class="glass-card">
+          <div class="card-header">
+            <h2>✨ Salomlashish Matni (Welcome Simulator)</h2>
+            <p>Yangi kirgan a'zoga yuboriladigan tabrik xabari. Shablonlardan birini tanlang yoki o'zingiz moslang:</p>
+          </div>
+
+          <!-- Quick Templates -->
+          <div style="margin-bottom: 12px;">
+            <div style="font-size: 11px; color: var(--text-sub); margin-bottom: 6px; font-weight: 800; letter-spacing: 0.5px;">
+              ⚡️ TAYYOR SHABLONLAR (BIR BOSISHDA TANLASH):
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" class="btn-copy" id="btnTplSerious" style="background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.4); color: #fbbf24;">
+                👑 Jiddiy & Rasmiy
+              </button>
+              <button type="button" class="btn-copy" id="btnTplFriendly" style="background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.4); color: #38bdf8;">
+                ✨ Samimiy & Do'stona
+              </button>
+              <button type="button" class="btn-copy" id="btnTplBusiness" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">
+                💼 Biznes & IT
+              </button>
+            </div>
+          </div>
+
+          <!-- Variables Chips -->
+          <div style="margin-bottom: 12px;">
+            <div style="font-size: 11px; color: var(--text-sub); margin-bottom: 6px; font-weight: 800; letter-spacing: 0.5px;">
+              🧩 TEZKOR O'ZGARUVCHILAR (BOSING VA QO'SHING):
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button type="button" class="tag-chip" onclick="insertWelcomeTag('{mention}')" style="cursor: pointer;">
+                <span>{mention} (Profil Havolasi)</span>
+              </button>
+              <button type="button" class="tag-chip" onclick="insertWelcomeTag('{name}')" style="cursor: pointer;">
+                <span>{name} (Ism)</span>
+              </button>
+              <button type="button" class="tag-chip" onclick="insertWelcomeTag('{title}')" style="cursor: pointer;">
+                <span>{title} (Guruh Nomi)</span>
+              </button>
+              <button type="button" class="tag-chip" onclick="insertWelcomeTag('{count}')" style="cursor: pointer;">
+                <span>{count} (A'zolar Soni)</span>
+              </button>
+            </div>
+          </div>
+
+          <textarea id="textareaWelcome" class="custom-textarea" placeholder="Salomlashish matnini yozing..."></textarea>
+
+          <!-- Telegram Bubble Simulator -->
+          <div style="font-size: 11px; color: var(--text-sub); margin: 12px 0 6px; font-weight: 800; letter-spacing: 0.5px;">
+            📱 TELEGRAMDA QANDAY KO'RINISHI (JONLI PREVIEW):
+          </div>
+          <div class="tg-bubble-sim">
+            <div class="tg-bubble-sender">
+              <span>Blizkiy Bot 🔰</span>
+              <span class="tg-bubble-badge">bot</span>
+            </div>
+            <div class="tg-bubble-body" id="welcomeLivePreview">Assalomu alaykum!</div>
+            <div class="tg-bubble-time">
+              <span>12:00</span>
+              <span>✓✓</span>
+            </div>
+          </div>
+
+          <button class="btn-save" id="btnSaveWelcome" type="button">
+            <span>💾 Salomlashish Matnini Saqlash</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- TAB 7: HAZIL UCHUN (PRANK / GHOST MODE) -->
     <!-- =================================================================== -->
     <div id="tab-prank" class="tab-pane">
       <div class="glass-card">
@@ -1609,7 +1881,7 @@
 
         <div class="custom-row" style="margin-top: 14px;">
           <input type="text" id="inputNewPrankUser" class="text-input" style="flex: 1;" placeholder="Username yozing (masalan: @username)...">
-          <button class="btn-copy" id="btnAddPrankUser" style="background: #ef4444; color: #fff; padding: 12px 22px; font-weight: 800;">➕ Qo'shish</button>
+          <button class="btn-copy" id="btnAddPrankUser" type="button" style="background: #ef4444; color: #fff; padding: 11px 22px; font-weight: 800;">➕ Qo'shish</button>
         </div>
         <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
           💡 Eslatma: Faqat shu guruhdagi a'zolarning username'ini kiriting. Maksimal 5 ta username kiritish mumkin.
@@ -1618,179 +1890,137 @@
     </div>
 
     <!-- =================================================================== -->
-    <!-- TAB 5: JONLI STATISTIKA (LEADERBOARD) -->
-    <!-- =================================================================== -->
-    <div id="tab-stats" class="tab-pane">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-        <div class="section-title" style="margin: 0;">
-          <span>🏆 Top Faol A'zolar (24 Soatlik Reyting)</span>
-        </div>
-        <button class="btn-copy" id="btnRefreshStats">🔄 Yangilash</button>
-      </div>
-
-      <div class="leaderboard-list" id="leaderboardList">
-        <div class="glass-card" style="text-align: center; color: var(--text-muted);">
-          Statistika yuklanmoqda...
-        </div>
-      </div>
-    </div>
-
-    <!-- =================================================================== -->
-    <!-- TAB 6: QOIDALAR VA SALOMLASHISH (RULES & WELCOME) -->
-    <!-- =================================================================== -->
-    <div id="tab-rules" class="tab-pane">
-      <div class="grid-2-col">
-        <div class="glass-card">
-          <div class="card-header">
-            <h2>📜 Guruh Qoidalarini Sozlash</h2>
-            <p>Guruhda <code>/rules</code> deb yozilganda a'zolarga aynan shu siz kiritgan qoidalar ko'rsatiladi:</p>
-          </div>
-
-          <textarea id="textareaRules" class="custom-textarea" placeholder="Guruh qoidalarini bu yerga yozing..."></textarea>
-          
-          <button class="btn-save" id="btnSaveRules">
-            <span>💾 Qoidalarni Saqlash</span>
-          </button>
-        </div>
-
-        <div class="glass-card">
-          <div class="card-header">
-            <h2>✨ Salomlashish Matni (Ideal Welcome)</h2>
-            <p>Yangi kirgan a'zoga yuboriladigan nufuzli, jiddiy va chiroyli tabrik xabari. Shablonlardan birini tanlang yoki o'zingiz moslang:</p>
-          </div>
-
-          <!-- Quick Templates (Tayyor Shablonlar) -->
-          <div style="margin-bottom: 12px;">
-            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 800; letter-spacing: 0.5px;">
-              ⚡️ TAYYOR SHABLONLAR (BIR BOSISHDA TANLASH):
-            </div>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button type="button" class="btn-copy" id="btnTplSerious" style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; padding: 6px 12px; font-size: 13px;">
-                👑 Jiddiy & Rasmiy
-              </button>
-              <button type="button" class="btn-copy" id="btnTplFriendly" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; padding: 6px 12px; font-size: 13px;">
-                ✨ Samimiy & Do'stona
-              </button>
-              <button type="button" class="btn-copy" id="btnTplBusiness" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; padding: 6px 12px; font-size: 13px;">
-                💼 Biznes & IT
-              </button>
-            </div>
-          </div>
-
-          <!-- Variables Chips -->
-          <div style="margin-bottom: 12px;">
-            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 800; letter-spacing: 0.5px;">
-              🧩 TEZKOR O'ZGARUVCHILAR (BOSING VA QO'SHING):
-            </div>
-            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-              <button type="button" class="tag-chip" onclick="insertWelcomeTag('{mention}')" style="cursor: pointer; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.1);">
-                <span>{mention} (Profil Havolasi)</span>
-              </button>
-              <button type="button" class="tag-chip" onclick="insertWelcomeTag('{name}')" style="cursor: pointer;">
-                <span>{name} (To'liq Ism)</span>
-              </button>
-              <button type="button" class="tag-chip" onclick="insertWelcomeTag('{title}')" style="cursor: pointer;">
-                <span>{title} (Guruh Nomi)</span>
-              </button>
-              <button type="button" class="tag-chip" onclick="insertWelcomeTag('{count}')" style="cursor: pointer;">
-                <span>{count} (A'zolar Soni)</span>
-              </button>
-            </div>
-          </div>
-
-          <textarea id="textareaWelcome" class="custom-textarea" rows="7" placeholder="Salomlashish matnini yozing..."></textarea>
-
-          <!-- Live Telegram Message Preview -->
-          <div style="margin: 14px 0;">
-            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 800; letter-spacing: 0.5px;">
-              📱 TELEGRAMDA QANDAY KO'RINADI (JONLI KO'RINISH):
-            </div>
-            <div id="welcomeLivePreview" style="background: #18222d; border-radius: 12px; padding: 14px 16px; border: 1px solid rgba(255,255,255,0.08); font-size: 14px; line-height: 1.6; color: #f1f5f9; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-              <!-- Rendered via JS -->
-            </div>
-          </div>
-
-          <button class="btn-save" id="btnSaveWelcome" style="background: linear-gradient(135deg, #0284c7, #2563eb);">
-            <span>💾 Salomlashish Matnini Saqlash</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- =================================================================== -->
-    <!-- TAB 7: BUYRUQLAR YO'RIQNOMASI (CHEAT SHEET) -->
+    <!-- TAB 8: BUYRUQLAR RO'YXATI (COMMANDS HELP) -->
     <!-- =================================================================== -->
     <div id="tab-commands" class="tab-pane">
-      <div class="section-title">
-        <span>👮‍♂️ Admin Buyruqlari (Bir Bosishda Nusxalash)</span>
+      <div class="glass-card">
+        <div class="card-header">
+          <h2>📖 Bot Buyruqlari Ma'lumotnomasi</h2>
+          <p>Guruhingizda bot orqali ishlatilishi mumkin bo'lgan buyruqlar (nusxa olish uchun ustiga bosing):</p>
+        </div>
+
+        <div class="cmd-card" onclick="copyCommand('/game')">
+          <div>
+            <div class="cmd-code">/game yoki /oyin</div>
+            <div class="cmd-desc">1 dan 100 gacha son o'ylash dueli (Floating doska, radar ko'rsatkichlari)</div>
+          </div>
+          <button class="btn-copy" type="button">Nusxa</button>
+        </div>
+
+        <div class="cmd-card" onclick="copyCommand('/stata')">
+          <div>
+            <div class="cmd-code">/stata</div>
+            <div class="cmd-desc">Guruhdagi 24 soatlik eng faol 10 ta a'zoning jonli reytingi</div>
+          </div>
+          <button class="btn-copy" type="button">Nusxa</button>
+        </div>
+
+        <div class="cmd-card" onclick="copyCommand('/rules')">
+          <div>
+            <div class="cmd-code">/rules yoki /qoidalar</div>
+            <div class="cmd-desc">Guruh qoidalarini chiroyli formatda a'zolarga chiqarish</div>
+          </div>
+          <button class="btn-copy" type="button">Nusxa</button>
+        </div>
+
+        <div class="cmd-card" onclick="copyCommand('/warn')">
+          <div>
+            <div class="cmd-code">/warn (reply qilib)</div>
+            <div class="cmd-desc">Qoida buzgan a'zoga admin tomonidan ogohlantirish berish</div>
+          </div>
+          <button class="btn-copy" type="button">Nusxa</button>
+        </div>
+
+        <div class="cmd-card" onclick="copyCommand('/mute 15m')">
+          <div>
+            <div class="cmd-code">/mute &lt;vaqt&gt; (reply)</div>
+            <div class="cmd-desc">A'zoga vaqtinchalik yozishni taqiqlash (masalan: 10m, 1h, 1d)</div>
+          </div>
+          <button class="btn-copy" type="button">Nusxa</button>
+        </div>
+
+        <div class="cmd-card" onclick="copyCommand('/unmute')">
+          <div>
+            <div class="cmd-code">/unmute (reply)</div>
+            <div class="cmd-desc">A'zodan barcha taqiqlarni darhol yechish</div>
+          </div>
+          <button class="btn-copy" type="button">Nusxa</button>
+        </div>
+
+        <div class="cmd-card" onclick="copyCommand('/ban')">
+          <div>
+            <div class="cmd-code">/ban (reply)</div>
+            <div class="cmd-desc">A'zoni guruhdan butunlay haydash</div>
+          </div>
+          <button class="btn-copy" type="button">Nusxa</button>
+        </div>
       </div>
+    </div>
 
-      <div class="grid-2-col">
-        <div>
-          <div class="cmd-card">
-            <div>
-              <div class="cmd-code">/mute @user 15m</div>
-              <div class="cmd-desc">Foydalanuvchini yozishdan cheklash</div>
-            </div>
-            <button class="btn-copy" onclick="copyCommand('/mute @user 15m')">Nusxalash</button>
+    <!-- =================================================================== -->
+    <!-- TAB 9: QO'SHILGAN GURUHLAR (GROUPS LIST) -->
+    <!-- =================================================================== -->
+    <div id="tab-groups" class="tab-pane">
+      <div class="glass-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div>
+            <h2 style="font-size: 16px; font-weight: 800; color: #fff;">👥 Boshqaruvdagi Guruhlaringiz</h2>
+            <p style="font-size: 12px; color: var(--text-sub); margin-top: 2px;">Sozlamalarini boshqarish uchun guruh kartasini bosing:</p>
           </div>
+          <button class="btn-copy" id="btnRefreshGroups" type="button">🔄 Yangilash</button>
+        </div>
 
-          <div class="cmd-card">
-            <div>
-              <div class="cmd-code">/unmute @user</div>
-              <div class="cmd-desc">Yozish cheklovini bekor qilish</div>
-            </div>
-            <button class="btn-copy" onclick="copyCommand('/unmute @user')">Nusxalash</button>
-          </div>
-
-          <div class="cmd-card">
-            <div>
-              <div class="cmd-code">/ban @user</div>
-              <div class="cmd-desc">Foydalanuvchini guruhdan haydash va bloklash</div>
-            </div>
-            <button class="btn-copy" onclick="copyCommand('/ban @user')">Nusxalash</button>
-          </div>
-
-          <div class="cmd-card">
-            <div>
-              <div class="cmd-code">/unban @user</div>
-              <div class="cmd-desc">Blokdan chiqarish</div>
-            </div>
-            <button class="btn-copy" onclick="copyCommand('/unban @user')">Nusxalash</button>
+        <div id="groupsCardsContainer">
+          <div style="text-align: center; color: var(--text-muted); padding: 30px;">
+            Guruhlar yuklanmoqda...
           </div>
         </div>
 
-        <div>
-          <div class="cmd-card">
-            <div>
-              <div class="cmd-code">/warn @user [sabab]</div>
-              <div class="cmd-desc">Ogohlantirish berish (limitda jazolanadi)</div>
-            </div>
-            <button class="btn-copy" onclick="copyCommand('/warn @user')">Nusxalash</button>
-          </div>
+        <div style="margin-top: 14px;">
+          <button class="btn-add-group" id="btnAddGroup" type="button" onclick="window.open('https://t.me/oken_sherda_bot?startgroup=true', '_blank')">
+            <span>➕ Botni Yangi Guruhingizga Qo'shish</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
-          <div class="cmd-card">
-            <div>
-              <div class="cmd-code">/sleep 1h [sabab]</div>
-              <div class="cmd-desc">Adminlar uchun bandlik / AFK rejimi</div>
-            </div>
-            <button class="btn-copy" onclick="copyCommand('/sleep 1h Bandman')">Nusxalash</button>
+    <!-- =================================================================== -->
+    <!-- TAB 10: OWNER / MANAGER DASHBOARD -->
+    <!-- =================================================================== -->
+    <div id="tab-manager" class="tab-pane">
+      <div class="glass-card" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(15, 23, 42, 0.85)); border-color: rgba(99, 102, 241, 0.4);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <div>
+            <h2 style="font-size: 16px; font-weight: 800; color: #fff;">👑 Bot Egasi Boshqaruv Markazi</h2>
+            <p style="font-size: 12px; color: var(--text-sub);">Barcha guruhlarning umumiy statistikasi va monitoringi</p>
           </div>
+          <button class="btn-copy" id="btnRefreshManager" type="button">🔄 Yangilash</button>
+        </div>
 
-          <div class="cmd-card">
-            <div>
-              <div class="cmd-code">stata</div>
-              <div class="cmd-desc">Guruhning 24 soatlik faollik reytingi</div>
-            </div>
-            <button class="btn-copy" onclick="copyCommand('stata')">Nusxalash</button>
+        <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 16px;">
+          <div class="mgr-stat-box">
+            <div class="mgr-stat-val" id="mgrTotalGroups">0</div>
+            <div class="mgr-stat-lbl">Jami Guruhlar</div>
           </div>
+          <div class="mgr-stat-box">
+            <div class="mgr-stat-val" id="mgrActiveGroups">0</div>
+            <div class="mgr-stat-lbl">Faol Guruhlar</div>
+          </div>
+          <div class="mgr-stat-box">
+            <div class="mgr-stat-val" id="mgrTotalMsgs">0</div>
+            <div class="mgr-stat-lbl">24h Xabarlar</div>
+          </div>
+          <div class="mgr-stat-box">
+            <div class="mgr-stat-val" id="mgrTotalMembers">0</div>
+            <div class="mgr-stat-lbl">A'zolar Qamrovi</div>
+          </div>
+        </div>
 
-          <div class="cmd-card">
-            <div>
-              <div class="cmd-code">/rules</div>
-              <div class="cmd-desc">Guruh qoidalarini chiqarish</div>
-            </div>
-            <button class="btn-copy" onclick="copyCommand('/rules')">Nusxalash</button>
+        <input type="text" id="inputSearchManagerGroups" class="text-input" placeholder="Guruh nomi yoki ID orqali qidirish..." style="margin-bottom: 12px;">
+
+        <div id="managerGroupsContainer">
+          <div style="text-align: center; color: var(--text-muted); padding: 20px;">
+            Yuklanmoqda...
           </div>
         </div>
       </div>
@@ -1798,195 +2028,179 @@
 
   </main>
 
-  <!-- Mobile Bottom Navigation Bar (Phone) -->
+  <!-- Mobile Bottom Navigation -->
   <nav class="bottom-nav">
-    <button class="nav-item" data-tab="tab-manager" id="bottomNavItemManager" style="display: none; color: #fbbf24; background: rgba(245, 158, 11, 0.1);">
-      <span class="nav-icon">👑</span>
-      <span>Manager</span>
-    </button>
-    <button class="nav-item active" data-tab="tab-groups">
-      <span class="nav-icon">👥</span>
-      <span>Guruhlar</span>
-    </button>
-    <button class="nav-item" data-tab="tab-general">
-      <span class="nav-icon">🎛</span>
+    <button class="nav-item active" data-tab="tab-general">
+      <span class="nav-icon">⚙️</span>
       <span>Asosiy</span>
     </button>
-    <button class="nav-item" data-tab="tab-punishments">
-      <span class="nav-icon">⏱</span>
-      <span>Jazolar</span>
-    </button>
     <button class="nav-item" data-tab="tab-flood">
-      <span class="nav-icon">⚡️</span>
-      <span>Toshqin</span>
+      <span class="nav-icon">🛡</span>
+      <span>Flood</span>
     </button>
     <button class="nav-item" data-tab="tab-badwords">
       <span class="nav-icon">🤬</span>
       <span>So'zlar</span>
     </button>
-    <button class="nav-item" data-tab="tab-prank">
-      <span class="nav-icon">🎭</span>
-      <span>Hazil</span>
-    </button>
     <button class="nav-item" data-tab="tab-stats">
-      <span class="nav-icon">📊</span>
+      <span class="nav-icon">🏆</span>
       <span>Stata</span>
     </button>
     <button class="nav-item" data-tab="tab-rules">
       <span class="nav-icon">📜</span>
       <span>Qoidalar</span>
     </button>
-    <button class="nav-item" data-tab="tab-commands">
-      <span class="nav-icon">📋</span>
-      <span>Buyruq</span>
+    <button class="nav-item" data-tab="tab-groups">
+      <span class="nav-icon">👥</span>
+      <span>Guruhlar</span>
+    </button>
+    <button class="nav-item" data-tab="tab-manager" id="bottomNavItemManager" style="display: none;">
+      <span class="nav-icon">👑</span>
+      <span>Boshqaruv</span>
     </button>
   </nav>
 
-  <!-- Toast Notification Box -->
-  <div id="toast" class="toast">
-    <span id="toastIcon">✅</span>
-    <span id="toastMsg">Amal bajarildi</span>
-  </div>
-
+  <!-- =================================================================== -->
+  <!-- LIQUID JAVASCRIPT ENGINE (OPTIMISTIC, ZERO-LAG, HAPTICS) -->
+  <!-- =================================================================== -->
   <script>
-    // Initialize Telegram WebApp
+    // 1. Telegram WebApp Initialization
     const tg = window.Telegram?.WebApp;
     if (tg) {
+      tg.ready();
+      tg.expand();
       try {
-        tg.ready();
-        tg.expand();
-        tg.enableClosingConfirmation();
-      } catch (e) {
-        console.warn("Telegram WebApp init:", e);
-      }
-    }
-
-    // Set User Profile from Telegram & Detect Owner
-    const tgUser = tg?.initDataUnsafe?.user;
-    const urlParams = new URLSearchParams(window.location.search);
-    const currentUserId = (tgUser && tgUser.id) ? tgUser.id : (urlParams.get('user_id') ? parseInt(urlParams.get('user_id'), 10) : null);
-    const currentUsername = (tgUser && tgUser.username) ? tgUser.username.toLowerCase() : '';
-    const BOT_OWNER_IDS = [8594505572, 7690283463];
-    const isOwner = BOT_OWNER_IDS.includes(Number(currentUserId)) || ['khojayev_ramz', 'wdablyu'].includes(currentUsername);
-
-    if (isOwner) {
-      const mgrNav = document.getElementById('navItemManager');
-      if (mgrNav) mgrNav.style.display = 'inline-flex';
-      const btmMgrNav = document.getElementById('bottomNavItemManager');
-      if (btmMgrNav) btmMgrNav.style.display = 'flex';
-    }
-
-    if (tgUser) {
-      document.getElementById('userName').textContent = tgUser.first_name || tgUser.username || "Admin";
-      const initial = (tgUser.first_name || tgUser.username || "A").charAt(0).toUpperCase();
-      document.getElementById('userAvatar').textContent = initial;
-    }
-
-    // Haptic Feedback Helper
-    function haptic(type = 'light') {
-      try {
-        if (tg?.HapticFeedback) {
-          if (type === 'success' || type === 'error' || type === 'warning') {
-            tg.HapticFeedback.notificationOccurred(type);
-          } else {
-            tg.HapticFeedback.impactOccurred(type);
-          }
-        }
+        if (tg.enableClosingConfirmation) tg.enableClosingConfirmation();
+        if (tg.setHeaderColor) tg.setHeaderColor('#060911');
+        if (tg.setBackgroundColor) tg.setBackgroundColor('#060911');
       } catch (e) {}
     }
 
-    // Toast Notification Helper
-    function showToast(msg, icon = '✅') {
-      const toast = document.getElementById('toast');
-      document.getElementById('toastMsg').textContent = msg;
-      document.getElementById('toastIcon').textContent = icon;
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 2600);
+    // Haptic Feedback Engine
+    function haptic(type = 'light') {
+      try {
+        if (!tg || !tg.HapticFeedback) return;
+        if (type === 'light') tg.HapticFeedback.impactOccurred('light');
+        else if (type === 'medium') tg.HapticFeedback.impactOccurred('medium');
+        else if (type === 'heavy') tg.HapticFeedback.impactOccurred('heavy');
+        else if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+        else if (type === 'warning') tg.HapticFeedback.notificationOccurred('warning');
+        else if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
+        else if (type === 'selection') tg.HapticFeedback.selectionChanged();
+      } catch (e) {}
     }
 
-    // Copy to clipboard
-    function copyCommand(cmd) {
-      haptic('light');
-      navigator.clipboard.writeText(cmd).then(() => {
-        showToast("Nusxalandi: " + cmd, "📋");
-      }).catch(() => {
-        showToast("Nusxa olindi", "📋");
-      });
+    // Floating Toast Notification
+    let toastTimeout = null;
+    function showToast(msg, icon = '✨') {
+      const toastEl = document.getElementById('toast');
+      const msgEl = document.getElementById('toastMsg');
+      const iconEl = document.getElementById('toastIcon');
+      if (!toastEl || !msgEl || !iconEl) return;
+
+      msgEl.textContent = msg;
+      iconEl.textContent = icon;
+      toastEl.classList.add('show');
+
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toastEl.classList.remove('show');
+      }, 2400);
     }
 
-    // Unified Tab Switching Function (Both PC Desktop Top Nav & Mobile Bottom Nav)
-    function switchTab(tabId) {
-      document.querySelectorAll('.desktop-nav-item, .nav-item').forEach(btn => {
-        if (btn.getAttribute('data-tab') === tabId) {
-          btn.classList.add('active');
-        } else {
-          btn.classList.remove('active');
-        }
-      });
-
-      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-      const target = document.getElementById(tabId);
-      if (target) {
-        target.classList.add('active');
+    // Copy to clipboard with haptics
+    function copyCommand(text) {
+      haptic('medium');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
       }
+      showToast(`"${text}" nusxalandi!`, '📋');
+    }
+
+    // State Variables
+    const urlParams = new URLSearchParams(window.location.search);
+    let currentChatId = urlParams.get('chat_id');
+    const initialChatId = currentChatId;
+    let groupsList = [];
+    let currentSettings = {};
+    let activeCensorSeconds = 15;
+    let activeFloodSeconds = 900;
+
+    // Telegram User info
+    let currentUserId = null;
+    if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+      const u = tg.initDataUnsafe.user;
+      currentUserId = u.id;
+      document.getElementById('userName').textContent = u.first_name || (u.username ? '@' + u.username : 'Foydalanuvchi');
+      if (u.first_name) {
+        document.getElementById('userAvatar').textContent = u.first_name.charAt(0).toUpperCase();
+      }
+    } else {
+      const testUid = urlParams.get('user_id');
+      if (testUid) currentUserId = parseInt(testUid, 10);
+    }
+
+    // Check Bot Owner for Manager Tab
+    const BOT_OWNER_IDS = [8594505572, 7690283463];
+    if (currentUserId && BOT_OWNER_IDS.includes(currentUserId)) {
+      const dt = document.getElementById('navItemManager');
+      const bt = document.getElementById('bottomNavItemManager');
+      if (dt) dt.style.display = 'flex';
+      if (bt) bt.style.display = 'flex';
+    }
+
+    // Tab Switching with Animation
+    function switchTab(tabId) {
+      haptic('selection');
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.desktop-nav-item').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+
+      const targetPane = document.getElementById(tabId);
+      if (targetPane) targetPane.classList.add('active');
+
+      const dBtn = document.querySelector(`.desktop-nav-item[data-tab="${tabId}"]`);
+      if (dBtn) dBtn.classList.add('active');
+
+      const mBtn = document.querySelector(`.nav-item[data-tab="${tabId}"]`);
+      if (mBtn) mBtn.classList.add('active');
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
 
       if (tabId === 'tab-manager') {
         loadManagerOverview();
       }
     }
 
-    document.querySelectorAll('.desktop-nav-item, .nav-item').forEach(btn => {
+    // Bind Tab Click Handlers
+    document.querySelectorAll('[data-tab]').forEach(btn => {
       btn.addEventListener('click', () => {
-        haptic('light');
-        const tabId = btn.getAttribute('data-tab');
-        switchTab(tabId);
+        const tab = btn.getAttribute('data-tab');
+        if (tab) switchTab(tab);
       });
     });
 
-    // Add To Group Button
-    document.getElementById('btnAddGroup').addEventListener('click', () => {
-      haptic('medium');
-      const addUrl = "https://t.me/oken_sherda_bot?startgroup=true";
-      if (tg?.openTelegramLink) {
-        tg.openTelegramLink(addUrl);
-      } else {
-        window.open(addUrl, '_blank');
-      }
-    });
-
-    // State Variables
-    let currentChatId = null;
-    let groupsList = [];
-    let currentSettings = {};
-
-    // Parse URL query parameter for pre-selected chat_id
-    const initialChatId = urlParams.get('chat_id');
-
-    // Preset & Custom Time Handlers (from seconds to years)
-    let activeCensorSeconds = 15;
-    let activeFloodSeconds = 900;
-
-    function formatDurationUz(seconds) {
-      const sec = parseInt(seconds, 10);
-      if (isNaN(sec) || sec <= 0) return "0 soniya";
-      if (sec < 60) return `${sec} soniya`;
-      if (sec < 3600) return `${Math.floor(sec / 60)} daqiqa`;
-      if (sec < 86400) return `${Math.floor(sec / 3600)} soat`;
-      if (sec < 604800) return `${Math.floor(sec / 86400)} kun`;
-      if (sec < 2592000) return `${Math.floor(sec / 604800)} hafta`;
-      if (sec < 31536000) return `${Math.floor(sec / 2592000)} oy`;
-      return `${Math.floor(sec / 31536000)} yil`;
+    // Time Formatters
+    function formatDurationUz(sec) {
+      if (sec < 60) return sec + " soniya";
+      if (sec < 3600) return Math.floor(sec / 60) + " daqiqa";
+      if (sec < 86400) return Math.floor(sec / 3600) + " soat";
+      if (sec < 604800) return Math.floor(sec / 86400) + " kun";
+      return Math.floor(sec / 604800) + " hafta";
     }
 
-    function decomposeSeconds(seconds) {
-      const sec = parseInt(seconds, 10);
-      if (isNaN(sec) || sec <= 0) return { val: 15, unit: 1 };
-      if (sec % 31536000 === 0) return { val: sec / 31536000, unit: 31536000 };
-      if (sec % 2592000 === 0) return { val: sec / 2592000, unit: 2592000 };
-      if (sec % 604800 === 0) return { val: sec / 604800, unit: 604800 };
-      if (sec % 86400 === 0) return { val: sec / 86400, unit: 86400 };
-      if (sec % 3600 === 0) return { val: sec / 3600, unit: 3600 };
-      if (sec % 60 === 0) return { val: sec / 60, unit: 60 };
+    function decomposeSeconds(sec) {
+      if (sec % 604800 === 0 && sec >= 604800) return { val: sec / 604800, unit: 604800 };
+      if (sec % 86400 === 0 && sec >= 86400) return { val: sec / 86400, unit: 86400 };
+      if (sec % 3600 === 0 && sec >= 3600) return { val: sec / 3600, unit: 3600 };
+      if (sec % 60 === 0 && sec >= 60) return { val: sec / 60, unit: 60 };
       return { val: sec, unit: 1 };
     }
 
@@ -2003,11 +2217,7 @@
       const container = document.getElementById('censorMutePresets');
       if (container) {
         container.querySelectorAll('.preset-btn').forEach(btn => {
-          if (parseInt(btn.getAttribute('data-sec'), 10) === sec) {
-            btn.classList.add('active');
-          } else {
-            btn.classList.remove('active');
-          }
+          btn.classList.toggle('active', parseInt(btn.getAttribute('data-sec'), 10) === sec);
         });
       }
     }
@@ -2025,17 +2235,14 @@
       const container = document.getElementById('floodMutePresets');
       if (container) {
         container.querySelectorAll('.preset-btn').forEach(btn => {
-          if (parseInt(btn.getAttribute('data-sec'), 10) === sec) {
-            btn.classList.add('active');
-          } else {
-            btn.classList.remove('active');
-          }
+          btn.classList.toggle('active', parseInt(btn.getAttribute('data-sec'), 10) === sec);
         });
       }
     }
 
     function setupPresetButtons(containerId, onSelect) {
       const container = document.getElementById(containerId);
+      if (!container) return;
       container.querySelectorAll('.preset-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           haptic('light');
@@ -2047,56 +2254,43 @@
       });
     }
 
-    setupPresetButtons('censorMutePresets', (sec) => {
-      updateCensorDisplay(sec);
-    });
-
-    setupPresetButtons('floodMutePresets', (sec) => {
-      updateFloodDisplay(sec);
-    });
+    setupPresetButtons('censorMutePresets', (sec) => updateCensorDisplay(sec));
+    setupPresetButtons('floodMutePresets', (sec) => updateFloodDisplay(sec));
 
     // Custom time input listeners
-    document.getElementById('inputCensorCustomVal').addEventListener('input', () => {
+    document.getElementById('inputCensorCustomVal')?.addEventListener('input', () => {
       const val = parseInt(document.getElementById('inputCensorCustomVal').value, 10);
       const unit = parseInt(document.getElementById('selectCensorCustomUnit').value, 10);
-      if (!isNaN(val) && val > 0) {
-        updateCensorDisplay(val * unit);
-      }
+      if (!isNaN(val) && val > 0) updateCensorDisplay(val * unit);
     });
-    document.getElementById('selectCensorCustomUnit').addEventListener('change', () => {
+    document.getElementById('selectCensorCustomUnit')?.addEventListener('change', () => {
       const val = parseInt(document.getElementById('inputCensorCustomVal').value, 10);
       const unit = parseInt(document.getElementById('selectCensorCustomUnit').value, 10);
-      if (!isNaN(val) && val > 0) {
-        updateCensorDisplay(val * unit);
-      }
+      if (!isNaN(val) && val > 0) updateCensorDisplay(val * unit);
     });
 
-    document.getElementById('inputFloodCustomVal').addEventListener('input', () => {
+    document.getElementById('inputFloodCustomVal')?.addEventListener('input', () => {
       const val = parseInt(document.getElementById('inputFloodCustomVal').value, 10);
       const unit = parseInt(document.getElementById('selectFloodCustomUnit').value, 10);
-      if (!isNaN(val) && val > 0) {
-        updateFloodDisplay(val * unit);
-      }
+      if (!isNaN(val) && val > 0) updateFloodDisplay(val * unit);
     });
-    document.getElementById('selectFloodCustomUnit').addEventListener('change', () => {
+    document.getElementById('selectFloodCustomUnit')?.addEventListener('change', () => {
       const val = parseInt(document.getElementById('inputFloodCustomVal').value, 10);
       const unit = parseInt(document.getElementById('selectFloodCustomUnit').value, 10);
-      if (!isNaN(val) && val > 0) {
-        updateFloodDisplay(val * unit);
-      }
+      if (!isNaN(val) && val > 0) updateFloodDisplay(val * unit);
     });
 
     // Validation helper
     function requireCurrentChat() {
       if (!currentChatId) {
-        showToast("Avval ➕ tugmasi orqali botni guruhingizga qo'shing va tanlang!", "⚠️");
+        showToast("Avval botni guruhingizga qo'shing va tanlang!", "⚠️");
         haptic('warning');
         return false;
       }
       return true;
     }
 
-    // Helper to send API requests trying direct path first, then /gradio_api
+    // High-performance API Fetch with fallback routes
     const RENDER_BACKEND_URL = "https://film-ai-finder-bot-uc34.onrender.com";
     const explicitBackend = urlParams.get('backend');
 
@@ -2115,19 +2309,14 @@
         candidates.push(`${cleanBackend}/gradio_api${fullPath}`);
       }
 
-      // 1. Agar sahifa backendning o'zida ochilgan bo'lsa (Render), darhol nisbiy yo'l (instant & xatosiz!)
       if (!window.location.hostname.includes("static.hf.space") && window.location.protocol !== "file:") {
         candidates.push(fullPath);
         candidates.push('/gradio_api' + fullPath);
       }
 
-      // 2. Render 24/7 bulutli backend manzili
       candidates.push(`${RENDER_BACKEND_URL}${fullPath}`);
       candidates.push(`${RENDER_BACKEND_URL}/gradio_api${fullPath}`);
-
-      // 3. Zaxira nisbiy yo'llar
       candidates.push(fullPath);
-      candidates.push('/gradio_api' + fullPath);
 
       let lastError = null;
       for (const targetUrl of candidates) {
@@ -2166,7 +2355,7 @@
       }
     }
 
-    // Render Groups Cards in "Qo'shilgan Guruhlar" tab
+    // Render Groups Cards
     function renderGroupsCards() {
       const container = document.getElementById('groupsCardsContainer');
       if (!container) return;
@@ -2174,16 +2363,13 @@
 
       if (!groupsList || groupsList.length === 0) {
         container.innerHTML = `
-          <div class="groups-empty-state">
-            <div class="groups-empty-icon">👥</div>
-            <div class="groups-empty-title">Hozircha hech qanday guruh qo'shilmagan</div>
-            <p class="groups-empty-desc">
+          <div style="text-align: center; padding: 32px 16px;">
+            <div style="font-size: 40px; margin-bottom: 12px;">👥</div>
+            <div style="font-size: 15px; font-weight: 800; color: #fff;">Hozircha hech qanday guruh qo'shilmagan</div>
+            <p style="font-size: 12.5px; color: var(--text-sub); margin: 8px auto 18px; max-width: 380px; line-height: 1.5;">
               Botni o'z guruhingizga qo'shing va administrator huquqini bering.
               Shunda guruhingiz bu yerda paydo bo'ladi va barcha qoidalarni 100% o'zingizga moslaysiz!
             </p>
-            <button class="btn-add-group" onclick="document.getElementById('btnAddGroup').click()" style="max-width: 320px; margin: 0 auto;">
-              <span>➕ Botni Guruhingizga Qo'shish</span>
-            </button>
           </div>
         `;
         return;
@@ -2204,15 +2390,15 @@
               </div>
             </div>
 
-            <div class="group-card-badges">
+            <div class="group-card-badges" style="margin-top: 10px;">
               <span class="group-badge ${g.is_bot_enabled ? 'active' : 'inactive'}">
-                ${g.is_bot_enabled ? '🟢 Bot Faol' : '🔴 Bot O\'chirilgan'}
+                ${g.is_bot_enabled ? '🟢 Bot Faol' : '🔴 Bot O'chirilgan'}
               </span>
               <span class="group-badge ${g.is_censor_enabled ? 'active' : ''}">
-                ${g.is_censor_enabled ? '🤬 So\'kinish: Faol' : '🤬 So\'kinish: O\'chiq'}
+                ${g.is_censor_enabled ? '🤬 So'kinish: Faol' : '🤬 So'kinish: O'chiq'}
               </span>
               <span class="group-badge ${g.is_game_enabled !== false ? 'active' : 'inactive'}">
-                ${g.is_game_enabled !== false ? '🎮 O\'yin: Faol' : '🛑 O\'yin: O\'chiq'}
+                ${g.is_game_enabled !== false ? '🎮 O'yin: Faol' : '🛑 O'yin: O'chiq'}
               </span>
               <span class="group-badge">
                 💬 ${g.msg_count_24h || 0} xabar / 24h
@@ -2250,10 +2436,11 @@
     // Render Groups Dropdown
     function renderGroupsDropdown() {
       const select = document.getElementById('groupSelect');
+      if (!select) return;
       select.innerHTML = '';
 
       if (groupsList.length === 0) {
-        select.innerHTML = '<option value="">⚠️ Guruh topilmadi — Avval ➕ tugmasi orqali botni guruhingizga qo\'shing!</option>';
+        select.innerHTML = '<option value="">⚠️ Guruh topilmadi</option>';
         currentChatId = null;
         updateActiveGroupBanner();
         return;
@@ -2266,7 +2453,6 @@
         select.appendChild(opt);
       });
 
-      // Select initial chat_id if matched
       if (initialChatId && groupsList.some(g => String(g.chat_id) === String(initialChatId))) {
         select.value = initialChatId;
       }
@@ -2278,23 +2464,12 @@
       }
     }
 
-    // Fetch Groups List
+    // Load Groups
     async function loadGroups(retryCount = 0) {
       if (window.__INITIAL_GROUPS__ && Array.isArray(window.__INITIAL_GROUPS__) && window.__INITIAL_GROUPS__.length > 0) {
         groupsList = window.__INITIAL_GROUPS__;
         renderGroupsDropdown();
         renderGroupsCards();
-      }
-
-      const container = document.getElementById('groupsCardsContainer');
-      if (groupsList.length === 0 && container && retryCount === 0) {
-        container.innerHTML = `
-          <div class="groups-empty-state" style="padding: 30px 10px;">
-            <div style="font-size: 32px; animation: spin 1s linear infinite; display: inline-block;">⏳</div>
-            <div class="groups-empty-title" style="margin-top: 10px;">Guruhlar yuklanmoqda...</div>
-            <p class="groups-empty-desc">Server bilan xavfsiz aloqa o'rnatilmoqda...</p>
-          </div>
-        `;
       }
 
       try {
@@ -2317,32 +2492,25 @@
       renderGroupsCards();
     }
 
-    // Handle Group Select Change
-    document.getElementById('groupSelect').addEventListener('change', (e) => {
+    // Banner Switch Button
+    document.getElementById('btnSwitchToGroupsTab')?.addEventListener('click', (e) => {
+      e.stopPropagation();
       haptic('light');
-      currentChatId = e.target.value;
-      updateActiveGroupBanner();
-      renderGroupsCards();
-      if (currentChatId) {
-        loadGroupDetails(currentChatId);
-      }
+      switchTab('tab-groups');
     });
-
-    // Button: Switch to Groups Tab from Banner
-    document.getElementById('btnSwitchToGroupsTab').addEventListener('click', () => {
+    document.getElementById('activeGroupBanner')?.addEventListener('click', () => {
       haptic('light');
       switchTab('tab-groups');
     });
 
-    // Button: Refresh Groups List
-    document.getElementById('btnRefreshGroups').addEventListener('click', async () => {
+    document.getElementById('btnRefreshGroups')?.addEventListener('click', async () => {
       haptic('medium');
-      showToast("Guruhlar ro'yxati yangilanmoqda...", "🔄");
+      showToast("Guruhlar yangilanmoqda...", "🔄");
       await loadGroups();
       showToast("Guruhlar yangilandi!", "✅");
     });
 
-    // Fetch Selected Group Details
+    // Load Selected Group Details
     async function loadGroupDetails(chatId) {
       try {
         const res = await apiFetch(`/api/group/${chatId}`);
@@ -2354,6 +2522,7 @@
         
         // Update General Toggles
         document.getElementById('toggleBotStatus').checked = !!g.is_bot_enabled;
+        updateHeroStatus(!!g.is_bot_enabled);
         document.getElementById('toggleCensor').checked = !!g.is_censor_enabled;
         document.getElementById('toggleStats').checked = !!g.is_stats_enabled;
         document.getElementById('toggleStatsPublic').checked = !!g.is_stats_public;
@@ -2385,8 +2554,9 @@
         // Render Prank Users
         renderPrankUsers(g.prank_users || []);
 
-        // Render Leaderboard
+        // Render Leaderboards
         renderLeaderboard(g.stats?.top_users || []);
+        renderGameLeaderboard(g.stats?.top_game_players || []);
 
         // Render Rules & Welcome
         document.getElementById('textareaRules').value = g.rules || "";
@@ -2403,23 +2573,37 @@
       }
     }
 
-    // Render Bad Words Chips
+    function updateHeroStatus(isEnabled) {
+      const orb = document.getElementById('heroStatusOrb');
+      const text = document.getElementById('heroStatusText');
+      if (!orb || !text) return;
+      if (isEnabled) {
+        orb.className = 'status-orb active';
+        text.textContent = 'BOT GURUHDA FAOL';
+      } else {
+        orb.className = 'status-orb inactive';
+        text.textContent = 'BOT TO'XTATILGAN';
+      }
+    }
+
+    // Render Bad Words
     function renderBadWords(words) {
       const container = document.getElementById('badwordsContainer');
+      if (!container) return;
       container.innerHTML = '';
       if (!words || words.length === 0) {
-        container.innerHTML = '<span style="font-size: 12px; color: var(--text-muted);">Maxsus taqiqlangan so\'zlar kiritilmagan</span>';
+        container.innerHTML = '<span style="font-size: 12px; color: var(--text-muted);">Maxsus taqiqlangan so'zlar kiritilmagan</span>';
         return;
       }
       words.forEach(w => {
         const chip = document.createElement('div');
         chip.className = 'tag-chip';
-        chip.innerHTML = `<span>${escapeHtml(w)}</span><button onclick="removeBadWord('${escapeHtml(w)}')">&times;</button>`;
+        chip.innerHTML = `<span>${escapeHtml(w)}</span><button type="button" onclick="removeBadWord('${escapeHtml(w)}')">&times;</button>`;
         container.appendChild(chip);
       });
     }
 
-    // Render Prank Users Chips
+    // Render Prank Users
     function renderPrankUsers(users) {
       const container = document.getElementById('prankUsersContainer');
       const badge = document.getElementById('prankCountBadge');
@@ -2439,17 +2623,18 @@
         chip.className = 'tag-chip';
         chip.style.borderColor = 'rgba(239, 68, 68, 0.4)';
         chip.style.background = 'rgba(239, 68, 68, 0.12)';
-        chip.innerHTML = `<span>@${escapeHtml(u)}</span><button onclick="removePrankUser('${escapeHtml(u)}')">&times;</button>`;
+        chip.innerHTML = `<span>@${escapeHtml(u)}</span><button type="button" onclick="removePrankUser('${escapeHtml(u)}')">&times;</button>`;
         container.appendChild(chip);
       });
     }
 
-    // Render Leaderboard List
+    // Render 24h Chat Activity Leaderboard
     function renderLeaderboard(topUsers) {
       const list = document.getElementById('leaderboardList');
+      if (!list) return;
       list.innerHTML = '';
       if (!topUsers || topUsers.length === 0) {
-        list.innerHTML = '<div class="glass-card" style="text-align: center; color: var(--text-muted);">So\'nggi 24 soatda faollik yo\'q</div>';
+        list.innerHTML = '<div class="glass-card" style="text-align: center; color: var(--text-muted); padding: 24px;">So'nggi 24 soatda faollik yo'q</div>';
         return;
       }
 
@@ -2477,6 +2662,64 @@
       });
     }
 
+    // Render Raqamni Top Game Champions
+    function renderGameLeaderboard(players) {
+      const list = document.getElementById('gameLeaderboardList');
+      if (!list) return;
+      list.innerHTML = '';
+      if (!players || players.length === 0) {
+        list.innerHTML = '<div class="glass-card" style="text-align: center; color: var(--text-muted); padding: 24px;">Hali hech kim o'yinda g'alaba qozonmagan</div>';
+        return;
+      }
+
+      const medals = ['🥇', '🥈', '🥉'];
+      players.forEach((p, idx) => {
+        const row = document.createElement('div');
+        row.className = 'user-rank-row';
+        const medalOrNum = idx < 3 ? medals[idx] : `#${idx + 1}`;
+        const uname = p.username ? `@${escapeHtml(p.username)}` : `ID: ${p.user_id}`;
+        
+        row.innerHTML = `
+          <div class="rank-info">
+            <div class="rank-medal">${medalOrNum}</div>
+            <div>
+              <div class="rank-user-name">${escapeHtml(p.full_name || 'O'yinchi')}</div>
+              <div class="rank-username">${uname}</div>
+            </div>
+          </div>
+          <div class="rank-count">
+            <div class="rank-msgs" style="color: #fbbf24;">${p.wins} 🏆</div>
+            <div class="rank-unit">g'alaba</div>
+          </div>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    // Stats View Segmented Toggle Handlers
+    document.getElementById('btnStatsTabChat')?.addEventListener('click', () => {
+      haptic('light');
+      document.getElementById('btnStatsTabChat').classList.add('active');
+      document.getElementById('btnStatsTabGame').classList.remove('active');
+      document.getElementById('viewStatsChat').style.display = 'block';
+      document.getElementById('viewStatsGame').style.display = 'none';
+    });
+    document.getElementById('btnStatsTabGame')?.addEventListener('click', () => {
+      haptic('light');
+      document.getElementById('btnStatsTabGame').classList.add('active');
+      document.getElementById('btnStatsTabChat').classList.remove('active');
+      document.getElementById('viewStatsChat').style.display = 'none';
+      document.getElementById('viewStatsGame').style.display = 'block';
+    });
+
+    document.getElementById('btnRefreshStats')?.addEventListener('click', async () => {
+      if (!requireCurrentChat()) return;
+      haptic('medium');
+      showToast("Statistika yangilanmoqda...", "🔄");
+      await loadGroupDetails(currentChatId);
+      showToast("Statistika yangilandi!", "✅");
+    });
+
     // Escape HTML helper
     function escapeHtml(text) {
       const div = document.createElement('div');
@@ -2484,46 +2727,50 @@
       return div.innerHTML;
     }
 
-    // Toggle Handlers
-    document.getElementById('toggleBotStatus').addEventListener('change', async (e) => {
+    // OPTIMISTIC ZERO-LATENCY TOGGLES
+    document.getElementById('toggleBotStatus')?.addEventListener('change', async (e) => {
       if (!requireCurrentChat()) {
         e.target.checked = !e.target.checked;
         return;
       }
       haptic('medium');
       const enabled = e.target.checked;
+      updateHeroStatus(enabled);
+      showToast(enabled ? "Bot guruhda yoqildi!" : "Bot to'xtatildi!", enabled ? "🟢" : "🔴");
       try {
         await apiFetch(`/api/group/${currentChatId}/toggle_bot`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ enabled })
         });
-        showToast(enabled ? "Bot guruhingizda yoqildi!" : "Bot guruhingizda o'chirildi!", enabled ? "🟢" : "🔴");
       } catch (err) {
+        e.target.checked = !enabled;
+        updateHeroStatus(!enabled);
         showToast("Xatolik yuz berdi", "❌");
       }
     });
 
-    document.getElementById('toggleCensor').addEventListener('change', async (e) => {
+    document.getElementById('toggleCensor')?.addEventListener('change', async (e) => {
       if (!requireCurrentChat()) {
         e.target.checked = !e.target.checked;
         return;
       }
       haptic('light');
       const enabled = e.target.checked;
+      showToast(enabled ? "So'kinish filtri yoqildi" : "So'kinish filtri o'chirildi");
       try {
         await apiFetch(`/api/group/${currentChatId}/toggle_censor`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ enabled })
         });
-        showToast(enabled ? "So'kinish filtri yoqildi" : "So'kinish filtri o'chirildi");
       } catch (err) {
+        e.target.checked = !enabled;
         showToast("Xatolik yuz berdi", "❌");
       }
     });
 
-    document.getElementById('toggleLinkFilter').addEventListener('change', async (e) => {
+    document.getElementById('toggleLinkFilter')?.addEventListener('change', async (e) => {
       if (!requireCurrentChat()) {
         e.target.checked = !e.target.checked;
         return;
@@ -2533,7 +2780,7 @@
       await savePartialSetting({ link_filter_enabled: enabled }, "Reklama filtri saqlandi!");
     });
 
-    document.getElementById('toggleWelcome').addEventListener('change', async (e) => {
+    document.getElementById('toggleWelcome')?.addEventListener('change', async (e) => {
       if (!requireCurrentChat()) {
         e.target.checked = !e.target.checked;
         return;
@@ -2543,59 +2790,62 @@
       await savePartialSetting({ welcome_enabled: enabled }, "Salomlashish sozlamasi saqlandi!");
     });
 
-    document.getElementById('toggleStats').addEventListener('change', async (e) => {
+    document.getElementById('toggleStats')?.addEventListener('change', async (e) => {
       if (!requireCurrentChat()) {
         e.target.checked = !e.target.checked;
         return;
       }
       haptic('light');
       const enabled = e.target.checked;
+      showToast(enabled ? "Guruh statistikasi yoqildi" : "Guruh statistikasi o'chirildi");
       try {
         await apiFetch(`/api/group/${currentChatId}/toggle_stats`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ enabled })
         });
-        showToast(enabled ? "Guruh statistikasi yoqildi" : "Guruh statistikasi o'chirildi");
       } catch (err) {
+        e.target.checked = !enabled;
         showToast("Xatolik yuz berdi", "❌");
       }
     });
 
-    document.getElementById('toggleStatsPublic').addEventListener('change', async (e) => {
+    document.getElementById('toggleStatsPublic')?.addEventListener('change', async (e) => {
       if (!requireCurrentChat()) {
         e.target.checked = !e.target.checked;
         return;
       }
       haptic('light');
       const is_public = e.target.checked;
+      showToast(is_public ? "Stata barcha a'zolarga ko'rinadi" : "Stata faqat adminlarga ko'rinadi");
       try {
         await apiFetch(`/api/group/${currentChatId}/set_stats_public`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ is_public })
         });
-        showToast(is_public ? "Stata barcha a'zolarga ko'rinadi" : "Stata faqat adminlarga ko'rinadi");
       } catch (err) {
+        e.target.checked = !is_public;
         showToast("Xatolik yuz berdi", "❌");
       }
     });
 
-    document.getElementById('toggleGameStatus').addEventListener('change', async (e) => {
+    document.getElementById('toggleGameStatus')?.addEventListener('change', async (e) => {
       if (!requireCurrentChat()) {
         e.target.checked = !e.target.checked;
         return;
       }
       haptic('light');
       const enabled = e.target.checked;
+      showToast(enabled ? "«Raqamni Top» o'yin rejimi yoqildi!" : "«Raqamni Top» o'yin rejimi o'chirildi!", enabled ? "🎯" : "🛑");
       try {
         await apiFetch(`/api/group/${currentChatId}/toggle_game`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ enabled })
         });
-        showToast(enabled ? "«Raqamni Top» o‘yin rejimi yoqildi!" : "«Raqamni Top» o‘yin rejimi o‘chirildi!", enabled ? "🎮" : "🛑");
       } catch (err) {
+        e.target.checked = !enabled;
         showToast("Xatolik yuz berdi", "❌");
       }
     });
@@ -2622,7 +2872,7 @@
     }
 
     // Save Punishments & Times
-    document.getElementById('btnSavePunishments').addEventListener('click', async () => {
+    document.getElementById('btnSavePunishments')?.addEventListener('click', async () => {
       if (!requireCurrentChat()) return;
       haptic('success');
 
@@ -2643,7 +2893,7 @@
     });
 
     // Save Flood Limits
-    document.getElementById('btnSaveFloodLimits').addEventListener('click', async () => {
+    document.getElementById('btnSaveFloodLimits')?.addEventListener('click', async () => {
       if (!requireCurrentChat()) return;
       haptic('success');
 
@@ -2661,7 +2911,7 @@
     });
 
     // Add Bad Word
-    document.getElementById('btnAddBadWord').addEventListener('click', async () => {
+    document.getElementById('btnAddBadWord')?.addEventListener('click', async () => {
       if (!requireCurrentChat()) return;
       haptic('medium');
       const input = document.getElementById('inputNewBadWord');
@@ -2683,14 +2933,10 @@
       }
     });
 
-    // Handle Enter key on Bad Word Input
-    document.getElementById('inputNewBadWord').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        document.getElementById('btnAddBadWord').click();
-      }
+    document.getElementById('inputNewBadWord')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('btnAddBadWord')?.click();
     });
 
-    // Remove Bad Word
     window.removeBadWord = async function(word) {
       if (!requireCurrentChat()) return;
       haptic('light');
@@ -2709,7 +2955,7 @@
     };
 
     // Add Prank User
-    document.getElementById('btnAddPrankUser').addEventListener('click', async () => {
+    document.getElementById('btnAddPrankUser')?.addEventListener('click', async () => {
       if (!requireCurrentChat()) return;
       haptic('medium');
       const input = document.getElementById('inputNewPrankUser');
@@ -2735,14 +2981,10 @@
       }
     });
 
-    // Handle Enter key on Prank User Input
-    document.getElementById('inputNewPrankUser').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        document.getElementById('btnAddPrankUser').click();
-      }
+    document.getElementById('inputNewPrankUser')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('btnAddPrankUser')?.click();
     });
 
-    // Remove Prank User
     window.removePrankUser = async function(username) {
       if (!requireCurrentChat()) return;
       haptic('light');
@@ -2760,170 +3002,143 @@
       }
     };
 
-
-    // Refresh Stats Button
-    document.getElementById('btnRefreshStats').addEventListener('click', () => {
-      if (!requireCurrentChat()) return;
-      haptic('light');
-      loadGroupDetails(currentChatId);
-      showToast("Statistika yangilandi!", "🔄");
-    });
-
-    // Save Rules Button
-    document.getElementById('btnSaveRules').addEventListener('click', async () => {
+    // Save Rules
+    document.getElementById('btnSaveRules')?.addEventListener('click', async () => {
       if (!requireCurrentChat()) return;
       haptic('success');
-      const rules_text = document.getElementById('textareaRules').value;
+      const rules = document.getElementById('textareaRules').value.trim();
       try {
-        await apiFetch(`/api/group/${currentChatId}/rules`, {
+        const res = await apiFetch(`/api/group/${currentChatId}/rules`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rules: rules_text })
+          body: JSON.stringify({ rules })
         });
-        showToast("Guruh qoidalari saqlandi!", "💾");
+        const data = await res.json();
+        if (data.ok) {
+          showToast("Guruh qoidalari muvaffaqiyatli saqlandi!", "📜");
+        } else {
+          showToast("Xatolik yuz berdi", "❌");
+        }
       } catch (err) {
         showToast("Saqlashda xatolik", "❌");
       }
     });
 
+    // Save Welcome Message
+    document.getElementById('btnSaveWelcome')?.addEventListener('click', async () => {
+      if (!requireCurrentChat()) return;
+      haptic('success');
+      const text = document.getElementById('textareaWelcome').value.trim();
+      await savePartialSetting({ welcome_text: text }, "Salomlashish matni saqlandi!");
+    });
+
     // Welcome Templates
-    const TPL_SERIOUS = `✨ <b>Xush kelibsiz, {mention}!</b>\n\nHurmatli ishtirokchi, <b>«{title}»</b> jamoasiga qo‘shilganingizdan mamnunmiz!\n\n<blockquote>🤝 <b>Guruh tartib-qoidalari:</b>\n• O‘zaro hurmat va madaniyatli muloqot;\n• Reklama, haqorat va keraksiz spamlardan tiyilish;\n• Mavzuga doir mazmunli va foydali suhbatlar.</blockquote>\n\n<i>Sizga guruhimizda maroqli va samarali vaqt tilaymiz!</i>`;
+    const TPL_SERIOUS = "👑 Assalomu alaykum, {mention}!
 
-    const TPL_FRIENDLY = `👋 <b>Assalomu alaykum va xush kelibsiz, {mention}!</b>\n\nBizning ahil <b>«{title}»</b> oilamizga xush kelibsiz! Guruhimizda sizni ko‘rganimizdan bag‘oyat xursandmiz.\n\n<blockquote>💡 <i>Guruhimizda o‘zaro samimiyat, do‘stona muhit va qiziqarli suhbatlar hukm suradi. O‘z fikrlaringiz bilan faol qatnashing!</i></blockquote>\n\nDoimo kayfiyatingiz a'lo bo‘lsin! 😊`;
+«{title}» nufuzli jamoasiga xush kelibsiz.
+Siz guruhimizning {count}-a'zosi bo'ldingiz.
 
-    const TPL_BUSINESS = `👔 <b>Xush kelibsiz, {mention}!</b>\n\nSiz <b>«{title}»</b> professional hamjamiyatiga muvaffaqiyatli qo‘shildingiz.\n\n<blockquote>📊 <b>Asosiy mezonlar:</b>\n• Faqat sohaviy va professional muloqot;\n• Spam, self-promo va o‘rinsiz havolalar man etiladi;\n• Fikrlar almashish va tajriba ulashish mamnuniyat bilan qabul qilinadi.</blockquote>\n\n<i>Karyerangiz va faoliyatingizda ulkan yutuqlar tilaymiz!</i>`;
+Iltimos, guruh qoidalariga rioya qiling. Maroqli suhbat tilaymiz!";
+    const TPL_FRIENDLY = "✨ Salom, {name}! 🎉
+
+Bizning do'stona «{title}» oilamizga xush kelibsiz!
+Biz bilan bo'lganingizdan xursandmiz. Bemalol suhbatga qo'shiling!";
+    const TPL_BUSINESS = "💼 Xush kelibsiz, {mention}!
+
+«{title}» biznes va professionallar hamjamiyatiga xush kelibsiz.
+Foydali tanishuvlar va samarali hamkorlik tilaymiz.";
+
+    document.getElementById('btnTplSerious')?.addEventListener('click', () => {
+      haptic('light');
+      document.getElementById('textareaWelcome').value = TPL_SERIOUS;
+      updateWelcomeLivePreview();
+      showToast("Jiddiy shablon tanlandi!");
+    });
+    document.getElementById('btnTplFriendly')?.addEventListener('click', () => {
+      haptic('light');
+      document.getElementById('textareaWelcome').value = TPL_FRIENDLY;
+      updateWelcomeLivePreview();
+      showToast("Samimiy shablon tanlandi!");
+    });
+    document.getElementById('btnTplBusiness')?.addEventListener('click', () => {
+      haptic('light');
+      document.getElementById('textareaWelcome').value = TPL_BUSINESS;
+      updateWelcomeLivePreview();
+      showToast("Biznes shabloni tanlandi!");
+    });
 
     function updateWelcomeLivePreview() {
       const textarea = document.getElementById('textareaWelcome');
       const preview = document.getElementById('welcomeLivePreview');
       if (!textarea || !preview) return;
-
-      const currentTitle = (groupsList && groupsList.find(g => String(g.chat_id) === String(currentChatId))?.title) || 'Bizning Guruh';
-      let raw = textarea.value || TPL_SERIOUS;
-
-      // Replace placeholders for preview
-      raw = raw.replace(/{mention}/g, '<span style="color: #38bdf8; font-weight: 700; text-decoration: underline;">Azizbek Karimov</span>');
-      raw = raw.replace(/{name}/g, '<span style="font-weight: 700;">Azizbek Karimov</span>');
-      raw = raw.replace(/{first_name}/g, 'Azizbek');
-      raw = raw.replace(/{username}/g, '<span style="color: #38bdf8;">@azizbek</span>');
-      raw = raw.replace(/{id}|{user_id}/g, '<code>12345678</code>');
-      raw = raw.replace(/{title}|{chat_title}/g, `<b>«${escapeHtml(currentTitle)}»</b>`);
-      raw = raw.replace(/{count}|{members_count}/g, '<b style="color: #34d399;">1 450</b>');
-      raw = raw.replace(/{rules}/g, 'O‘zaro hurmat va tartib-intizom.');
-
-      // Convert blockquote tags into styled boxes
-      raw = raw.replace(/<blockquote>([\s\S]*?)<\/blockquote>/gi, (match, p1) => {
-        return `<div style="border-left: 3px solid #38bdf8; background: rgba(56,189,248,0.1); padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 13px;">${p1}</div>`;
-      });
-
-      // Convert newlines to br
-      raw = raw.replace(/\n/g, '<br>');
-
-      // Add mockup buttons below preview
-      const previewButtons = `
-        <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
-          <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 4px;">
-            📜 Guruh Qoidalari
-          </div>
-          <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 700; color: #94a3b8; display: flex; align-items: center; gap: 4px;">
-            🔗 Guruh Silkasi
-          </div>
-        </div>
-      `;
-
-      preview.innerHTML = raw + previewButtons;
+      let text = textarea.value;
+      if (!text.trim()) {
+        preview.textContent = "Salomlashish xabari yo'q...";
+        return;
+      }
+      text = text.replace(/\{mention\}/g, "@Ramzbek")
+                 .replace(/\{name\}/g, "Ramzbek")
+                 .replace(/\{title\}/g, "Blizkiy Guruh")
+                 .replace(/\{count\}/g, "1,250");
+      preview.textContent = text;
     }
+
+    document.getElementById('textareaWelcome')?.addEventListener('input', updateWelcomeLivePreview);
 
     window.insertWelcomeTag = function(tag) {
       haptic('light');
       const textarea = document.getElementById('textareaWelcome');
       if (!textarea) return;
-
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
+      const start = textarea.selectionStart || textarea.value.length;
+      const end = textarea.selectionEnd || textarea.value.length;
       const val = textarea.value;
-
       textarea.value = val.substring(0, start) + tag + val.substring(end);
       textarea.focus();
       textarea.selectionStart = textarea.selectionEnd = start + tag.length;
       updateWelcomeLivePreview();
     };
 
-    document.getElementById('btnTplSerious')?.addEventListener('click', () => {
-      haptic('medium');
-      document.getElementById('textareaWelcome').value = TPL_SERIOUS;
-      updateWelcomeLivePreview();
-      showToast("Jiddiy & Rasmiy shablon tanlandi!", "👑");
-    });
-
-    document.getElementById('btnTplFriendly')?.addEventListener('click', () => {
-      haptic('medium');
-      document.getElementById('textareaWelcome').value = TPL_FRIENDLY;
-      updateWelcomeLivePreview();
-      showToast("Samimiy & Do'stona shablon tanlandi!", "✨");
-    });
-
-    document.getElementById('btnTplBusiness')?.addEventListener('click', () => {
-      haptic('medium');
-      document.getElementById('textareaWelcome').value = TPL_BUSINESS;
-      updateWelcomeLivePreview();
-      showToast("Biznes & IT shabloni tanlandi!", "💼");
-    });
-
-    document.getElementById('textareaWelcome')?.addEventListener('input', () => {
-      updateWelcomeLivePreview();
-    });
-
-    // Save Welcome Text Button
-    document.getElementById('btnSaveWelcome').addEventListener('click', async () => {
-      if (!requireCurrentChat()) return;
-      haptic('success');
-      const welcome_text = document.getElementById('textareaWelcome').value;
-      await savePartialSetting({ welcome_text }, "Salomlashish matni saqlandi!");
-    });
-
-    // ===================================================================
-    // BOT MANAGER DASHBOARD (SUPER-ADMIN ONLY FOR @khojayev_ramz)
-    // ===================================================================
-    let managerAllGroups = [];
-
+    // Manager Overview (Bot Owner only)
+    let allManagerGroups = [];
     async function loadManagerOverview() {
-      if (!isOwner) return;
       try {
         const res = await apiFetch('/api/manager/overview');
         const data = await res.json();
-        if (!data.ok) {
-          showToast("Boshqaruv ma'lumotlarini yuklashda xatolik", "❌");
-          return;
-        }
-        const s = data.summary || {};
-        const elTotalGroups = document.getElementById('mgrTotalGroups');
-        const elActiveGroups = document.getElementById('mgrActiveGroups');
-        const elTotalMembers = document.getElementById('mgrTotalMembers');
-        const elTotalMsgs = document.getElementById('mgrTotalMsgs');
+        if (!data.ok) return;
 
-        if (elTotalGroups) elTotalGroups.textContent = (s.total_groups || 0) + " ta";
-        if (elActiveGroups) elActiveGroups.textContent = (s.active_groups || 0) + " ta";
-        if (elTotalMembers) elTotalMembers.textContent = (s.total_members || 0).toLocaleString() + " kishi";
-        if (elTotalMsgs) elTotalMsgs.textContent = (s.total_msgs_24h || 0).toLocaleString() + " ta";
+        const sum = data.summary || {};
+        document.getElementById('mgrTotalGroups').textContent = (sum.total_groups || 0);
+        document.getElementById('mgrActiveGroups').textContent = (sum.active_groups || 0);
+        document.getElementById('mgrTotalMsgs').textContent = (sum.total_messages_24h || 0);
+        document.getElementById('mgrTotalMembers').textContent = (sum.total_members || 0);
 
-        managerAllGroups = data.groups || [];
+        allManagerGroups = data.groups || [];
         filterAndRenderManagerGroups();
       } catch (err) {
         console.error("Manager overview yuklashda xatolik:", err);
       }
     }
 
+    document.getElementById('btnRefreshManager')?.addEventListener('click', async () => {
+      haptic('medium');
+      showToast("Boshqaruv markazi yangilanmoqda...", "🔄");
+      await loadManagerOverview();
+      showToast("Yangilandi!", "✅");
+    });
+
+    document.getElementById('inputSearchManagerGroups')?.addEventListener('input', () => {
+      filterAndRenderManagerGroups();
+    });
+
     function filterAndRenderManagerGroups() {
-      const query = (document.getElementById('inputSearchManagerGroups')?.value || '').toLowerCase().trim();
-      const filtered = managerAllGroups.filter(g => {
-        if (!query) return true;
-        return (g.title && g.title.toLowerCase().includes(query)) ||
-               (g.username && g.username.toLowerCase().includes(query)) ||
-               String(g.chat_id).includes(query) ||
-               (g.added_by_name && g.added_by_name.toLowerCase().includes(query)) ||
-               (g.added_by_username && g.added_by_username.toLowerCase().includes(query));
-      });
+      const q = (document.getElementById('inputSearchManagerGroups')?.value || '').toLowerCase().trim();
+      let filtered = allManagerGroups;
+      if (q) {
+        filtered = allManagerGroups.filter(g => 
+          (g.title && g.title.toLowerCase().includes(q)) || 
+          String(g.chat_id).includes(q)
+        );
+      }
       renderManagerGroupsCards(filtered);
     }
 
@@ -2931,110 +3146,36 @@
       const container = document.getElementById('managerGroupsContainer');
       if (!container) return;
       container.innerHTML = '';
-
       if (!groups || groups.length === 0) {
-        container.innerHTML = `
-          <div class="groups-empty-state" style="padding: 28px 10px;">
-            <div class="groups-empty-icon">🔍</div>
-            <div class="groups-empty-title">Guruh topilmadi</div>
-            <p class="groups-empty-desc">Qidiruv bo'yicha mos keluvchi guruh mavjud emas.</p>
-          </div>
-        `;
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">Guruhlar topilmadi</div>';
         return;
       }
 
       groups.forEach(g => {
-        const initial = (g.title || 'G').charAt(0).toUpperCase();
         const card = document.createElement('div');
         card.className = 'group-item-card';
-        card.style.borderColor = 'rgba(245, 158, 11, 0.3)';
-
-        const linkHtml = g.invite_link ? 
-          `<a href="${escapeHtml(g.invite_link)}" target="_blank" style="color: #38bdf8; text-decoration: none; font-size: 13px; font-weight: 700; word-break: break-all;">🔗 ${escapeHtml(g.invite_link)} ↗</a>` :
-          `<span style="color: var(--text-muted); font-size: 12px;">🔒 Havola mavjud emas (Maxfiy guruh)</span>`;
-
-        const addedByText = g.added_by_name || (g.added_by_username ? `@${g.added_by_username}` : (g.added_by_user_id ? `ID: ${g.added_by_user_id}` : 'Nomaʼlum'));
-
         card.innerHTML = `
-          <div>
-            <div class="group-card-header">
-              <div class="group-card-avatar" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; font-weight: 900;">${escapeHtml(initial)}</div>
-              <div class="group-card-info">
-                <div class="group-card-title">${escapeHtml(g.title || 'Guruh')}</div>
-                <div class="group-card-id">ID: ${g.chat_id}</div>
-              </div>
+          <div class="group-card-header">
+            <div class="group-card-avatar">${(g.title || 'G').charAt(0).toUpperCase()}</div>
+            <div class="group-card-info">
+              <div class="group-card-title">${escapeHtml(g.title || 'Guruh')}</div>
+              <div class="group-card-id">ID: ${g.chat_id}</div>
             </div>
-
-            <div style="margin: 8px 0 10px; padding: 10px 12px; background: rgba(0,0,0,0.28); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
-              <div style="margin-bottom: 6px;">${linkHtml}</div>
-              <div style="font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
-                <span>👤 Qo'shgan: <strong style="color: #fff;">${escapeHtml(addedByText)}</strong></span>
-                <span>👥 A'zolar: <strong style="color: #38bdf8;">${(g.members_count || 0).toLocaleString()} ta</strong></span>
-              </div>
-            </div>
-
-            <div class="group-card-badges">
-              <span class="group-badge ${g.is_bot_enabled ? 'active' : 'inactive'}">
-                ${g.is_bot_enabled ? '🟢 Bot Faol' : '🔴 Bot O\'chirilgan'}
-              </span>
-              <span class="group-badge ${g.bot_status === 'left' ? 'inactive' : 'active'}">
-                ${g.bot_status === 'left' ? '🚫 Bot Chiqarilgan' : '🤖 ' + (g.bot_status || 'admin')}
-              </span>
-              <span class="group-badge ${g.is_censor_enabled ? 'active' : ''}">
-                ${g.is_censor_enabled ? '🤬 So\'kinish: On' : '🤬 So\'kinish: Off'}
-              </span>
-              <span class="group-badge ${g.is_game_enabled !== false ? 'active' : 'inactive'}">
-                ${g.is_game_enabled !== false ? '🎮 O\'yin: On' : '🛑 O\'yin: Off'}
-              </span>
-              <span class="group-badge">
-                💬 ${g.msg_count_24h || 0} xabar / 24h
-              </span>
-            </div>
+            <span class="group-badge ${g.is_bot_enabled ? 'active' : 'inactive'}">
+              ${g.is_bot_enabled ? '🟢 Faol' : '🔴 O'chiq'}
+            </span>
           </div>
-
-          <div style="display: flex; gap: 8px; margin-top: 12px;">
-            <button class="btn-select-group" onclick="selectAndManageGroup('${g.chat_id}')" style="flex: 1;">
-              <span>⚙️ Sozlamalar &rarr;</span>
-            </button>
-            ${g.invite_link ? `
-              <a href="${escapeHtml(g.invite_link)}" target="_blank" class="btn-copy" style="text-decoration: none; display: flex; align-items: center; justify-content: center; padding: 0 16px; font-weight: 700; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8;">
-                ↗ Guruhga
-              </a>
-            ` : ''}
+          <div style="font-size: 12px; color: var(--text-sub); display: flex; justify-content: space-between;">
+            <span>💬 24h: <b>${g.messages_24h || 0}</b> ta</span>
+            <span>👥 A'zolar: <b>${g.member_count || 0}</b></span>
           </div>
         `;
         container.appendChild(card);
       });
     }
 
-    const btnRefreshMgr = document.getElementById('btnRefreshManager');
-    if (btnRefreshMgr) {
-      btnRefreshMgr.addEventListener('click', async () => {
-        haptic('medium');
-        showToast("Manager ma'lumotlari yangilanmoqda...", "🔄");
-        await loadManagerOverview();
-        showToast("Manager ma'lumotlari yangilandi!", "✅");
-      });
-    }
-
-    const inputSearchMgr = document.getElementById('inputSearchManagerGroups');
-    if (inputSearchMgr) {
-      inputSearchMgr.addEventListener('input', () => {
-        filterAndRenderManagerGroups();
-      });
-    }
-
-    // Initialize on load
-    loadGroups().then(() => {
-      const targetTab = urlParams.get('tab');
-      if (targetTab === 'manager' && isOwner) {
-        switchTab('tab-manager');
-      } else if (targetTab === 'groups' || (!initialChatId && groupsList.length > 0)) {
-        switchTab('tab-groups');
-      } else if (initialChatId) {
-        switchTab('tab-general');
-      }
-    });
+    // INITIAL LOAD
+    loadGroups();
   </script>
 </body>
 </html>

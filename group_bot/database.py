@@ -1441,7 +1441,8 @@ def get_group_details(chat_id: int) -> dict:
         "stats": {
             "total_messages": total_msgs,
             "active_users": active_users,
-            "top_users": top_users
+            "top_users": top_users,
+            "top_game_players": get_top_game_players(chat_id)
         }
     }
 
