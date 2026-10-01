@@ -82,6 +82,19 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
                 "top_game_players": group_db.get_top_game_players(-1003834509976)
             }, headers=RESPONSE_HEADERS)
 
+        # Standby Render node (4wrf) redirection to primary (uc34)
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "")
+        if "4wrf" in render_url and norm_path in ("/webapp", "/"):
+            query_str = str(request.url.query)
+            target = "https://film-ai-finder-bot-uc34.onrender.com/webapp"
+            if query_str:
+                target += f"?{query_str}"
+            try:
+                from fastapi.responses import RedirectResponse
+                return RedirectResponse(url=target, status_code=307)
+            except Exception:
+                return JSONResponse({}, status_code=307, headers={"Location": target, **RESPONSE_HEADERS})
+
         # Mini App HTML serving
         if norm_path in ("/webapp",):
             user_id_param = request.query_params.get("user_id") or request.headers.get("X-Telegram-User-Id")

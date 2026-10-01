@@ -149,7 +149,7 @@ class PrankModeMiddleware(BaseMiddleware):
                             logger.info(f"🎭 [Prank Triggered] Chat: {chat_id}, User: {uid} (@{uname}), Mode: {mode}")
 
                             if mode == "chaos":
-                                mode = random.choice(["emoji", "ghost", "troll"])
+                                mode = random.choice(["emoji", "ghost", "mute", "troll"])
 
                             if mode == "ghost":
                                 try:
@@ -179,14 +179,17 @@ class PrankModeMiddleware(BaseMiddleware):
                                 if now - last_w > 8:
                                     self._last_warn[(chat_id, uid)] = now
                                     try:
-                                        warn_msg = await event.answer(
-                                            f"🔇 <b>{escape(event.from_user.full_name)}</b>, siz <b>Super Mute</b>dasiz!\n"
-                                            f"<i>Xabarlaringiz guruhda ko'rinmaydi.</i>",
+                                        warn_msg = await event.bot.send_message(
+                                            chat_id=chat_id,
+                                            text=(
+                                                f"🔇 <b>{escape(event.from_user.full_name)}</b>, siz <b>Super Mute</b>dasiz!\n"
+                                                f"<i>Xabarlaringiz guruhda ko'rinmaydi.</i>"
+                                            ),
                                             parse_mode="HTML"
                                         )
                                         asyncio.create_task(self._auto_delete_msg(warn_msg, 4))
-                                    except Exception:
-                                        pass
+                                    except Exception as e:
+                                        logger.warning(f"Mute warn send error: {e}")
                                 return
                             elif mode == "emoji":
                                 # Telegram guruhda 100% ruxsat berilgan emojilar ro'yxati
@@ -220,6 +223,10 @@ class PrankModeMiddleware(BaseMiddleware):
                                     await event.reply(reply_text)
                                 except Exception as e:
                                     logger.warning(f"Troll reply error: {e}")
+                                    try:
+                                        await event.bot.send_message(chat_id=chat_id, text=reply_text)
+                                    except Exception:
+                                        pass
                                 return await handler(event, data)
         except Exception as e:
             logger.exception(f"PrankModeMiddleware error: {e}")
@@ -273,14 +280,17 @@ class AdminVirtualMuteMiddleware(BaseMiddleware):
                             rem_secs = get_admin_virtual_mute_remaining(event.chat.id, uid) or 0
                             rem_text = format_duration(rem_secs) if rem_secs > 0 else "noma'lum muddat"
                             try:
-                                warn_msg = await event.answer(
-                                    f"🔇 <b>Admin {escape(event.from_user.full_name)}</b>, siz <b>Super Virtual Mute</b>dasiz!\n"
-                                    f"<i>Xabarlaringiz o'chirilmoqda. Qolgan vaqt: {rem_text}</i>",
+                                warn_msg = await event.bot.send_message(
+                                    chat_id=event.chat.id,
+                                    text=(
+                                        f"🔇 <b>Admin {escape(event.from_user.full_name)}</b>, siz <b>Super Virtual Mute</b>dasiz!\n"
+                                        f"<i>Xabarlaringiz o'chirilmoqda. Qolgan vaqt: {rem_text}</i>"
+                                    ),
                                     parse_mode="HTML"
                                 )
                                 asyncio.create_task(self._auto_delete_msg(warn_msg, 4))
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning(f"AdminVirtualMute warn send error: {e}")
                         return
         return await handler(event, data)
 

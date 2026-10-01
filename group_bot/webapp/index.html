@@ -1996,20 +1996,23 @@
           <p>Ushbu ro'yxatga kiritilgan a'zolarga (ID yoki username) maxsus rejim tayinlanadi. Xabar yozganda bot avtomatik reaksiya bosadi (Emoji Bomb) yoki xabarni darhol o'chiradi (Ghost)!</p>
         </div>
 
-        <div class="tags-container" id="prankUsersContainer">
-          <span style="font-size: 12px; color: var(--text-muted);">Hozircha hech kim kiritilmagan</span>
+        <div id="prankUsersContainer" style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 18px; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed var(--border-glass);">Hozircha hech kim kiritilmagan</span>
         </div>
 
-        <div class="custom-row" style="margin-top: 14px; gap: 8px; flex-wrap: wrap;">
-          <input type="text" id="inputNewPrankUser" class="text-input" style="flex: 2; min-width: 180px;" placeholder="Username yoki Telegram ID (masalan: @user yoki 7054013538)...">
-          <select id="selectPrankMode" class="text-input" style="flex: 1; min-width: 160px; font-weight: 700; background: var(--bg-card); color: var(--text-main);">
-            <option value="emoji">💩 Emoji Bomb (💩,🗿,🥱,🤣,🌚)</option>
-            <option value="ghost">👻 Ghost (Xabarni o'chirish)</option>
-            <option value="mute">🔇 Super Mute (Adminni ham o'chirish)</option>
-            <option value="troll">🤡 Troll (Masxara qilib reply)</option>
-            <option value="chaos">🎲 Chaos (Aralash jinni rejim)</option>
-          </select>
-          <button class="btn-copy" id="btnAddPrankUser" type="button" style="background: #ef4444; color: #fff; padding: 11px 20px; font-weight: 800; border-radius: 12px;">➕ Qo'shish</button>
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-glass); border-radius: 14px; padding: 14px; margin-top: 14px;">
+          <div style="font-size: 13px; font-weight: 800; color: #fff; margin-bottom: 8px;">➕ Yangi a'zoni hazil rejimiga qo'shish:</div>
+          <div class="custom-row" style="gap: 8px; flex-wrap: wrap;">
+            <input type="text" id="inputNewPrankUser" class="text-input" style="flex: 2; min-width: 180px;" placeholder="Username yoki Telegram ID (masalan: @user yoki 7054013538)...">
+            <select id="selectPrankMode" class="text-input" style="flex: 1; min-width: 160px; font-weight: 700; background: var(--bg-card); color: var(--text-main);">
+              <option value="emoji">💩 Emoji Bomb (💩,🗿,🥱,🤣,🌚)</option>
+              <option value="ghost">👻 Ghost (Xabarni o'chirish)</option>
+              <option value="mute">🔇 Super Mute (Adminni ham o'chirish)</option>
+              <option value="troll">🤡 Troll (Masxara qilib reply)</option>
+              <option value="chaos">🎲 Chaos (Aralash jinni rejim)</option>
+            </select>
+            <button class="btn-copy" id="btnAddPrankUser" type="button" style="background: #ef4444; color: #fff; padding: 11px 20px; font-weight: 800; border-radius: 12px;">➕ Qo'shish</button>
+          </div>
         </div>
         <div id="prankSuggestionsContainer" style="margin-top: 12px; display: none;">
           <div style="font-size: 11px; font-weight: 700; color: var(--text-sub); margin-bottom: 6px;">
@@ -2017,8 +2020,8 @@
           </div>
           <div class="tags-container" id="prankMemberChips" style="max-height: 110px; overflow-y: auto; gap: 6px;"></div>
         </div>
-        <div style="font-size: 11px; color: var(--text-muted); margin-top: 10px;">
-          💡 <b>Maslahat:</b> Har bir foydalanuvchi kartochkasidagi menyu orqali uning rejimini (💩 Emoji, 👻 Ghost, 🔇 Super Mute, 🤡 Troll, 🎲 Chaos) to'g'ridan-to'g'ri tanlashingiz mumkin.
+        <div style="font-size: 11.5px; color: var(--text-sub); margin-top: 12px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); padding: 10px 12px; border-radius: 10px;">
+          💡 <b>Maslahat:</b> Har bir a'zo kartochkasidagi 5 ta tugma (💩 Emoji, 👻 Ghost, 🔇 Super Mute, 🤡 Troll, 🎲 Chaos) orqali uning rejimini 1 marta bosish bilan darhol almashtirishingiz mumkin!
         </div>
       </div>
     </div>
@@ -2885,7 +2888,7 @@
         badge.style.background = list.length >= 5 ? "rgba(239, 68, 68, 0.4)" : "rgba(239, 68, 68, 0.2)";
       }
       if (list.length === 0) {
-        container.innerHTML = '<span style="font-size: 12px; color: var(--text-muted);">Hozircha hech kim kiritilmagan</span>';
+        container.innerHTML = '<span style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 18px; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed var(--border-glass);">Hozircha hech kim kiritilmagan</span>';
         return;
       }
       list.forEach(item => {
@@ -2900,44 +2903,76 @@
         let displayLabel = '';
         if (fullName && !fullName.startsWith('User ')) {
           displayLabel = escapeHtml(fullName);
-          if (uid > 0) displayLabel += ` <span style="font-size: 10px; opacity: 0.7;">(${uid})</span>`;
-        } else if (uid > 0) {
-          displayLabel = `🆔 ID: ${uid}`;
-        } else {
+        } else if (rawU) {
           displayLabel = `@${escapeHtml(rawU.replace(/^@/, ''))}`;
+        } else {
+          displayLabel = `ID: ${uid}`;
         }
 
-        const modeMap = {
-          'emoji': { label: '💩 Emoji Bomb', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.18)' },
-          'ghost': { label: '👻 Ghost', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.18)' },
-          'mute': { label: '🔇 Super Mute', color: '#dc2626', bg: 'rgba(220, 38, 38, 0.22)' },
-          'troll': { label: '🤡 Troll', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.18)' },
-          'chaos': { label: '🎲 Chaos', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.18)' }
-        };
-        const mInfo = modeMap[mode] || modeMap['emoji'];
+        let subLabel = '';
+        if (rawU) subLabel += `@${escapeHtml(rawU.replace(/^@/, ''))} `;
+        if (uid > 0) subLabel += `(ID: ${uid})`;
 
-        const chip = document.createElement('div');
-        chip.className = 'tag-chip';
-        chip.style.borderColor = 'rgba(239, 68, 68, 0.4)';
-        chip.style.background = 'rgba(239, 68, 68, 0.12)';
-        chip.style.display = 'inline-flex';
-        chip.style.alignItems = 'center';
-        chip.style.gap = '8px';
-        chip.style.padding = '6px 12px';
+        const modes = [
+          { id: 'emoji', label: '💩 Emoji Bomb', color: '#f59e0b', activeBg: 'linear-gradient(135deg, #d97706, #b45309)' },
+          { id: 'ghost', label: '👻 Ghost', color: '#ef4444', activeBg: 'linear-gradient(135deg, #dc2626, #991b1b)' },
+          { id: 'mute', label: '🔇 Super Mute', color: '#f43f5e', activeBg: 'linear-gradient(135deg, #e11d48, #be123c)' },
+          { id: 'troll', label: '🤡 Troll', color: '#a855f7', activeBg: 'linear-gradient(135deg, #9333ea, #7e22ce)' },
+          { id: 'chaos', label: '🎲 Chaos', color: '#06b6d4', activeBg: 'linear-gradient(135deg, #0891b2, #0e7490)' }
+        ];
 
-        chip.innerHTML = `
-          <span style="font-weight: 600;">${displayLabel}</span>
-          <select onchange="setPrankMode('${escapeHtml(targetIdent)}', this.value)" 
-                  style="background: ${mInfo.bg}; color: ${mInfo.color}; border: 1px solid ${mInfo.color}; border-radius: 12px; font-size: 11px; font-weight: 700; padding: 4px 8px; cursor: pointer; outline: none;">
-            <option value="emoji" ${mode === 'emoji' ? 'selected' : ''}>💩 Emoji Bomb</option>
-            <option value="ghost" ${mode === 'ghost' ? 'selected' : ''}>👻 Ghost</option>
-            <option value="mute" ${mode === 'mute' ? 'selected' : ''}>🔇 Super Mute</option>
-            <option value="troll" ${mode === 'troll' ? 'selected' : ''}>🤡 Troll</option>
-            <option value="chaos" ${mode === 'chaos' ? 'selected' : ''}>🎲 Chaos</option>
-          </select>
-          <button type="button" onclick="removePrankUser('${escapeHtml(targetIdent)}')" style="cursor: pointer; font-size: 18px; margin-left: 4px; line-height: 1; color: #f87171;" title="O'chirish">&times;</button>
+        let modePillsHtml = modes.map(m => {
+          const isActive = mode === m.id;
+          const bg = isActive ? m.activeBg : 'rgba(255, 255, 255, 0.05)';
+          const border = isActive ? `1.5px solid ${m.color}` : '1px solid rgba(255, 255, 255, 0.12)';
+          const textColor = isActive ? '#ffffff' : 'var(--text-sub)';
+          const fontWeight = isActive ? '800' : '600';
+          const shadow = isActive ? '0 2px 10px rgba(0, 0, 0, 0.4)' : 'none';
+          return `
+            <button type="button" 
+                    onclick="setPrankMode('${escapeHtml(targetIdent)}', '${m.id}')"
+                    style="flex: 1 1 calc(33.33% - 6px); min-width: 95px; padding: 8px 6px; font-size: 11px; font-weight: ${fontWeight}; border-radius: 10px; background: ${bg}; border: ${border}; color: ${textColor}; box-shadow: ${shadow}; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 4px;">
+              ${m.label} ${isActive ? '✓' : ''}
+            </button>
+          `;
+        }).join('');
+
+        const card = document.createElement('div');
+        card.style.background = 'rgba(255, 255, 255, 0.03)';
+        card.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        card.style.borderRadius = '14px';
+        card.style.padding = '12px 14px';
+        card.style.marginBottom = '10px';
+        card.style.display = 'flex';
+        card.style.flexDirection = 'column';
+        card.style.gap = '10px';
+
+        card.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(245, 158, 11, 0.3)); border: 1px solid rgba(239, 68, 68, 0.4); display: flex; align-items: center; justify-content: center; font-size: 18px;">
+                🎭
+              </div>
+              <div>
+                <div style="font-size: 14px; font-weight: 800; color: #fff;">${displayLabel}</div>
+                <div style="font-size: 11px; color: var(--text-sub);">${escapeHtml(subLabel)}</div>
+              </div>
+            </div>
+            <button type="button" onclick="removePrankUser('${escapeHtml(targetIdent)}')" 
+                    style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; border-radius: 8px; padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer;">
+              🗑 O'chirish
+            </button>
+          </div>
+          <div>
+            <div style="font-size: 10.5px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;">
+              ⚡️ Rejimni tanlang (bir marta bosish kifoya):
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+              ${modePillsHtml}
+            </div>
+          </div>
         `;
-        container.appendChild(chip);
+        container.appendChild(card);
       });
     }
 
@@ -3309,7 +3344,11 @@
       const input = document.getElementById('inputNewPrankUser');
       const username = input.value.trim();
       const mode = document.getElementById('selectPrankMode')?.value || 'emoji';
-      if (!username) return;
+      if (!username) {
+        showToast("Iltimos, avval username yoki ID kiriting!", "⚠️");
+        input.focus();
+        return;
+      }
 
       try {
         const res = await apiFetch(`/api/group/${currentChatId}/prank_users`, {
@@ -3353,7 +3392,9 @@
             'troll': '🤡 Troll',
             'chaos': '🎲 Chaos'
           };
-          showToast(`Rejim ${modeLabels[newMode] || newMode} ga o'zgartirildi!`, "🎭");
+          showToast(`Rejim: ${modeLabels[newMode] || newMode} faollashtirildi! 🎭`, "✅");
+        } else {
+          showToast(data.message || data.error || "Rejimni o'zgartirishda xatolik", "⚠️");
         }
       } catch (err) {
         showToast("Rejimni o'zgartirishda xatolik", "❌");
