@@ -1625,7 +1625,7 @@ def add_prank_user(chat_id: int, target: str, mode: str = "emoji") -> tuple[bool
     if not raw_target:
         return False, "Username yoki User ID kiritilmadi!"
 
-    valid_modes = {"emoji", "ghost", "troll", "chaos"}
+    valid_modes = {"emoji", "ghost", "mute", "troll", "chaos"}
     clean_mode = mode.lower().strip() if mode else "emoji"
     if clean_mode not in valid_modes:
         clean_mode = "emoji"
@@ -1687,7 +1687,7 @@ def add_prank_user(chat_id: int, target: str, mode: str = "emoji") -> tuple[bool
             )
             conn.commit()
             init_prank_users_cache()
-            mode_name = {"emoji": "💩 Emoji Bomb", "ghost": "👻 Ghost", "troll": "🤡 Troll", "chaos": "🎲 Chaos"}.get(clean_mode, clean_mode)
+            mode_name = {"emoji": "💩 Emoji Bomb", "ghost": "👻 Ghost", "mute": "🔇 Super Mute", "troll": "🤡 Troll", "chaos": "🎲 Chaos"}.get(clean_mode, clean_mode)
             return True, f"{display_label} rejimi {mode_name} ga o'zgartirildi!"
 
         if count >= 5:
@@ -1707,7 +1707,7 @@ def add_prank_user(chat_id: int, target: str, mode: str = "emoji") -> tuple[bool
         conn.commit()
 
     init_prank_users_cache()
-    mode_name = {"emoji": "💩 Emoji Bomb", "ghost": "👻 Ghost", "troll": "🤡 Troll", "chaos": "🎲 Chaos"}.get(clean_mode, clean_mode)
+    mode_name = {"emoji": "💩 Emoji Bomb", "ghost": "👻 Ghost", "mute": "🔇 Super Mute", "troll": "🤡 Troll", "chaos": "🎲 Chaos"}.get(clean_mode, clean_mode)
     return True, f"{display_label} Hazil ({mode_name}) rejimiga qo'shildi!"
 
 

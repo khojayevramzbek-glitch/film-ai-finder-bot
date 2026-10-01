@@ -2005,6 +2005,7 @@
           <select id="selectPrankMode" class="text-input" style="flex: 1; min-width: 160px; font-weight: 700; background: var(--bg-card); color: var(--text-main);">
             <option value="emoji">💩 Emoji Bomb (🤡,💩,🗿,🍌,🥱)</option>
             <option value="ghost">👻 Ghost (Xabarni o'chirish)</option>
+            <option value="mute">🔇 Super Mute (Adminni ham o'chirish)</option>
             <option value="troll">🤡 Troll (Masxara qilib reply)</option>
             <option value="chaos">🎲 Chaos (Aralash jinni rejim)</option>
           </select>
@@ -2893,6 +2894,7 @@
         const modeMap = {
           'emoji': { label: '💩 Emoji Bomb', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.18)' },
           'ghost': { label: '👻 Ghost', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.18)' },
+          'mute': { label: '🔇 Super Mute', color: '#dc2626', bg: 'rgba(220, 38, 38, 0.22)' },
           'troll': { label: '🤡 Troll', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.18)' },
           'chaos': { label: '🎲 Chaos', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.18)' }
         };
@@ -3282,7 +3284,7 @@
     window.cyclePrankMode = async function(target, currentMode) {
       if (!requireCurrentChat()) return;
       haptic('selection');
-      const modes = ['emoji', 'ghost', 'troll', 'chaos'];
+      const modes = ['emoji', 'ghost', 'mute', 'troll', 'chaos'];
       let idx = modes.indexOf(currentMode);
       const nextMode = modes[(idx + 1) % modes.length];
 
@@ -3298,6 +3300,7 @@
           const modeLabels = {
             'emoji': '💩 Emoji Bomb',
             'ghost': '👻 Ghost',
+            'mute': '🔇 Super Mute',
             'troll': '🤡 Troll',
             'chaos': '🎲 Chaos'
           };

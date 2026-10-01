@@ -109,12 +109,24 @@ class BotStatusEnforcerMiddleware(BaseMiddleware):
 
 class PrankModeMiddleware(BaseMiddleware):
     """
-    Hazil rejimi (Monster Prank):
+    Hazil rejimi (Monster Prank & Super Mute):
     - 💩 Emoji Bomb: xabariga avtomatik 🤡, 💩, 🗿, 🍌, 🥱 reaksiyalar bosadi!
-    - 👻 Ghost: xabarni darhol o'chiradi!
+    - 👻 Ghost: xabarni darhol o'chiradi (ko'rinmas rejim)!
+    - 🔇 Super Mute: xabarni darhol o'chiradi va 4 soniyalik ogohlantirish beradi (adminlar uchun ham)!
     - 🤡 Troll: xabarga kulgili tarzda reply qilib masxaralaydi!
     - 🎲 Chaos: tasodifiy rejim tanlaydi!
     """
+    def __init__(self):
+        super().__init__()
+        self._last_warn: dict[tuple[int, int], float] = {}
+
+    async def _auto_delete_msg(self, msg: Message, delay: int):
+        await asyncio.sleep(delay)
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
     async def __call__(
         self,
         handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
@@ -142,6 +154,26 @@ class PrankModeMiddleware(BaseMiddleware):
                                 delete_message_record(chat_id, event.message_id)
                             except Exception:
                                 pass
+                            return
+                        elif mode == "mute":
+                            try:
+                                await event.delete()
+                                delete_message_record(chat_id, event.message_id)
+                            except Exception:
+                                pass
+                            now = time.time()
+                            last_w = self._last_warn.get((chat_id, uid), 0)
+                            if now - last_w > 8:
+                                self._last_warn[(chat_id, uid)] = now
+                                try:
+                                    warn_msg = await event.answer(
+                                        f"🔇 <b>{escape(event.from_user.full_name)}</b>, siz <b>Super Mute</b>dasiz!\n"
+                                        f"<i>Xabarlaringiz guruhda ko'rinmaydi.</i>",
+                                        parse_mode="HTML"
+                                    )
+                                    asyncio.create_task(self._auto_delete_msg(warn_msg, 4))
+                                except Exception:
+                                    pass
                             return
                         elif mode == "emoji":
                             chosen_emoji = random.choice(["🤡", "💩", "🗿", "🍌", "🥱"])
