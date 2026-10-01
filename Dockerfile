@@ -1,9 +1,11 @@
 FROM python:3.12-slim
 
-# Install system dependencies including FFmpeg
+# Install system dependencies including FFmpeg, curl, and build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
+    gcc \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for Hugging Face Spaces compatibility

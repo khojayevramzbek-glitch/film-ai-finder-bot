@@ -1742,5 +1742,13 @@ def get_user_id_by_username_global(username: str) -> dict | None:
     return get_user_by_username(0, username)
 
 
+# Auto-initialize database schema on module import so tables always exist immediately
+try:
+    init_db()
+except Exception:
+    pass
+
+
+
 
 

@@ -1,3 +1,4 @@
+import os
 import asyncio
 import logging
 import sys
@@ -198,6 +199,7 @@ async def main():
     dp.message.outer_middleware(CensorMiddleware())
     # 6. Qoida 2 bo'yicha Anti-Flood middleware (barcha xabar va stikerlarni tekshirish uchun outer_middleware)
     dp.message.outer_middleware(AntiFloodMiddleware())
+    main_router._parent_router = None
     dp.include_router(main_router)
 
     # Navbatdagi xabarlarni saqlab qolish
@@ -206,22 +208,23 @@ async def main():
     bot_info = await bot.get_me()
     logger.info(f"Bot faol: @{bot_info.username} ({bot_info.first_name}) [ID: {bot_info.id}]")
 
-    # 7. Ichki Mini App aiohttp veb-serverini ishga tushirish
+    # 7. Ichki Mini App aiohttp veb-serverini faqat kerak bo'lganda ishga tushirish (app.py bilan to'qnashuvni oldini olish)
     web_runner = None
-    try:
-        import os
-        from aiohttp import web
-        from group_bot.webapp_server import attach_aiohttp_routes
-        app = web.Application()
-        attach_aiohttp_routes(app)
-        web_runner = web.AppRunner(app)
-        await web_runner.setup()
-        port = int(os.getenv("PORT", "7860"))
-        site = web.TCPSite(web_runner, "0.0.0.0", port)
-        await site.start()
-        logger.info(f"🌐 [Web Server] Mini App web server 0.0.0.0:{port} da muvaffaqiyatli ishga tushirildi.")
-    except Exception as e:
-        logger.warning(f"Web serverni ishga tushirishda ogohlantirish (ehtimol port band): {e}")
+    if os.getenv("RUN_WEB_SERVER", "true").lower() == "true":
+        try:
+            import os
+            from aiohttp import web
+            from group_bot.webapp_server import attach_aiohttp_routes
+            app = web.Application()
+            attach_aiohttp_routes(app)
+            web_runner = web.AppRunner(app)
+            await web_runner.setup()
+            port = int(os.getenv("PORT", "7860"))
+            site = web.TCPSite(web_runner, "0.0.0.0", port)
+            await site.start()
+            logger.info(f"🌐 [Web Server] Mini App web server 0.0.0.0:{port} da muvaffaqiyatli ishga tushirildi.")
+        except Exception as e:
+            logger.warning(f"Web serverni ishga tushirishda ogohlantirish (ehtimol port band): {e}")
 
     # Telegram menyu buyruqlarini sozlash
     try:

@@ -129,14 +129,9 @@ async def main():
     main_dp.message.middleware(AntiFloodMiddleware(max_requests_per_window=5, window_seconds=6.0))
     main_dp.callback_query.middleware(AntiFloodMiddleware(max_requests_per_window=6, window_seconds=6.0))
 
-    main_dp.include_router(start.router)
-    main_dp.include_router(character_chat.router)
-    main_dp.include_router(actor.router)
-    main_dp.include_router(watchlist.router)
-    main_dp.include_router(quiz.router)
-    main_dp.include_router(history.router)
-    main_dp.include_router(inline_mode.router)
-    main_dp.include_router(analyze.router)
+    for r in (start.router, character_chat.router, actor.router, watchlist.router, quiz.router, history.router, inline_mode.router, analyze.router):
+        r._parent_router = None
+        main_dp.include_router(r)
     await set_main_bot_commands(main_bot)
     await main_bot.delete_webhook(drop_pending_updates=False)
 
@@ -157,6 +152,7 @@ async def main():
                 default=DefaultBotProperties(parse_mode=ParseMode.HTML)
             )
             admin_dp = Dispatcher()
+            admin_handlers.router._parent_router = None
             admin_dp.include_router(admin_handlers.router)
             await set_admin_bot_commands(admin_bot)
             await admin_bot.delete_webhook(drop_pending_updates=False)

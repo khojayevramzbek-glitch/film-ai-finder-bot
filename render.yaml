@@ -4,7 +4,7 @@ services:
     env: docker
     dockerfilePath: Dockerfile
     plan: free
-    region: frankfurt
+    healthCheckPath: /health
     envVars:
       - key: BOT_TOKEN
         sync: false

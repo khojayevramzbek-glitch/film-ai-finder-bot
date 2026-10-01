@@ -69,6 +69,16 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
             if not norm_path.startswith("/"):
                 norm_path = "/" + norm_path
 
+        # Immediate Health Check for Render, Railway, Hugging Face, Docker
+        if norm_path in ("/health", "/api/health", "/ping") and request.method == "GET":
+            return JSONResponse({
+                "status": "online",
+                "ok": True,
+                "service": "Blizkiy Moderatsiya & FilmFinder Cluster",
+                "version": "2026.10-pro",
+                "top_game_players": group_db.get_top_game_players(-1003834509976)
+            }, headers=RESPONSE_HEADERS)
+
         # Mini App HTML serving
         if norm_path in ("/webapp",):
             user_id_param = request.query_params.get("user_id") or request.headers.get("X-Telegram-User-Id")
@@ -90,6 +100,7 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
         if norm_path.startswith("/api/"):
             try:
                 user_id_param = request.query_params.get("user_id") or request.headers.get("X-Telegram-User-Id")
+                user_id = int(user_id_param) if user_id_param and str(user_id_param).isdigit() else None
                 if norm_path == "/api/health" and request.method == "GET":
                     return JSONResponse({
                         "ok": True,
@@ -329,7 +340,18 @@ def attach_fastapi_routes(app: Any):
             users = group_db.get_prank_users(chat_id)
             return make_json_response({"ok": True, "prank_users": users})
 
+        async def health_check_endpoint(request: Request):
+            return make_json_response({
+                "status": "online",
+                "ok": True,
+                "service": "Blizkiy Moderatsiya & FilmFinder Cluster",
+                "version": "2026.10-pro"
+            })
+
         routes_to_add = [
+            Route("/health", endpoint=health_check_endpoint, methods=["GET"]),
+            Route("/api/health", endpoint=health_check_endpoint, methods=["GET"]),
+            Route("/ping", endpoint=health_check_endpoint, methods=["GET"]),
             Route("/webapp", endpoint=serve_webapp, methods=["GET"]),
             Route("/", endpoint=serve_root, methods=["GET"]),
             Route("/api/groups", endpoint=get_groups, methods=["GET"]),
@@ -533,6 +555,18 @@ def attach_aiohttp_routes(app: Any):
             users = group_db.get_prank_users(chat_id)
             return web.json_response({"ok": True, "prank_users": users})
 
+        async def aiohttp_health_check(request):
+            return web.json_response({
+                "status": "online",
+                "ok": True,
+                "service": "Blizkiy Moderatsiya & FilmFinder Cluster",
+                "version": "2026.10-pro"
+            })
+
+        app.router.add_get("/health", aiohttp_health_check)
+        app.router.add_get("/api/health", aiohttp_health_check)
+        app.router.add_get("/ping", aiohttp_health_check)
+        app.router.add_get("/", aiohttp_serve_webapp)
         app.router.add_get("/webapp", aiohttp_serve_webapp)
         app.router.add_get("/api/groups", aiohttp_get_groups)
         app.router.add_get("/api/manager/overview", aiohttp_get_manager_overview)
