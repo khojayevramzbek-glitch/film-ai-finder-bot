@@ -13,7 +13,7 @@ from group_bot.database import (
     upsert_known_user,
     get_chat_full_settings, format_duration,
     set_admin_virtual_mute, remove_admin_virtual_mute, is_admin_virtually_muted,
-    get_user_info_stats, log_user_punishment
+    get_user_info_stats, log_user_punishment, record_member_join
 )
 
 router = Router()
@@ -686,91 +686,69 @@ async def cmd_user_info(message: types.Message, bot: Bot):
     chat_id = message.chat.id
     target_id = target_user.id
 
+    # Bazaga a'zo sifatida qayd etish
+    record_member_join(chat_id, target_id, target_user.full_name, target_user.username)
+
     # 3. Bazadan statistikani olish
     stats = get_user_info_stats(chat_id, target_id)
 
-    # 4. Telegram API orqali guruhdagi jonli maqomini aniqlash
-    role_str = "👤 Oddiy a'zo"
-    live_status_str = "🟢 Faol (yozishi mumkin)"
-    try:
-        member = await bot.get_chat_member(chat_id, target_id)
-        if member.status == ChatMemberStatus.CREATOR:
-            role_str = "👑 Guruh Asoschisi (Creator)"
-        elif member.status == ChatMemberStatus.ADMINISTRATOR:
-            role_str = "⭐️ Guruh Admini (Admin)"
-        elif member.status == ChatMemberStatus.RESTRICTED:
-            role_str = "⚠️ Cheklangan a'zo"
-            if not getattr(member, "can_send_messages", True):
-                live_status_str = "🔴 Muteda (yozish taqiqlangan)"
-        elif member.status in [ChatMemberStatus.LEFT, ChatMemberStatus.KICKED]:
-            role_str = "🚪 Guruhdan chiqqan / Ban qilingan"
-            live_status_str = "🚫 Guruhda emas"
-    except Exception:
-        pass
+    # 1) Username
+    uname = target_user.username or stats.get("username")
+    username_clean = f"@{escape(uname)}" if uname else "Yo'q"
 
-    if stats.get("is_virtually_muted"):
-        live_status_str = "👻 Virtual Muteda (xabarlari darhol o'chiriladi)"
+    # 2) ID: target_id
 
-    # 5. Qo'shilgan vaqti va davomiyligi
-    joined_text = "Noma'lum"
-    if stats.get("joined_at"):
+    # 3) Qo'shilgan kuni, oyi, yili
+    UZBEK_MONTHS = {
+        1: "yanvar", 2: "fevral", 3: "mart", 4: "aprel",
+        5: "may", 6: "iyun", 7: "iyul", 8: "avgust",
+        9: "sentyabr", 10: "oktyabr", 11: "noyabr", 12: "dekabr"
+    }
+
+    raw_dt = stats.get("joined_at")
+    if not raw_dt and message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id == target_id:
+        raw_dt = message.reply_to_message.date
+
+    tashkent_tz = timezone(timedelta(hours=5))
+    if raw_dt:
         try:
-            dt = stats["joined_at"]
-            if isinstance(dt, str):
-                dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
-            tashkent_tz = timezone(timedelta(hours=5))
-            dt_local = dt.astimezone(tashkent_tz)
-            date_str = dt_local.strftime("%d.%m.%Y, %H:%M")
-            now_local = datetime.now(tashkent_tz)
-            delta = now_local - dt_local
-            days = delta.days
-            if days > 0:
-                duration_sub = f"({days} kun oldin)"
+            if isinstance(raw_dt, str):
+                dt_str = raw_dt.replace("Z", "+00:00")
+                try:
+                    dt_obj = datetime.fromisoformat(dt_str)
+                except Exception:
+                    dt_obj = datetime.strptime(dt_str.split(".")[0], "%Y-%m-%d %H:%M:%S")
             else:
-                hours = int(delta.total_seconds() // 3600)
-                duration_sub = f"({hours} soat oldin)" if hours > 0 else "(Yaqinda)"
-            joined_text = f"<b>{date_str}</b> {duration_sub}"
+                dt_obj = raw_dt
+
+            if dt_obj.tzinfo is None:
+                dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+            dt_local = dt_obj.astimezone(tashkent_tz)
         except Exception:
-            joined_text = str(stats["joined_at"])
+            dt_local = datetime.now(tashkent_tz)
+    else:
+        dt_local = datetime.now(tashkent_tz)
 
-    # 6. Oxirgi faolligi
-    last_seen_text = "Noma'lum"
-    if stats.get("last_msg"):
-        try:
-            dt = stats["last_msg"]
-            if isinstance(dt, str):
-                dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
-            tashkent_tz = timezone(timedelta(hours=5))
-            dt_local = dt.astimezone(tashkent_tz)
-            last_seen_text = dt_local.strftime("%d.%m.%Y, %H:%M")
-        except Exception:
-            last_seen_text = str(stats["last_msg"])
+    month_name = UZBEK_MONTHS.get(dt_local.month, "")
+    joined_text = f"{dt_local.day}-{month_name} {dt_local.year}-yil"
 
-    name_clean = escape(target_user.full_name or stats.get("full_name") or "Foydalanuvchi")
-    username_clean = f"@{escape(target_user.username)}" if target_user.username else (f"@{escape(stats['username'])}" if stats.get("username") else "<i>Mavjud emas</i>")
-    ghost_status = "🔴 Faol (Ghost rejimida)" if stats.get("is_ghost") else "⚪️ O'chirilgan"
+    # 4) Guruhga qo'shilganidan beri yozgan barcha xabarlari soni
+    total_msgs = stats.get("total_msgs", 0)
+    if total_msgs == 0 and message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id == target_id:
+        total_msgs = 1
+    total_msgs_text = f"{total_msgs:,}".replace(",", " ")
 
+    # 5) Olgan mutelari
+    mute_count = stats.get("mute_count", 0)
+
+    # Qisqa va londa ma'lumot
     card_text = (
-        f"<b>📋 FOYDALANUVCHI MA'LUMOTLARI (INFO)</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>Ism:</b> {name_clean}\n"
-        f"🆔 <b>Telegram ID:</b> <code>{target_id}</code>\n"
-        f"🔖 <b>Username:</b> {username_clean}\n"
-        f"🎖 <b>Guruhdagi maqomi:</b> {role_str}\n\n"
-        f"📅 <b>Guruhdagi tarixi:</b>\n"
-        f"├ ⏳ <b>Qo'shilgan / Birinchi aniqlangan:</b>\n"
-        f"│   └ {joined_text}\n"
-        f"└ ⏱ <b>So'nggi faolligi:</b> {last_seen_text}\n\n"
-        f"💬 <b>Xabarlar statistikasi:</b>\n"
-        f"├ 📈 <b>Qo'shilganidan beri jami:</b> <code>{stats.get('total_msgs', 0)}</code> ta xabar\n"
-        f"└ ⚡️ <b>So'nggi 24 soatda:</b> <code>{stats.get('msgs_24h', 0)}</code> ta xabar\n\n"
-        f"⚖️ <b>Jazolar va Xavfsizlik:</b>\n"
-        f"├ 🔇 <b>Jami olingan Mute:</b> <code>{stats.get('mute_count', 0)}</code> marta\n"
-        f"├ ⚠️ <b>Faol ogohlantirishlar:</b> <code>{stats.get('warn_count', 0)}/3</code> ta\n"
-        f"├ 🎭 <b>Hazil (Ghost) rejimi:</b> {ghost_status}\n"
-        f"└ 🛡 <b>Hozirgi holati:</b> {live_status_str}\n"
-        f"━━━━━━━━━━━━━━━━━━━━━\n"
-        f"<i>🔍 Tekshiruvchi: @{escape(sender_uname or str(sender_id))}</i>"
+        f"📋 <b>Foydalanuvchi ma'lumoti:</b>\n\n"
+        f"👤 <b>Username:</b> {username_clean}\n"
+        f"🆔 <b>ID:</b> <code>{target_id}</code>\n"
+        f"📅 <b>Qo'shilgan sana:</b> {joined_text}\n"
+        f"💬 <b>Barcha xabarlari:</b> {total_msgs_text} ta\n"
+        f"🔇 <b>Olgan mutelari:</b> {mute_count} ta"
     )
 
     await message.reply(card_text, parse_mode="HTML")

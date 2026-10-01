@@ -1686,6 +1686,11 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
             joined_at = m_row["joined_at"]
         elif first_msg:
             joined_at = first_msg
+        else:
+            cur = conn.execute("SELECT updated_at FROM known_users WHERE user_id = ?", (user_id,))
+            k_row = cur.fetchone()
+            if k_row and k_row["updated_at"]:
+                joined_at = k_row["updated_at"]
 
         # 4. Mute jazolari soni
         cur = conn.execute(
