@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, Awaitable
 
+logger = logging.getLogger(__name__)
+
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -133,91 +135,94 @@ class PrankModeMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
-        if isinstance(event, Message) and event.chat:
-            if event.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
-                chat_id = event.chat.id
-                if event.from_user:
-                    uid = event.from_user.id
-                    uname = (event.from_user.username or "").lower()
-                    prank_info = get_prank_user_action(chat_id, user_id=uid, username=uname)
-                    if prank_info:
-                        upsert_known_user(uid, event.from_user.full_name, uname, chat_id)
-                        mode = prank_info.get("mode", "emoji")
-                        logger.info(f"🎭 [Prank Triggered] Chat: {chat_id}, User: {uid} (@{uname}), Mode: {mode}")
+        try:
+            if isinstance(event, Message) and event.chat:
+                if event.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
+                    chat_id = event.chat.id
+                    if event.from_user:
+                        uid = event.from_user.id
+                        uname = (event.from_user.username or "").lower()
+                        prank_info = get_prank_user_action(chat_id, user_id=uid, username=uname)
+                        if prank_info:
+                            upsert_known_user(uid, event.from_user.full_name, uname, chat_id)
+                            mode = prank_info.get("mode", "emoji")
+                            logger.info(f"🎭 [Prank Triggered] Chat: {chat_id}, User: {uid} (@{uname}), Mode: {mode}")
 
-                        if mode == "chaos":
-                            mode = random.choice(["emoji", "ghost", "troll"])
+                            if mode == "chaos":
+                                mode = random.choice(["emoji", "ghost", "troll"])
 
-                        if mode == "ghost":
-                            try:
-                                await event.delete()
-                                delete_message_record(chat_id, event.message_id)
-                            except Exception as e:
-                                logger.warning(f"Ghost delete error: {e}")
+                            if mode == "ghost":
                                 try:
-                                    await event.bot.delete_message(chat_id=chat_id, message_id=event.message_id)
+                                    await event.delete()
                                     delete_message_record(chat_id, event.message_id)
-                                except Exception as e2:
-                                    logger.error(f"Ghost fallback delete error: {e2}")
-                            return
-                        elif mode == "mute":
-                            try:
-                                await event.delete()
-                                delete_message_record(chat_id, event.message_id)
-                            except Exception as e:
-                                logger.warning(f"Mute delete error: {e}")
+                                except Exception as e:
+                                    logger.warning(f"Ghost delete error: {e}")
+                                    try:
+                                        await event.bot.delete_message(chat_id=chat_id, message_id=event.message_id)
+                                        delete_message_record(chat_id, event.message_id)
+                                    except Exception as e2:
+                                        logger.error(f"Ghost fallback delete error: {e2}")
+                                return
+                            elif mode == "mute":
                                 try:
-                                    await event.bot.delete_message(chat_id=chat_id, message_id=event.message_id)
+                                    await event.delete()
                                     delete_message_record(chat_id, event.message_id)
-                                except Exception as e2:
-                                    logger.error(f"Mute fallback delete error: {e2}")
-                            now = time.time()
-                            last_w = self._last_warn.get((chat_id, uid), 0)
-                            if now - last_w > 8:
-                                self._last_warn[(chat_id, uid)] = now
+                                except Exception as e:
+                                    logger.warning(f"Mute delete error: {e}")
+                                    try:
+                                        await event.bot.delete_message(chat_id=chat_id, message_id=event.message_id)
+                                        delete_message_record(chat_id, event.message_id)
+                                    except Exception as e2:
+                                        logger.error(f"Mute fallback delete error: {e2}")
+                                now = time.time()
+                                last_w = self._last_warn.get((chat_id, uid), 0)
+                                if now - last_w > 8:
+                                    self._last_warn[(chat_id, uid)] = now
+                                    try:
+                                        warn_msg = await event.answer(
+                                            f"🔇 <b>{escape(event.from_user.full_name)}</b>, siz <b>Super Mute</b>dasiz!\n"
+                                            f"<i>Xabarlaringiz guruhda ko'rinmaydi.</i>",
+                                            parse_mode="HTML"
+                                        )
+                                        asyncio.create_task(self._auto_delete_msg(warn_msg, 4))
+                                    except Exception:
+                                        pass
+                                return
+                            elif mode == "emoji":
+                                # Telegram guruhda 100% ruxsat berilgan emojilar ro'yxati
+                                group_emojis = ["💩", "🗿", "🥱", "🤣", "🌚", "🤨", "🤓", "🔥", "💯"]
+                                chosen_emoji = random.choice(group_emojis)
                                 try:
-                                    warn_msg = await event.answer(
-                                        f"🔇 <b>{escape(event.from_user.full_name)}</b>, siz <b>Super Mute</b>dasiz!\n"
-                                        f"<i>Xabarlaringiz guruhda ko'rinmaydi.</i>",
-                                        parse_mode="HTML"
-                                    )
-                                    asyncio.create_task(self._auto_delete_msg(warn_msg, 4))
-                                except Exception:
-                                    pass
-                            return
-                        elif mode == "emoji":
-                            # Telegram guruhda 100% ruxsat berilgan emojilar ro'yxati
-                            group_emojis = ["💩", "🗿", "🥱", "🤣", "🌚", "🤨", "🤓", "🔥", "💯"]
-                            chosen_emoji = random.choice(group_emojis)
-                            try:
-                                await event.react([ReactionTypeEmoji(emoji=chosen_emoji)])
-                            except Exception as e:
-                                logger.warning(f"Reaction error with {chosen_emoji}: {e}, falling back to 💩")
+                                    await event.react([ReactionTypeEmoji(emoji=chosen_emoji)])
+                                except Exception as e:
+                                    logger.warning(f"Reaction error with {chosen_emoji}: {e}, falling back to 💩")
+                                    try:
+                                        await event.react([ReactionTypeEmoji(emoji="💩")])
+                                    except Exception:
+                                        pass
+                                return await handler(event, data)
+                            elif mode == "troll":
+                                troll_replies = [
+                                    "🤡 Voybo' yana keldilar donishmand...",
+                                    "🗿 Bitta shu gapingiz kam edi o'zi 😂",
+                                    "💩 O'zingiz tushundingizmi nima deganingizni? 😂",
+                                    "🥱 Bo'ldi qiling, uyqum kelib ketdi...",
+                                    "🍌 Maymun ham bundan aqlliroq gap aytardi 😂",
+                                    "🤦‍♂️ Gapiring, gapiring, baribir hech kim eshitmayapti 😂"
+                                ]
+                                text = (event.text or event.caption or "").strip()
+                                if text and len(text) <= 40 and not text.startswith("/"):
+                                    mocked = "".join(c.upper() if i % 2 == 0 else c.lower() for i, c in enumerate(text))
+                                    reply_text = f"«{mocked}» 🤡"
+                                else:
+                                    reply_text = random.choice(troll_replies)
                                 try:
-                                    await event.react([ReactionTypeEmoji(emoji="💩")])
-                                except Exception:
-                                    pass
-                            return await handler(event, data)
-                        elif mode == "troll":
-                            troll_replies = [
-                                "🤡 Voybo' yana keldilar donishmand...",
-                                "🗿 Bitta shu gapingiz kam edi o'zi 😂",
-                                "💩 O'zingiz tushundingizmi nima deganingizni? 😂",
-                                "🥱 Bo'ldi qiling, uyqum kelib ketdi...",
-                                "🍌 Maymun ham bundan aqlliroq gap aytardi 😂",
-                                "🤦‍♂️ Gapiring, gapiring, baribir hech kim eshitmayapti 😂"
-                            ]
-                            text = (event.text or event.caption or "").strip()
-                            if text and len(text) <= 40 and not text.startswith("/"):
-                                mocked = "".join(c.upper() if i % 2 == 0 else c.lower() for i, c in enumerate(text))
-                                reply_text = f"«{mocked}» 🤡"
-                            else:
-                                reply_text = random.choice(troll_replies)
-                            try:
-                                await event.reply(reply_text)
-                            except Exception as e:
-                                logger.warning(f"Troll reply error: {e}")
-                            return await handler(event, data)
+                                    await event.reply(reply_text)
+                                except Exception as e:
+                                    logger.warning(f"Troll reply error: {e}")
+                                return await handler(event, data)
+        except Exception as e:
+            logger.exception(f"PrankModeMiddleware error: {e}")
         return await handler(event, data)
 
 
