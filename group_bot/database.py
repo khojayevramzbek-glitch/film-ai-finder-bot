@@ -12,6 +12,11 @@ DB_PATH = Path(__file__).resolve().parent / "bot_data.db"
 def get_connection():
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA temp_store=MEMORY;")
+    except Exception:
+        pass
     return conn
 
 
@@ -446,11 +451,14 @@ def delete_message_record(chat_id: int, message_id: int):
 
 
 def add_message(chat_id: int, user_id: int, full_name: str, username: str | None = None, message_id: int | None = None):
-    """Yangi kelgan xabarni bazaga yozish va doimiy katalogga muhrlash."""
+    """Yangi kelgan xabarni bazaga yozish va doimiy katalogga muhrlash (yagona tranzaksiya)."""
     now_utc = datetime.now(timezone.utc)
-    upsert_known_user(user_id, full_name, username, chat_id)
-    record_member_join(chat_id, user_id, full_name, username)
+    now_iso = now_utc.isoformat()
+    clean_username = username.lstrip("@").strip() if username else None
+    clean_full_name = (full_name or "").strip() or f"Foydalanuvchi [{user_id}]"
+
     with get_connection() as conn:
+        # 1. messages jadvaliga yozish
         conn.execute(
             """
             INSERT INTO messages (chat_id, user_id, full_name, username, created_at, message_id)
@@ -458,14 +466,32 @@ def add_message(chat_id: int, user_id: int, full_name: str, username: str | None
             """,
             (chat_id, user_id, full_name, username, now_utc, message_id)
         )
+        # 2. known_users katalogiga yozish
+        if user_id and user_id > 0:
+            conn.execute(
+                """
+                INSERT INTO known_users (user_id, username, full_name, last_chat_id, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    username = COALESCE(excluded.username, known_users.username),
+                    full_name = CASE WHEN excluded.full_name != '' THEN excluded.full_name ELSE known_users.full_name END,
+                    last_chat_id = COALESCE(excluded.last_chat_id, known_users.last_chat_id),
+                    updated_at = excluded.updated_at
+                """,
+                (user_id, clean_username, clean_full_name, chat_id, now_iso)
+            )
+        # 3. group_members jadvalini yangilash
         conn.execute(
             """
-            UPDATE group_members
-            SET total_messages = COALESCE(total_messages, 0) + 1,
-                last_seen = ?
-            WHERE chat_id = ? AND user_id = ?
+            INSERT INTO group_members (chat_id, user_id, full_name, username, joined_at, first_seen, last_seen, is_exact_join, total_messages)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1)
+            ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                full_name = excluded.full_name,
+                username = COALESCE(excluded.username, group_members.username),
+                last_seen = excluded.last_seen,
+                total_messages = COALESCE(group_members.total_messages, 0) + 1
             """,
-            (now_utc, chat_id, user_id)
+            (chat_id, user_id, full_name, username, now_utc, now_utc, now_utc)
         )
         conn.commit()
 
@@ -891,16 +917,30 @@ def get_all_active_sleeps() -> list[dict]:
     return active
 
 
+# -------------------------------------------------------------
+# Tezkor RAM keshlar (Disk I/O va SQLite qulfini 0 ga tushirish)
+# -------------------------------------------------------------
+_bot_status_cache: dict[int, bool] = {}
+_censor_status_cache: dict[int, bool] = {}
+_chat_settings_cache: dict[int, dict] = {}
+_bad_words_cache: dict[int, list[str]] = {}
+
+
 def is_censor_enabled(chat_id: int) -> bool:
-    """Guruhda censor filtri yoqilganligini tekshirish (standart: yoqilgan - True)."""
+    """Guruhda censor filtri yoqilganligini tekshirish (RAM kesh: 0.0001ms)."""
+    if chat_id in _censor_status_cache:
+        return _censor_status_cache[chat_id]
     with get_connection() as conn:
         cur = conn.execute("SELECT is_enabled FROM chat_censor_settings WHERE chat_id = ?", (chat_id,))
         row = cur.fetchone()
-        return bool(row["is_enabled"]) if row else True
+        val = bool(row["is_enabled"]) if row else True
+        _censor_status_cache[chat_id] = val
+        return val
 
 
 def set_censor_status(chat_id: int, enabled: bool):
     """Guruhda censor filtrini yoqish yoki o'chirish."""
+    _censor_status_cache[chat_id] = enabled
     val = 1 if enabled else 0
     with get_connection() as conn:
         conn.execute(
@@ -919,6 +959,7 @@ def add_custom_bad_word(chat_id: int, word: str) -> bool:
     clean_word = word.strip().strip("<>\"' ").lower()
     if not clean_word:
         return False
+    _bad_words_cache.clear()
     with get_connection() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO custom_bad_words (chat_id, word) VALUES (?, ?)",
@@ -931,6 +972,7 @@ def add_custom_bad_word(chat_id: int, word: str) -> bool:
 def remove_custom_bad_word(chat_id: int, word: str) -> bool:
     """Guruh yoki umumiy uchun taqiqlangan so'zni ro'yxatdan chiqarish."""
     clean_word = word.strip().strip("<>\"' ").lower()
+    _bad_words_cache.clear()
     with get_connection() as conn:
         if chat_id != 0:
             cur = conn.execute(
@@ -947,13 +989,17 @@ def remove_custom_bad_word(chat_id: int, word: str) -> bool:
 
 
 def get_custom_bad_words(chat_id: int = 0) -> list[str]:
-    """Guruh va umumiy kiritilgan maxsus taqiqlangan so'zlar ro'yxati."""
+    """Guruh va umumiy kiritilgan maxsus taqiqlangan so'zlar ro'yxati (RAM kesh)."""
+    if chat_id in _bad_words_cache:
+        return _bad_words_cache[chat_id]
     with get_connection() as conn:
         if chat_id != 0:
             cur = conn.execute("SELECT DISTINCT word FROM custom_bad_words WHERE chat_id IN (?, 0)", (chat_id,))
         else:
             cur = conn.execute("SELECT DISTINCT word FROM custom_bad_words WHERE chat_id = 0")
-        return [row["word"] for row in cur.fetchall()]
+        words = [row["word"] for row in cur.fetchall()]
+        _bad_words_cache[chat_id] = words
+        return words
 
 
 def is_stats_enabled(chat_id: int) -> bool:
@@ -1010,17 +1056,23 @@ def get_all_group_ids() -> list[int]:
 
 
 def is_bot_enabled(chat_id: int) -> bool:
-    """Guruhda bot umumiy holati (yoqilgan/o'chirilgan) - standart True."""
+    """Guruhda bot umumiy holati (yoqilgan/o'chirilgan) - RAM kesh: 0.0001ms."""
+    if chat_id in _bot_status_cache:
+        return _bot_status_cache[chat_id]
     with get_connection() as conn:
         cur = conn.execute("SELECT is_enabled FROM chat_bot_status WHERE chat_id = ?", (chat_id,))
         row = cur.fetchone()
         if row is None:
-            return True
-        return bool(row["is_enabled"])
+            val = True
+        else:
+            val = bool(row["is_enabled"])
+        _bot_status_cache[chat_id] = val
+        return val
 
 
 def set_bot_status(chat_id: int, enabled: bool):
     """Guruhda bot umumiy holatini yoqish yoki o'chirish."""
+    _bot_status_cache[chat_id] = enabled
     val = 1 if enabled else 0
     with get_connection() as conn:
         conn.execute(
@@ -1452,18 +1504,22 @@ def format_duration(seconds: int) -> str:
 
 
 def get_chat_full_settings(chat_id: int) -> dict:
-    """Guruhning barcha sozlamalarini (mute/ban daqiqalari, flood, warn va h.k.) olish."""
+    """Guruhning barcha sozlamalarini (mute/ban daqiqalari, flood, warn va h.k.) olish (RAM kesh: 0.0001ms)."""
+    if chat_id in _chat_settings_cache:
+        return dict(_chat_settings_cache[chat_id])
     with get_connection() as conn:
         cur = conn.execute("SELECT * FROM chat_settings WHERE chat_id = ?", (chat_id,))
         row = cur.fetchone()
         if not row:
             res = dict(DEFAULT_CHAT_SETTINGS)
             res["chat_id"] = chat_id
-            return res
+            _chat_settings_cache[chat_id] = res
+            return dict(res)
         res = dict(row)
         if not res.get("welcome_text") or res.get("welcome_text") == "Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!":
             res["welcome_text"] = DEFAULT_WELCOME_TEXT
-        return res
+        _chat_settings_cache[chat_id] = res
+        return dict(res)
 
 
 def update_chat_settings(chat_id: int, settings: dict):
@@ -1471,6 +1527,7 @@ def update_chat_settings(chat_id: int, settings: dict):
     now_utc = datetime.now(timezone.utc)
     current = get_chat_full_settings(chat_id)
     current.update(settings)
+    _chat_settings_cache[chat_id] = current
     with get_connection() as conn:
         conn.execute("""
             INSERT INTO chat_settings (

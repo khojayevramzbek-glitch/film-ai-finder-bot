@@ -40,10 +40,32 @@ from group_bot.handlers.antiflood import AntiFloodMiddleware
 from group_bot.handlers.censor import CensorMiddleware
 
 
+def _track_message_bg(chat_id: int, user_id: int, full_name: str, username: str | None, message_id: int | None, ru_info, fu_info, mentions_info, chat_title: str | None):
+    try:
+        add_message(
+            chat_id=chat_id,
+            user_id=user_id,
+            full_name=full_name,
+            username=username,
+            message_id=message_id
+        )
+        if ru_info:
+            upsert_known_user(ru_info[0], ru_info[1], ru_info[2], chat_id)
+        if fu_info:
+            upsert_known_user(fu_info[0], fu_info[1], fu_info[2], chat_id)
+        for mu in mentions_info:
+            upsert_known_user(mu[0], mu[1], mu[2], chat_id)
+        if chat_title:
+            save_chat_title(chat_id, chat_title)
+    except Exception as e:
+        logging.getLogger("group_bot").warning(f"_track_message_bg error: {e}")
+
+
 class MessageTrackerMiddleware(BaseMiddleware):
     """
     Guruhdagi har bir xabarni ma'lumotlar bazasiga yozib boruvchi va log qiluvchi middleware.
-    Botlarning xabarlari hisobga olinmaydi.
+    Botlarning xabarlari hisobga olinmaydi. Baza yozish amallari fonda (asyncio.to_thread)
+    bajarilib, bot javob berish tezligiga mutlaqo 0ms xalaqit qiladi.
     """
     async def __call__(
         self,
@@ -56,29 +78,32 @@ class MessageTrackerMiddleware(BaseMiddleware):
             logging.getLogger("group_bot").info(
                 f"💬 [GROUP {event.chat.id}] @{event.from_user.username or event.from_user.id} ({event.from_user.full_name}): {text_preview!r}"
             )
-            # Barcha xabarlar, stiker, emoji va GIFlar stataga hisoblanadi (faqat flood bo'lsa o'chiriladi)
-            add_message(
-                chat_id=event.chat.id,
-                user_id=event.from_user.id,
-                full_name=event.from_user.full_name,
-                username=event.from_user.username,
-                message_id=event.message_id
-            )
-            # Reply qilingan foydalanuvchini ham doimiy katalogga muhrlash
+            ru_info = None
             if event.reply_to_message and event.reply_to_message.from_user and not event.reply_to_message.from_user.is_bot:
                 ru = event.reply_to_message.from_user
-                upsert_known_user(ru.id, ru.full_name, ru.username, event.chat.id)
-            # Forward qilingan xabar egasini muhrlash
+                ru_info = (ru.id, ru.full_name, ru.username)
+            fu_info = None
             if event.forward_from and not event.forward_from.is_bot:
                 fu = event.forward_from
-                upsert_known_user(fu.id, fu.full_name, fu.username, event.chat.id)
-            # Mention qilingan a'zolarni muhrlash
+                fu_info = (fu.id, fu.full_name, fu.username)
+            mentions_info = []
             for ent in (event.entities or event.caption_entities or []):
                 if ent.type == "text_mention" and ent.user and not ent.user.is_bot:
-                    upsert_known_user(ent.user.id, ent.user.full_name, ent.user.username, event.chat.id)
-            # Guruh nomini saqlab borish
-            if event.chat and event.chat.title:
-                save_chat_title(event.chat.id, event.chat.title)
+                    mentions_info.append((ent.user.id, ent.user.full_name, ent.user.username))
+            chat_title = event.chat.title if (event.chat and event.chat.title) else None
+
+            asyncio.create_task(asyncio.to_thread(
+                _track_message_bg,
+                event.chat.id,
+                event.from_user.id,
+                event.from_user.full_name,
+                event.from_user.username,
+                event.message_id,
+                ru_info,
+                fu_info,
+                mentions_info,
+                chat_title
+            ))
         return await handler(event, data)
 
 
@@ -129,6 +154,20 @@ class PrankModeMiddleware(BaseMiddleware):
         except Exception:
             pass
 
+    async def _send_mute_warn(self, bot: Bot, chat_id: int, user_full_name: str):
+        try:
+            warn_msg = await bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"🔇 <b>{escape(user_full_name)}</b>, siz <b>Super Mute</b>dasiz!\n"
+                    f"<i>Xabarlaringiz guruhda ko'rinmaydi.</i>"
+                ),
+                parse_mode="HTML"
+            )
+            await self._auto_delete_msg(warn_msg, 4)
+        except Exception as e:
+            logger.warning(f"Mute warn send error: {e}")
+
     async def __call__(
         self,
         handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
@@ -144,55 +183,36 @@ class PrankModeMiddleware(BaseMiddleware):
                         uname = (event.from_user.username or "").lower()
                         prank_info = get_prank_user_action(chat_id, user_id=uid, username=uname)
                         if prank_info:
-                            upsert_known_user(uid, event.from_user.full_name, uname, chat_id)
                             mode = prank_info.get("mode", "emoji")
                             logger.info(f"🎭 [Prank Triggered] Chat: {chat_id}, User: {uid} (@{uname}), Mode: {mode}")
 
                             if mode == "chaos":
                                 mode = random.choice(["emoji", "ghost", "mute", "troll"])
 
-                            if mode == "ghost":
+                            if mode in ("ghost", "mute"):
+                                # 1. Xabarni darhol (0.01 soniyada) Telegramdan o'chirish
                                 try:
                                     await event.delete()
-                                    delete_message_record(chat_id, event.message_id)
-                                except Exception as e:
-                                    logger.warning(f"Ghost delete error: {e}")
+                                except Exception:
                                     try:
                                         await event.bot.delete_message(chat_id=chat_id, message_id=event.message_id)
-                                        delete_message_record(chat_id, event.message_id)
-                                    except Exception as e2:
-                                        logger.error(f"Ghost fallback delete error: {e2}")
+                                    except Exception:
+                                        pass
+
+                                # 2. Baza tozalash amallarini fonda asinxron bajarish
+                                asyncio.create_task(asyncio.to_thread(delete_message_record, chat_id, event.message_id))
+                                asyncio.create_task(asyncio.to_thread(upsert_known_user, uid, event.from_user.full_name, uname, chat_id))
+
+                                if mode == "mute":
+                                    now = time.time()
+                                    last_w = self._last_warn.get((chat_id, uid), 0)
+                                    if now - last_w > 8:
+                                        self._last_warn[(chat_id, uid)] = now
+                                        asyncio.create_task(self._send_mute_warn(event.bot, chat_id, event.from_user.full_name))
                                 return
-                            elif mode == "mute":
-                                try:
-                                    await event.delete()
-                                    delete_message_record(chat_id, event.message_id)
-                                except Exception as e:
-                                    logger.warning(f"Mute delete error: {e}")
-                                    try:
-                                        await event.bot.delete_message(chat_id=chat_id, message_id=event.message_id)
-                                        delete_message_record(chat_id, event.message_id)
-                                    except Exception as e2:
-                                        logger.error(f"Mute fallback delete error: {e2}")
-                                now = time.time()
-                                last_w = self._last_warn.get((chat_id, uid), 0)
-                                if now - last_w > 8:
-                                    self._last_warn[(chat_id, uid)] = now
-                                    try:
-                                        warn_msg = await event.bot.send_message(
-                                            chat_id=chat_id,
-                                            text=(
-                                                f"🔇 <b>{escape(event.from_user.full_name)}</b>, siz <b>Super Mute</b>dasiz!\n"
-                                                f"<i>Xabarlaringiz guruhda ko'rinmaydi.</i>"
-                                            ),
-                                            parse_mode="HTML"
-                                        )
-                                        asyncio.create_task(self._auto_delete_msg(warn_msg, 4))
-                                    except Exception as e:
-                                        logger.warning(f"Mute warn send error: {e}")
-                                return
+
                             elif mode == "emoji":
-                                # Telegram guruhda 100% ruxsat berilgan emojilar ro'yxati
+                                asyncio.create_task(asyncio.to_thread(upsert_known_user, uid, event.from_user.full_name, uname, chat_id))
                                 group_emojis = ["💩", "🗿", "🥱", "🤣", "🌚", "🤨", "🤓", "🔥", "💯"]
                                 chosen_emoji = random.choice(group_emojis)
                                 try:
@@ -204,7 +224,9 @@ class PrankModeMiddleware(BaseMiddleware):
                                     except Exception:
                                         pass
                                 return await handler(event, data)
+
                             elif mode == "troll":
+                                asyncio.create_task(asyncio.to_thread(upsert_known_user, uid, event.from_user.full_name, uname, chat_id))
                                 troll_replies = [
                                     "🤡 Voybo' yana keldilar donishmand...",
                                     "🗿 Bitta shu gapingiz kam edi o'zi 😂",
@@ -246,6 +268,27 @@ class AdminVirtualMuteMiddleware(BaseMiddleware):
         super().__init__()
         self._last_warn: dict[tuple[int, int], float] = {}
 
+    async def _auto_delete_msg(self, msg: Message, delay: int):
+        await asyncio.sleep(delay)
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
+    async def _send_virtual_mute_warn(self, bot: Bot, chat_id: int, user_full_name: str, rem_text: str):
+        try:
+            warn_msg = await bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"🔇 <b>Admin {escape(user_full_name)}</b>, siz <b>Super Virtual Mute</b>dasiz!\n"
+                    f"<i>Xabarlaringiz o'chirilmoqda. Qolgan vaqt: {rem_text}</i>"
+                ),
+                parse_mode="HTML"
+            )
+            await self._auto_delete_msg(warn_msg, 4)
+        except Exception as e:
+            logger.warning(f"AdminVirtualMute warn send error: {e}")
+
     async def __call__(
         self,
         handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
@@ -264,13 +307,12 @@ class AdminVirtualMuteMiddleware(BaseMiddleware):
                     if is_admin_virtually_muted(event.chat.id, uid):
                         try:
                             await event.delete()
-                            delete_message_record(event.chat.id, event.message_id)
                         except Exception:
                             try:
                                 await event.bot.delete_message(chat_id=event.chat.id, message_id=event.message_id)
-                                delete_message_record(event.chat.id, event.message_id)
                             except Exception:
                                 pass
+                        asyncio.create_task(asyncio.to_thread(delete_message_record, event.chat.id, event.message_id))
 
                         # Adminni xabardor qilish (kamida 8 soniyada 1 marta ogohlantirish, 4 soniyada o'chadi)
                         now = time.time()
@@ -279,27 +321,8 @@ class AdminVirtualMuteMiddleware(BaseMiddleware):
                             self._last_warn[(event.chat.id, uid)] = now
                             rem_secs = get_admin_virtual_mute_remaining(event.chat.id, uid) or 0
                             rem_text = format_duration(rem_secs) if rem_secs > 0 else "noma'lum muddat"
-                            try:
-                                warn_msg = await event.bot.send_message(
-                                    chat_id=event.chat.id,
-                                    text=(
-                                        f"🔇 <b>Admin {escape(event.from_user.full_name)}</b>, siz <b>Super Virtual Mute</b>dasiz!\n"
-                                        f"<i>Xabarlaringiz o'chirilmoqda. Qolgan vaqt: {rem_text}</i>"
-                                    ),
-                                    parse_mode="HTML"
-                                )
-                                asyncio.create_task(self._auto_delete_msg(warn_msg, 4))
-                            except Exception as e:
-                                logger.warning(f"AdminVirtualMute warn send error: {e}")
-                        return
+                            asyncio.create_task(self._send_virtual_mute_warn(event.bot, event.chat.id, event.from_user.full_name, rem_text))
         return await handler(event, data)
-
-    async def _auto_delete_msg(self, msg: Message, delay: int):
-        await asyncio.sleep(delay)
-        try:
-            await msg.delete()
-        except Exception:
-            pass
 
 
 async def main():

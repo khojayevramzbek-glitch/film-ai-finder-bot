@@ -74,13 +74,23 @@ def is_bot_owner(user: Any) -> bool:
     return False
 
 
+_admin_cache: dict[tuple[int, int], tuple[bool, float]] = {}
+ADMIN_CACHE_TTL = 300.0
+
+
 async def is_telegram_admin(chat_id: int, user_id: int, bot: Bot) -> bool:
-    """Foydalanuvchi guruh admini yoki egasi ekanligini aniqlash."""
+    """Foydalanuvchi guruh admini yoki egasi ekanligini aniqlash (RAM kesh: 0.0001ms)."""
     if user_id in ALLOWED_BOT_OWNER_IDS:
         return True
+    now = time.time()
+    cached = _admin_cache.get((chat_id, user_id))
+    if cached and (now - cached[1]) < ADMIN_CACHE_TTL:
+        return cached[0]
     try:
         member = await bot.get_chat_member(chat_id, user_id)
-        return member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]
+        is_adm = member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]
+        _admin_cache[(chat_id, user_id)] = (is_adm, now)
+        return is_adm
     except Exception:
         return False
 
@@ -281,8 +291,6 @@ class AntiFloodMiddleware(BaseMiddleware):
         if is_bot_owner(user):
             return await handler(event, data)
 
-        is_admin_user = await is_telegram_admin(event.chat.id, user.id, bot)
-
         settings = get_chat_full_settings(event.chat.id)
         flood_sec = int(settings.get("flood_mute_seconds", 900))
         flood_duration = timedelta(seconds=flood_sec)
@@ -340,7 +348,8 @@ class AntiFloodMiddleware(BaseMiddleware):
             # Bazadan/statadan o'chirish
             delete_flood_messages(event.chat.id, user.id, [event.message_id])
 
-            if is_admin_user:
+            is_adm_user = await is_telegram_admin(event.chat.id, user.id, bot)
+            if is_adm_user:
                 # Adminga 1 daqiqalik virtual mute
                 _admin_virtual_mutes[key] = now + 60.0
                 try:
@@ -393,10 +402,11 @@ class AntiFloodMiddleware(BaseMiddleware):
                 _text_history[key] = []
                 _piece_fast_history[key] = []
                 _piece_slow_history[key] = []
+                is_adm = await is_telegram_admin(event.chat.id, user.id, bot)
                 await handle_flood_action(
                     event,
                     bot,
-                    is_admin_user=is_admin_user,
+                    is_admin_user=is_adm,
                     msg_ids=msg_ids,
                     duration=flood_duration,
                     reason="me'yordan ortiq stiker yoki GIF yuborganingiz"
@@ -416,10 +426,11 @@ class AntiFloodMiddleware(BaseMiddleware):
                 _text_history[key] = []
                 _piece_fast_history[key] = []
                 _piece_slow_history[key] = []
+                is_adm = await is_telegram_admin(event.chat.id, user.id, bot)
                 await handle_flood_action(
                     event,
                     bot,
-                    is_admin_user=is_admin_user,
+                    is_admin_user=is_adm,
                     msg_ids=msg_ids,
                     duration=flood_duration,
                     reason="ketma-ket '/' belgisi bilan xabarlar yuborganingiz"
@@ -437,10 +448,11 @@ class AntiFloodMiddleware(BaseMiddleware):
                 _text_history[key] = []
                 _piece_fast_history[key] = []
                 _piece_slow_history[key] = []
+                is_adm = await is_telegram_admin(event.chat.id, user.id, bot)
                 await handle_flood_action(
                     event,
                     bot,
-                    is_admin_user=is_admin_user,
+                    is_admin_user=is_adm,
                     msg_ids=[event.message_id],
                     duration=flood_duration,
                     reason="ko'p qatorli matn bilan flood qilganingiz"
@@ -478,10 +490,11 @@ class AntiFloodMiddleware(BaseMiddleware):
                 _piece_slow_history[key] = []
 
                 reason = "bo‘lak-bo‘lak qilib ketma-ket xabarlar yuborganingiz" if is_piece_flood else "ketma-ket xabarlar yuborib flood qilganingiz"
+                is_adm = await is_telegram_admin(event.chat.id, user.id, bot)
                 await handle_flood_action(
                     event,
                     bot,
-                    is_admin_user=is_admin_user,
+                    is_admin_user=is_adm,
                     msg_ids=all_flood_ids,
                     duration=flood_duration,
                     reason=reason

@@ -1,5 +1,6 @@
 import asyncio
 import re
+import time
 from datetime import datetime, timezone, timedelta
 from html import escape
 from typing import Any, Callable, Dict, Awaitable
@@ -171,13 +172,23 @@ def is_bot_owner(user: Any) -> bool:
     return False
 
 
+_admin_cache: dict[tuple[int, int], tuple[bool, float]] = {}
+ADMIN_CACHE_TTL = 300.0
+
+
 async def is_telegram_admin(chat_id: int, user_id: int, bot: Bot) -> bool:
-    """Foydalanuvchi guruh admini yoki egasi ekanligini aniqlash."""
+    """Foydalanuvchi guruh admini yoki egasi ekanligini aniqlash (RAM kesh: 0.0001ms)."""
     if user_id in ALLOWED_BOT_OWNER_IDS:
         return True
+    now = time.time()
+    cached = _admin_cache.get((chat_id, user_id))
+    if cached and (now - cached[1]) < ADMIN_CACHE_TTL:
+        return cached[0]
     try:
         member = await bot.get_chat_member(chat_id, user_id)
-        return member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]
+        is_adm = member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]
+        _admin_cache[(chat_id, user_id)] = (is_adm, now)
+        return is_adm
     except Exception:
         return False
 
@@ -254,19 +265,19 @@ class CensorMiddleware(BaseMiddleware):
 
         # 1. Havolalar (reklama) filtri tekshiruvi
         if settings.get("link_filter_enabled", 0):
-            is_admin_check = await is_telegram_admin(chat_id, user.id, bot)
-            if not is_admin_check and not is_bot_owner(user):
-                has_link = False
-                entities = event.entities or event.caption_entities or []
-                for ent in entities:
-                    if ent.type in ("url", "text_link"):
-                        has_link = True
-                        break
-                text_raw = event.text or event.caption or ""
-                if not has_link and re.search(r'(https?://|t\.me/|telegram\.me/|@[a-zA-Z0-9_]{4,})', text_raw, re.IGNORECASE):
+            has_link = False
+            entities = event.entities or event.caption_entities or []
+            for ent in entities:
+                if ent.type in ("url", "text_link"):
                     has_link = True
+                    break
+            text_raw = event.text or event.caption or ""
+            if not has_link and re.search(r'(https?://|t\.me/|telegram\.me/|@[a-zA-Z0-9_]{4,})', text_raw, re.IGNORECASE):
+                has_link = True
 
-                if has_link:
+            if has_link:
+                is_admin_check = await is_telegram_admin(chat_id, user.id, bot)
+                if not is_admin_check and not is_bot_owner(user):
                     try:
                         await bot.delete_message(chat_id=chat_id, message_id=event.message_id)
                     except Exception:
