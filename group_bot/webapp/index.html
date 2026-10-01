@@ -1991,7 +1991,12 @@
         <div class="card-header">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <h2>🎭 Hazil uchun (Monster Prank & Emoji Bomb)</h2>
-            <span id="prankCountBadge" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 800;">0/5</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button type="button" onclick="refreshPrankUsers(true)" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border-glass); border-radius: 8px; color: var(--text-main); font-size: 11px; padding: 4px 8px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                🔄 Yangilash
+              </button>
+              <span id="prankCountBadge" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 800;">0/5</span>
+            </div>
           </div>
           <p>Ushbu ro'yxatga kiritilgan a'zolarga (ID yoki username) maxsus rejim tayinlanadi. Xabar yozganda bot avtomatik reaksiya bosadi (Emoji Bomb) yoki xabarni darhol o'chiradi (Ghost)!</p>
         </div>
@@ -2422,6 +2427,9 @@
       updateBackButton(tabId);
       if (tabId === 'tab-manager') {
         loadManagerOverview();
+      }
+      if (tabId === 'tab-prank' && currentChatId) {
+        refreshPrankUsers();
       }
     }
 
@@ -3398,6 +3406,24 @@
         }
       } catch (err) {
         showToast("Rejimni o'zgartirishda xatolik", "❌");
+      }
+    };
+
+    window.refreshPrankUsers = async function(notify = false) {
+      if (!currentChatId) return;
+      if (notify) {
+        haptic('light');
+        showToast("Hazil ro'yxati yangilanmoqda...", "🔄");
+      }
+      try {
+        const res = await apiFetch(`/api/group/${currentChatId}/prank_users`);
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.prank_users)) {
+          renderPrankUsers(data.prank_users);
+          if (notify) showToast("Hazil ro'yxati yangilandi!", "✅");
+        }
+      } catch (err) {
+        console.error("refreshPrankUsers error:", err);
       }
     };
 
