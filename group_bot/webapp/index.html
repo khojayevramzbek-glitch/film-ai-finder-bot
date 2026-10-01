@@ -2480,8 +2480,8 @@
       return true;
     }
 
-    // High-performance API Fetch with fallback routes
-    const RENDER_BACKEND_URL = "https://film-ai-finder-bot-uc34.onrender.com";
+    // High-performance API Fetch with dynamic origin & fallback routes
+    const currentOrigin = (window.location.origin && window.location.origin.startsWith('http')) ? window.location.origin : "https://film-ai-finder-bot-4wrf.onrender.com";
     const explicitBackend = urlParams.get('backend');
 
     async function apiFetch(path, options = {}) {
@@ -2499,14 +2499,13 @@
         candidates.push(`${cleanBackend}/gradio_api${fullPath}`);
       }
 
-      if (!window.location.hostname.includes("static.hf.space") && window.location.protocol !== "file:") {
-        candidates.push(fullPath);
-        candidates.push('/gradio_api' + fullPath);
-      }
-
-      candidates.push(`${RENDER_BACKEND_URL}${fullPath}`);
-      candidates.push(`${RENDER_BACKEND_URL}/gradio_api${fullPath}`);
+      // 1. Same-Origin relative call (fastest & bypasses CORS / Same-Origin restrictions)
       candidates.push(fullPath);
+      candidates.push('/gradio_api' + fullPath);
+      candidates.push(`${currentOrigin}${fullPath}`);
+      candidates.push(`${currentOrigin}/gradio_api${fullPath}`);
+      candidates.push(`https://film-ai-finder-bot-4wrf.onrender.com${fullPath}`);
+      candidates.push(`https://film-ai-finder-bot-uc34.onrender.com${fullPath}`);
 
       let lastError = null;
       for (const targetUrl of candidates) {
