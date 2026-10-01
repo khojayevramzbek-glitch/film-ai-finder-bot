@@ -26,7 +26,7 @@ def get_webapp_url() -> str:
     if WEBAPP_URL_FILE.exists():
         try:
             saved_url = WEBAPP_URL_FILE.read_text(encoding="utf-8").strip()
-            if saved_url and saved_url.startswith("http"):
+            if saved_url and saved_url.startswith("http") and "trycloudflare.com" not in saved_url:
                 return saved_url
         except Exception:
             pass
