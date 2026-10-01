@@ -2,7 +2,7 @@ import json
 import logging
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 if hasattr(sys.stdout, 'reconfigure'):
@@ -13,14 +13,17 @@ logger = logging.getLogger(__name__)
 DB_PATH = Path(__file__).resolve().parent / "bot_data.db"
 
 
-def import_telegram_export(json_path: str, target_chat_id: int = -1003834509976):
+def import_telegram_export(export_path: str, target_chat_id: int = -1003834509976):
     """
     Telegram Desktop JSON eksport faylidan barcha a'zolar xabarlari va
     qo'shilgan sanalarini bot bazasiga to'liq yuklash (Import).
     """
-    path = Path(json_path)
+    path = Path(export_path)
+    if path.is_dir():
+        path = path / "result.json"
+
     if not path.exists():
-        print(f"Fayl topilmadi: {json_path}")
+        print(f"Fayl topilmadi: {path}")
         return False
 
     print(f"Fayl ochilmoqda: {path}...")
@@ -28,10 +31,11 @@ def import_telegram_export(json_path: str, target_chat_id: int = -1003834509976)
         data = json.load(f)
 
     messages = []
-    # 1. Agar to'g'ridan-to'g'ri guruh eksporti bo'lsa (messages.json yoki bitta chat)
+    # 1. To'g'ridan-to'g'ri bitta guruh eksporti (result.json -> messages)
     if "messages" in data and isinstance(data["messages"], list):
         messages = data["messages"]
-    # 2. Agar umumiy akkaunt eksporti bo'lsa (result.json -> chats -> list)
+        print(f"Guruh nomi: {data.get('name')} (ID: {data.get('id')})")
+    # 2. Butun akkaunt eksporti (result.json -> chats -> list)
     elif "chats" in data and "list" in data["chats"]:
         target_str = str(abs(target_chat_id)).replace("100", "", 1) if str(abs(target_chat_id)).startswith("100") else str(abs(target_chat_id))
         for c in data["chats"]["list"]:
@@ -48,19 +52,54 @@ def import_telegram_export(json_path: str, target_chat_id: int = -1003834509976)
 
     print(f"Jami tahlil qilinadigan xabarlar soni: {len(messages)}")
 
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn = sqlite3.connect(DB_PATH, timeout=60.0)
     conn.row_factory = sqlite3.Row
 
-    users_stats = {}  # user_id -> {full_name, username, first_date, last_date, msg_count}
-    db_messages = []
+    # Jadval ustunlari mavjudligini kafolatlash
+    try:
+        conn.execute("ALTER TABLE group_members ADD COLUMN is_exact_join INTEGER DEFAULT 0;")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE group_members ADD COLUMN total_messages INTEGER DEFAULT 0;")
+    except Exception:
+        pass
 
+    users_stats = {}  # user_id -> {full_name, username, join_date, first_seen, last_seen, msg_count}
+    recent_messages = []
+    max_ts = 0
+
+    # 1-qadam: Eng so'nggi xabar vaqtini aniqlash (so'nggi 3 kunlik xabarlarni ajratib olish uchun)
+    for m in messages:
+        ts = m.get("date_unixtime")
+        if ts and int(ts) > max_ts:
+            max_ts = int(ts)
+
+    cutoff_3d_ts = max_ts - (3 * 86400) if max_ts > 0 else 0
+
+    # 2-qadam: Barcha xabarlarni bir marta to'liq tahlil qilish
     for m in messages:
         m_id = m.get("id")
+        date_unixtime = m.get("date_unixtime")
         date_str = m.get("date")
-        if not date_str:
+
+        if date_unixtime:
+            dt = datetime.fromtimestamp(int(date_unixtime), timezone.utc)
+            iso_date = dt.isoformat()
+            ts_val = int(date_unixtime)
+        elif date_str:
+            try:
+                dt = datetime.fromisoformat(date_str)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                iso_date = dt.isoformat()
+                ts_val = int(dt.timestamp())
+            except Exception:
+                iso_date = date_str
+                ts_val = 0
+        else:
             continue
 
-        # from_id ni aniqlash: "user8594505572" -> 8594505572
         raw_from_id = m.get("from_id") or m.get("actor_id")
         if not raw_from_id or not str(raw_from_id).startswith("user"):
             continue
@@ -70,52 +109,58 @@ def import_telegram_export(json_path: str, target_chat_id: int = -1003834509976)
         except Exception:
             continue
 
-        full_name = m.get("from") or m.get("actor") or f"User {user_id}"
-        username = None  # JSON exportda odatda username bo'lmaydi, lekin known_users orqali saqlanadi
+        name = m.get("from") or m.get("actor") or f"User {user_id}"
+        m_type = m.get("type")
+        act = m.get("action")
 
-        # Format date
-        try:
-            dt = datetime.fromisoformat(date_str)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            iso_date = dt.isoformat()
-        except Exception:
-            iso_date = date_str
-
-        # Statistika yig'ish
         if user_id not in users_stats:
             users_stats[user_id] = {
-                "full_name": full_name,
-                "username": username,
-                "first_date": iso_date,
-                "last_date": iso_date,
+                "full_name": name,
+                "username": None,
+                "join_date": None,
+                "first_seen": iso_date,
+                "last_seen": iso_date,
                 "msg_count": 0
             }
 
-        users_stats[user_id]["msg_count"] += 1
-        users_stats[user_id]["last_date"] = iso_date
-        if iso_date < users_stats[user_id]["first_date"]:
-            users_stats[user_id]["first_date"] = iso_date
+        st = users_stats[user_id]
+        if name and not st["full_name"].startswith("User "):
+            st["full_name"] = name
 
-        if m.get("type") == "message":
-            db_messages.append((m_id, target_chat_id, user_id, full_name, username, iso_date))
+        if iso_date < st["first_seen"]:
+            st["first_seen"] = iso_date
+        if iso_date > st["last_seen"]:
+            st["last_seen"] = iso_date
 
-    print(f"Topilgan a'zolar soni: {len(users_stats)}")
+        if act == "join_group_by_request":
+            if not st["join_date"] or iso_date < st["join_date"]:
+                st["join_date"] = iso_date
+
+        if m_type == "message":
+            st["msg_count"] += 1
+            if ts_val >= cutoff_3d_ts:
+                recent_messages.append((m_id, target_chat_id, user_id, name, None, iso_date))
+
+    print(f"Tahlil qilindi: {len(users_stats)} nafar unikal a'zo aniqlandi.")
+
+    # 3-qadam: group_members va known_users jadvallarini yangilash
+    print("A'zolar ma'lumotlari bazaga yozilmoqda...")
     for uid, st in users_stats.items():
-        print(f"👤 {st['full_name']} (ID: {uid}): {st['msg_count']} ta xabar, Birinchi faolligi: {st['first_date']}")
+        # Agar join_group_by_request bo'lmasa, uning ilk faolligi (birinchi xabari) qo'shilgan vaqti hisoblanadi
+        effective_join = st["join_date"] or st["first_seen"]
 
-    # Bazaga guruh a'zolarini va birinchi faollik sanasini yozish
-    for uid, st in users_stats.items():
         conn.execute("""
-            INSERT INTO group_members (chat_id, user_id, full_name, username, joined_at, first_seen, last_seen, is_exact_join)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+            INSERT INTO group_members (chat_id, user_id, full_name, username, joined_at, first_seen, last_seen, is_exact_join, total_messages)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
             ON CONFLICT(chat_id, user_id) DO UPDATE SET
                 full_name = excluded.full_name,
+                username = COALESCE(excluded.username, group_members.username),
                 joined_at = MIN(group_members.joined_at, excluded.joined_at),
                 first_seen = MIN(group_members.first_seen, excluded.first_seen),
                 last_seen = MAX(group_members.last_seen, excluded.last_seen),
-                is_exact_join = 1
-        """, (target_chat_id, uid, st["full_name"], st["username"], st["first_date"], st["first_date"], st["last_date"]))
+                is_exact_join = 1,
+                total_messages = MAX(COALESCE(group_members.total_messages, 0), excluded.total_messages)
+        """, (target_chat_id, uid, st["full_name"], st["username"], effective_join, st["first_seen"], st["last_seen"], st["msg_count"]))
 
         conn.execute("""
             INSERT INTO known_users (user_id, username, full_name, last_chat_id, updated_at)
@@ -124,24 +169,29 @@ def import_telegram_export(json_path: str, target_chat_id: int = -1003834509976)
                 full_name = excluded.full_name,
                 last_chat_id = excluded.last_chat_id,
                 updated_at = excluded.updated_at
-        """, (uid, st["username"], st["full_name"], target_chat_id, st["last_date"]))
+        """, (uid, st["username"], st["full_name"], target_chat_id, st["last_seen"]))
 
-    # Xabarlarni bazaga to'ldirish (agar mavjud bo'lmasa)
-    print(f"{len(db_messages)} ta xabar bazaga kiritilmoqda...")
+    # 4-qadam: So'nggi 3 kunlik xabarlarni messages jadvaliga kiritish (24 soatlik statistika uchun)
+    print(f"So'nggi 3 kunlik {len(recent_messages)} ta xabar 'messages' jadvaliga kiritilmoqda...")
     conn.executemany("""
         INSERT OR IGNORE INTO messages (message_id, chat_id, user_id, full_name, username, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
-    """, db_messages)
+    """, recent_messages)
 
     conn.commit()
+
+    # Bazani optimizatsiya qilish
+    print("Baza optimallashtirilmoqda (VACUUM & ANALYZE)...")
+    conn.execute("ANALYZE;")
+    conn.commit()
     conn.close()
-    print("✅ Eksport ma'lumotlari muvaffaqiyatli bazaga yuklandi!")
+
+    print("✅ Tarixiy eksport ma'lumotlari to'liq va muvaffaqiyatli yuklandi!")
     return True
 
 
 if __name__ == "__main__":
-    import sys
-    path = r"C:\Users\Ramzbek\Downloads\Telegram Desktop\DataExport_2026-10-01 (1)\result.json"
+    path = r"C:\Users\Ramzbek\Downloads\Telegram Desktop\ChatExport_2026-10-01 (1)\result.json"
     if len(sys.argv) > 1:
         path = sys.argv[1]
     import_telegram_export(path)

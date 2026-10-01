@@ -61,6 +61,13 @@ async def is_group_creator(chat_id: int, user_id: int, bot: Bot) -> bool:
         return False
 
 
+UZBEK_MONTHS = {
+    1: "yanvar", 2: "fevral", 3: "mart", 4: "aprel",
+    5: "may", 6: "iyun", 7: "iyul", 8: "avgust",
+    9: "sentyabr", 10: "oktyabr", 11: "noyabr", 12: "dekabr"
+}
+
+
 TIME_REGEX = re.compile(
     r"^(\d+)\s*(s|sec|sek|sekund|soniya|с|сек|секунд|"
     r"m|min|daq|daqiqa|м|мин|минут|минута|"
@@ -700,14 +707,8 @@ async def cmd_user_info(message: types.Message, bot: Bot):
     # 2) ID: target_id
 
     # 3) Qo'shilgan kuni, oyi, yili
-    UZBEK_MONTHS = {
-        1: "yanvar", 2: "fevral", 3: "mart", 4: "aprel",
-        5: "may", 6: "iyun", 7: "iyul", 8: "avgust",
-        9: "sentyabr", 10: "oktyabr", 11: "noyabr", 12: "dekabr"
-    }
-
-    raw_dt = stats.get("joined_at")
-    if is_exact_join and raw_dt:
+    raw_dt = stats.get("joined_at") or stats.get("first_msg")
+    if raw_dt:
         try:
             if isinstance(raw_dt, str):
                 dt_str = raw_dt.replace("Z", "+00:00")
@@ -725,20 +726,16 @@ async def cmd_user_info(message: types.Message, bot: Bot):
             month_name = UZBEK_MONTHS.get(dt_local.month, "")
             joined_text = f"{dt_local.day}-{month_name} {dt_local.year}-yil"
         except Exception:
-            joined_text = "Guruhning eski a'zosi (Botdan oldin qo'shilgan)"
+            joined_text = "Noma'lum"
     else:
-        joined_text = "Guruhning eski a'zosi (Botdan oldin qo'shilgan)"
+        joined_text = "Noma'lum"
 
     # 4) Xabarlari soni
     total_msgs = stats.get("total_msgs", 0)
     if total_msgs == 0 and message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id == target_id:
         total_msgs = 1
     total_msgs_text = f"{total_msgs:,}".replace(",", " ")
-
-    if is_exact_join:
-        msgs_line = f"💬 <b>Barcha xabarlari:</b> {total_msgs_text} ta"
-    else:
-        msgs_line = f"💬 <b>Xabarlari (bot hisobida):</b> {total_msgs_text} ta"
+    msgs_line = f"💬 <b>Barcha xabarlari:</b> {total_msgs_text} ta"
 
     # 5) Olgan mutelari
     mute_count = stats.get("mute_count", 0)

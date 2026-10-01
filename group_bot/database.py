@@ -146,11 +146,16 @@ def init_db():
                 first_seen TIMESTAMP NOT NULL,
                 last_seen TIMESTAMP NOT NULL,
                 is_exact_join INTEGER DEFAULT 0,
+                total_messages INTEGER DEFAULT 0,
                 PRIMARY KEY (chat_id, user_id)
             );
         """)
         try:
             conn.execute("ALTER TABLE group_members ADD COLUMN is_exact_join INTEGER DEFAULT 0;")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE group_members ADD COLUMN total_messages INTEGER DEFAULT 0;")
         except Exception:
             pass
         conn.execute("""
@@ -426,6 +431,15 @@ def add_message(chat_id: int, user_id: int, full_name: str, username: str | None
             VALUES (?, ?, ?, ?, ?, ?)
             """,
             (chat_id, user_id, full_name, username, now_utc, message_id)
+        )
+        conn.execute(
+            """
+            UPDATE group_members
+            SET total_messages = COALESCE(total_messages, 0) + 1,
+                last_seen = ?
+            WHERE chat_id = ? AND user_id = ?
+            """,
+            (now_utc, chat_id, user_id)
         )
         conn.commit()
 
@@ -1636,11 +1650,11 @@ def record_member_join(chat_id: int, user_id: int, full_name: str, username: str
     with get_connection() as conn:
         conn.execute(
             """
-            INSERT INTO group_members (chat_id, user_id, full_name, username, joined_at, first_seen, last_seen, is_exact_join)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO group_members (chat_id, user_id, full_name, username, joined_at, first_seen, last_seen, is_exact_join, total_messages)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
             ON CONFLICT(chat_id, user_id) DO UPDATE SET
                 full_name = excluded.full_name,
-                username = excluded.username,
+                username = COALESCE(excluded.username, group_members.username),
                 last_seen = excluded.last_seen,
                 is_exact_join = MAX(group_members.is_exact_join, excluded.is_exact_join)
             """,
@@ -1670,7 +1684,7 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
             (chat_id, user_id)
         )
         msg_row = cur.fetchone()
-        total_msgs = msg_row["total"] if msg_row else 0
+        table_msgs = msg_row["total"] if msg_row else 0
         first_msg = msg_row["first_msg"] if msg_row else None
         last_msg = msg_row["last_msg"] if msg_row else None
 
@@ -1684,18 +1698,23 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
 
         # 3. Qo'shilgan vaqti (group_members yoki birinchi xabar vaqti)
         cur = conn.execute(
-            "SELECT joined_at, first_seen, last_seen, full_name, username, is_exact_join FROM group_members WHERE chat_id = ? AND user_id = ?",
+            "SELECT joined_at, first_seen, last_seen, full_name, username, is_exact_join, total_messages FROM group_members WHERE chat_id = ? AND user_id = ?",
             (chat_id, user_id)
         )
         m_row = cur.fetchone()
         joined_at = None
         is_exact = False
+        member_total = 0
         if m_row:
             joined_at = m_row["joined_at"]
             try:
                 is_exact = bool(m_row["is_exact_join"])
             except Exception:
                 is_exact = False
+            try:
+                member_total = int(m_row["total_messages"] or 0)
+            except Exception:
+                member_total = 0
         elif first_msg:
             joined_at = first_msg
         else:
@@ -1703,6 +1722,9 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
             k_row = cur.fetchone()
             if k_row and k_row["updated_at"]:
                 joined_at = k_row["updated_at"]
+
+        # Jami barcha xabarlar soni
+        total_msgs = max(member_total, table_msgs)
 
         # 4. Mute jazolari soni
         cur = conn.execute(
