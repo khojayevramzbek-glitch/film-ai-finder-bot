@@ -80,6 +80,14 @@
       background: rgba(56, 189, 248, 0.4);
     }
 
+    html {
+      height: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+    }
+
     body {
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       background-color: var(--bg-base);
@@ -89,10 +97,17 @@
         radial-gradient(circle at 50% 85%, rgba(16, 185, 129, 0.08) 0%, transparent 50%);
       background-attachment: fixed;
       color: var(--text-main);
-      min-height: 100vh;
+      min-height: 100%;
+      min-height: 100dvh;
       overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
+      overscroll-behavior-y: contain;
       line-height: 1.5;
       font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
     /* Ambient Lighting Mesh (Animated) */
@@ -324,17 +339,23 @@
       display: none;
     }
 
-    /* Desktop Navigation (Top Pills) */
+    /* Universal Navigation (Top Category Pills for Mobile, Tablet & PC) */
     .desktop-nav-wrap {
-      display: none;
+      display: block !important;
       position: sticky;
-      top: 67px;
+      top: 61px;
       z-index: 55;
-      background: rgba(6, 9, 17, 0.88);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
+      background: rgba(6, 9, 17, 0.94);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
       border-bottom: 1px solid var(--border-glass);
-      padding: 8px 18px;
+      padding: 8px 12px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .desktop-nav-wrap::-webkit-scrollbar {
+      display: none;
     }
     .desktop-nav {
       max-width: 940px;
@@ -343,39 +364,43 @@
       align-items: center;
       gap: 8px;
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       scrollbar-width: none;
+      white-space: nowrap;
+      padding: 2px 4px;
     }
     .desktop-nav::-webkit-scrollbar {
       display: none;
     }
     .desktop-nav-item {
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 7px;
-      background: rgba(255, 255, 255, 0.04);
+      background: rgba(255, 255, 255, 0.05);
       border: 1px solid var(--border-glass);
       color: var(--text-sub);
       border-radius: var(--radius-pill);
-      padding: 8px 16px;
-      font-size: 12.5px;
+      padding: 7px 14px;
+      font-size: 12px;
       font-weight: 700;
       cursor: pointer;
       white-space: nowrap;
+      flex-shrink: 0;
       transition: all 0.2s var(--ease-spring);
     }
-    .desktop-nav-item:hover {
-      background: rgba(56, 189, 248, 0.1);
+    .desktop-nav-item:hover, .desktop-nav-item:active {
+      background: rgba(56, 189, 248, 0.15);
       color: #fff;
-      border-color: rgba(56, 189, 248, 0.3);
+      border-color: rgba(56, 189, 248, 0.4);
     }
     .desktop-nav-item.active {
       background: linear-gradient(135deg, #0284c7, #2563eb);
       color: #fff;
       border-color: var(--accent-cyan);
-      box-shadow: 0 4px 16px rgba(2, 132, 199, 0.4);
+      box-shadow: 0 4px 16px rgba(2, 132, 199, 0.45);
     }
 
-    /* Mobile Bottom Navigation (Ultra Glass) */
+    /* Mobile Bottom Navigation (Ultra Glass, Horizontal Swipe Support) */
     .bottom-nav {
       display: flex;
       position: fixed;
@@ -383,13 +408,19 @@
       left: 0;
       right: 0;
       z-index: 70;
-      background: rgba(6, 9, 17, 0.92);
+      background: rgba(6, 9, 17, 0.95);
       backdrop-filter: blur(28px) saturate(180%);
       -webkit-backdrop-filter: blur(28px) saturate(180%);
       border-top: 1px solid var(--border-glass);
-      justify-content: space-around;
-      padding: 6px 4px calc(8px + env(safe-area-inset-bottom, 0px));
-      box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.5);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding: 6px 6px calc(10px + env(safe-area-inset-bottom, 0px));
+      box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.6);
+      gap: 4px;
+    }
+    .bottom-nav::-webkit-scrollbar {
+      display: none;
     }
     .nav-item {
       display: flex;
@@ -402,12 +433,12 @@
       font-size: 10px;
       font-weight: 700;
       cursor: pointer;
-      padding: 6px 8px;
+      padding: 6px 10px;
       border-radius: var(--radius-sm);
       transition: all 0.2s var(--ease-spring);
       position: relative;
-      flex: 1;
-      max-width: 72px;
+      flex-shrink: 0;
+      min-width: 58px;
     }
     .nav-item:active {
       transform: scale(0.9);
@@ -437,10 +468,7 @@
     /* Responsive Breakpoints */
     @media (min-width: 768px) {
       body {
-        padding-bottom: 40px;
-      }
-      .desktop-nav-wrap {
-        display: block;
+        padding-bottom: 40px !important;
       }
       .bottom-nav {
         display: none !important;
@@ -456,10 +484,10 @@
     }
     @media (max-width: 767px) {
       body {
-        padding-bottom: 95px;
+        padding-bottom: max(140px, calc(env(safe-area-inset-bottom, 0px) + 120px)) !important;
       }
       .container {
-        padding: 12px;
+        padding: 12px 12px 60px 12px;
       }
       .grid-2-col {
         display: flex;
@@ -2140,7 +2168,7 @@
 
   </main>
 
-  <!-- Mobile Bottom Navigation -->
+  <!-- Mobile Bottom Navigation (All 10 Tabs, Horizontally Scrollable) -->
   <nav class="bottom-nav">
     <button class="nav-item active" data-tab="tab-general">
       <span class="nav-icon">⚙️</span>
@@ -2154,6 +2182,10 @@
       <span class="nav-icon">🤬</span>
       <span>So'zlar</span>
     </button>
+    <button class="nav-item" data-tab="tab-punishments">
+      <span class="nav-icon">⚖️</span>
+      <span>Jazolar</span>
+    </button>
     <button class="nav-item" data-tab="tab-stats">
       <span class="nav-icon">🏆</span>
       <span>Stata</span>
@@ -2161,6 +2193,14 @@
     <button class="nav-item" data-tab="tab-rules">
       <span class="nav-icon">📜</span>
       <span>Qoidalar</span>
+    </button>
+    <button class="nav-item" data-tab="tab-prank">
+      <span class="nav-icon">🎭</span>
+      <span>Hazil</span>
+    </button>
+    <button class="nav-item" data-tab="tab-commands">
+      <span class="nav-icon">ℹ️</span>
+      <span>Buyruqlar</span>
     </button>
     <button class="nav-item" data-tab="tab-groups">
       <span class="nav-icon">👥</span>
@@ -2183,6 +2223,9 @@
       tg.ready();
       tg.expand();
       try {
+        if (typeof tg.disableVerticalSwipes === 'function') {
+          tg.disableVerticalSwipes();
+        }
         if (tg.enableClosingConfirmation) tg.enableClosingConfirmation();
         if (tg.setHeaderColor) tg.setHeaderColor('#060911');
         if (tg.setBackgroundColor) tg.setBackgroundColor('#060911');
@@ -2356,10 +2399,16 @@
       if (targetPane) targetPane.classList.add('active');
 
       const dBtn = document.querySelector(`.desktop-nav-item[data-tab="${tabId}"]`);
-      if (dBtn) dBtn.classList.add('active');
+      if (dBtn) {
+        dBtn.classList.add('active');
+        try { dBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }); } catch(e) {}
+      }
 
       const mBtn = document.querySelector(`.nav-item[data-tab="${tabId}"]`);
-      if (mBtn) mBtn.classList.add('active');
+      if (mBtn) {
+        mBtn.classList.add('active');
+        try { mBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }); } catch(e) {}
+      }
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
