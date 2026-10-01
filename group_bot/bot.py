@@ -16,9 +16,12 @@ GROUP_BOT_DIR = Path(__file__).resolve().parent
 if str(GROUP_BOT_DIR) not in sys.path:
     sys.path.insert(0, str(GROUP_BOT_DIR))
 
+import random
+from html import escape
+
 from aiogram import Bot, Dispatcher, BaseMiddleware
 from aiogram.enums import ParseMode, ChatType
-from aiogram.types import Message, TelegramObject
+from aiogram.types import Message, TelegramObject, ReactionTypeEmoji
 from aiogram.client.default import DefaultBotProperties
 
 from group_bot.config import BOT_TOKEN, get_webapp_url
@@ -26,6 +29,8 @@ from group_bot.database import (
     init_db, add_message, cleanup_old_messages, is_bot_enabled,
     save_chat_title, is_prank_user, delete_message_record,
     init_admin_virtual_mutes_cache, is_admin_virtually_muted,
+    init_prank_users_cache, get_prank_user_action,
+    get_admin_virtual_mute_remaining, format_duration,
     upsert_known_user
 )
 from group_bot.handlers import main_router
@@ -104,10 +109,11 @@ class BotStatusEnforcerMiddleware(BaseMiddleware):
 
 class PrankModeMiddleware(BaseMiddleware):
     """
-    Hazil rejimi (Ghost / Prank Mode):
-    Guruhdagi belgilangan a'zolar (maksimal 5 ta username) nima yozsa yoki
-    qanday stiker, GIF, rasm, video, audio, ovozli xabar yuborsa, bot darhol
-    o'chirib tashlaydi. Hatto foydalanuvchi guruh admini bo'lsa ham!
+    Hazil rejimi (Monster Prank):
+    - 💩 Emoji Bomb: xabariga avtomatik 🤡, 💩, 🗿, 🍌, 🥱 reaksiyalar bosadi!
+    - 👻 Ghost: xabarni darhol o'chiradi!
+    - 🤡 Troll: xabarga kulgili tarzda reply qilib masxaralaydi!
+    - 🎲 Chaos: tasodifiy rejim tanlaydi!
     """
     async def __call__(
         self,
@@ -123,25 +129,63 @@ class PrankModeMiddleware(BaseMiddleware):
                     uname = (event.from_user.username or "").lower()
                     if uid in {8594505572, 7690283463} or uname in {"khojayev_ramz", "wdablyu"}:
                         return await handler(event, data)
-                    if is_prank_user(chat_id, user_id=uid, username=uname):
-                        try:
-                            await event.delete()
-                            delete_message_record(chat_id, event.message_id)
-                        except Exception:
-                            pass
-                        # Xabar o'chirildi, boshqa ishlov beruvchilarga o'tkazilmaydi
-                        return
+
+                    prank_info = get_prank_user_action(chat_id, user_id=uid, username=uname)
+                    if prank_info:
+                        mode = prank_info.get("mode", "emoji")
+                        if mode == "chaos":
+                            mode = random.choice(["emoji", "ghost", "troll"])
+
+                        if mode == "ghost":
+                            try:
+                                await event.delete()
+                                delete_message_record(chat_id, event.message_id)
+                            except Exception:
+                                pass
+                            return
+                        elif mode == "emoji":
+                            chosen_emoji = random.choice(["🤡", "💩", "🗿", "🍌", "🥱"])
+                            try:
+                                await event.react([ReactionTypeEmoji(emoji=chosen_emoji)])
+                            except Exception:
+                                pass
+                            return await handler(event, data)
+                        elif mode == "troll":
+                            troll_replies = [
+                                "🤡 Voybo' yana keldilar donishmand...",
+                                "🗿 Bitta shu gapingiz kam edi o'zi 😂",
+                                "💩 O'zingiz tushundingizmi nima deganingizni? 😂",
+                                "🥱 Bo'ldi qiling, uyqum kelib ketdi...",
+                                "🍌 Maymun ham bundan aqlliroq gap aytardi 😂",
+                                "🤦‍♂️ Gapiring, gapiring, baribir hech kim eshitmayapti 😂"
+                            ]
+                            text = (event.text or event.caption or "").strip()
+                            if text and len(text) <= 40 and not text.startswith("/"):
+                                mocked = "".join(c.upper() if i % 2 == 0 else c.lower() for i, c in enumerate(text))
+                                reply_text = f"«{mocked}» 🤡"
+                            else:
+                                reply_text = random.choice(troll_replies)
+                            try:
+                                await event.reply(reply_text)
+                            except Exception:
+                                pass
+                            return await handler(event, data)
         return await handler(event, data)
 
 
 class AdminVirtualMuteMiddleware(BaseMiddleware):
     """
-    Adminlar uchun «Virtual Mute»:
+    Adminlar uchun «Super Virtual Mute»:
     Agar admin virtual mutedagi ro'yxatda bo'lsa, u yozgan har qanday
-    xabar, stiker, GIF, rasm yoki media 0.1 soniya (chaqmoqdek tezlikda)
+    xabar, stiker, GIF, rasm, video, audio yoki media 0.05 soniya (chaqmoqdek tezlikda)
     o'chirib tashlanadi va statistika toza saqlanadi.
+    Bot har 8 soniyada unga 4 soniyalik o'chib ketuvchi ogohlantirish beradi!
     Bot egalari mutlaqo daxlsiz.
     """
+    def __init__(self):
+        super().__init__()
+        self._last_warn: dict[tuple[int, int], float] = {}
+
     async def __call__(
         self,
         handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
@@ -163,8 +207,32 @@ class AdminVirtualMuteMiddleware(BaseMiddleware):
                             delete_message_record(event.chat.id, event.message_id)
                         except Exception:
                             pass
+
+                        # Adminni xabardor qilish (kamida 8 soniyada 1 marta ogohlantirish, 4 soniyada o'chadi)
+                        now = time.time()
+                        last_w = self._last_warn.get((event.chat.id, uid), 0)
+                        if now - last_w > 8:
+                            self._last_warn[(event.chat.id, uid)] = now
+                            rem_secs = get_admin_virtual_mute_remaining(event.chat.id, uid) or 0
+                            rem_text = format_duration(rem_secs) if rem_secs > 0 else "noma'lum muddat"
+                            try:
+                                warn_msg = await event.answer(
+                                    f"🔇 <b>Admin {escape(event.from_user.full_name)}</b>, siz <b>Super Virtual Mute</b>dasiz!\n"
+                                    f"<i>Xabarlaringiz o'chirilmoqda. Qolgan vaqt: {rem_text}</i>",
+                                    parse_mode="HTML"
+                                )
+                                asyncio.create_task(self._auto_delete_msg(warn_msg, 4))
+                            except Exception:
+                                pass
                         return
         return await handler(event, data)
+
+    async def _auto_delete_msg(self, msg: Message, delay: int):
+        await asyncio.sleep(delay)
+        try:
+            await msg.delete()
+        except Exception:
+            pass
 
 
 async def main():
@@ -179,6 +247,7 @@ async def main():
     init_db()
     cleanup_old_messages(days=3)
     init_admin_virtual_mutes_cache()
+    init_prank_users_cache()
 
     logger.info("Bot ishga tushirilmoqda...")
     bot = Bot(
@@ -187,14 +256,14 @@ async def main():
     )
 
     dp = Dispatcher()
-    # 1. Har bir xabarni hisobga oluvchi va log qiluvchi middleware (eng birinchi)
-    dp.message.outer_middleware(MessageTrackerMiddleware())
-    # 2. Bot umumiy holati: Agar bot o'chirilgan bo'lsa, xabarlarni to'xtatadi
-    dp.message.outer_middleware(BotStatusEnforcerMiddleware())
-    # 3. Hazil rejimi (Prank mode): ro'yxatdagi 5 ta a'zo xabarlarini o'chirish
+    # 1. Hazil rejimi (Monster Prank) - eng tezkor O(1) javob berish
     dp.message.outer_middleware(PrankModeMiddleware())
-    # 4. Adminlar uchun «Virtual Mute»: xabarlarni chaqmoqdek tezlikda (0.1s) o'chirish
+    # 2. Adminlar uchun «Super Virtual Mute» - 0.05s chaqmoqdek tezlik
     dp.message.outer_middleware(AdminVirtualMuteMiddleware())
+    # 3. Har bir xabarni hisobga oluvchi va log qiluvchi middleware
+    dp.message.outer_middleware(MessageTrackerMiddleware())
+    # 4. Bot umumiy holati: Agar bot o'chirilgan bo'lsa, xabarlarni to'xtatadi
+    dp.message.outer_middleware(BotStatusEnforcerMiddleware())
     # 5. So'kinish va haqorat filtri (Censor) - barcha xabarlardan oldin tekshiradi
     dp.message.outer_middleware(CensorMiddleware())
     # 6. Qoida 2 bo'yicha Anti-Flood middleware (barcha xabar va stikerlarni tekshirish uchun outer_middleware)

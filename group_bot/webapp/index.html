@@ -1990,22 +1990,28 @@
       <div class="glass-card">
         <div class="card-header">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h2>🎭 Hazil uchun (Ghost Rejimi)</h2>
+            <h2>🎭 Hazil uchun (Monster Prank & Emoji Bomb)</h2>
             <span id="prankCountBadge" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 800;">0/5</span>
           </div>
-          <p>Ushbu ro'yxatga kiritilgan foydalanuvchilar (maksimal 5 ta username yoki Telegram ID) guruhda nima yozsa yoki qanday stiker, GIF, rasm yuborsa bot zudlik bilan o'chirib tashlaydi. Hatto foydalanuvchi guruh admini bo'lsa ham!</p>
+          <p>Ushbu ro'yxatga kiritilgan a'zolarga (ID yoki username) maxsus rejim tayinlanadi. Xabar yozganda bot avtomatik reaksiya bosadi (Emoji Bomb) yoki xabarni darhol o'chiradi (Ghost)!</p>
         </div>
 
         <div class="tags-container" id="prankUsersContainer">
           <span style="font-size: 12px; color: var(--text-muted);">Hozircha hech kim kiritilmagan</span>
         </div>
 
-        <div class="custom-row" style="margin-top: 14px;">
-          <input type="text" id="inputNewPrankUser" class="text-input" style="flex: 1;" placeholder="Username yoki Telegram ID (masalan: @username yoki 123456789)...">
-          <button class="btn-copy" id="btnAddPrankUser" type="button" style="background: #ef4444; color: #fff; padding: 11px 22px; font-weight: 800;">➕ Qo'shish</button>
+        <div class="custom-row" style="margin-top: 14px; gap: 8px; flex-wrap: wrap;">
+          <input type="text" id="inputNewPrankUser" class="text-input" style="flex: 2; min-width: 180px;" placeholder="Username yoki Telegram ID (masalan: @user yoki 7054013538)...">
+          <select id="selectPrankMode" class="text-input" style="flex: 1; min-width: 160px; font-weight: 700; background: var(--bg-card); color: var(--text-main);">
+            <option value="emoji">💩 Emoji Bomb (🤡,💩,🗿,🍌,🥱)</option>
+            <option value="ghost">👻 Ghost (Xabarni o'chirish)</option>
+            <option value="troll">🤡 Troll (Masxara qilib reply)</option>
+            <option value="chaos">🎲 Chaos (Aralash jinni rejim)</option>
+          </select>
+          <button class="btn-copy" id="btnAddPrankUser" type="button" style="background: #ef4444; color: #fff; padding: 11px 20px; font-weight: 800; border-radius: 12px;">➕ Qo'shish</button>
         </div>
         <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
-          💡 Eslatma: Shu guruhdagi a'zolarning username'ini yoki Telegram ID raqamini kiriting. Maksimal 5 ta foydalanuvchi kiritish mumkin.
+          💡 <b>Maslahat:</b> Ro'yxatdagi foydalanuvchi kartochkasidagi rejim tugmasini (🔄) bosib, uning rejimini istalgan paytda bir zumda almashtirishingiz mumkin.
         </div>
       </div>
     </div>
@@ -2865,15 +2871,52 @@
         container.innerHTML = '<span style="font-size: 12px; color: var(--text-muted);">Hozircha hech kim kiritilmagan</span>';
         return;
       }
-      list.forEach(u => {
+      list.forEach(item => {
+        const isObj = typeof item === 'object' && item !== null;
+        const uid = isObj ? (item.user_id || 0) : (/^\d+$/.test(item) ? parseInt(item) : 0);
+        const rawU = isObj ? (item.username || '') : String(item);
+        const mode = isObj ? (item.mode || 'emoji') : 'emoji';
+        const fullName = isObj ? (item.full_name || '') : '';
+
+        const targetIdent = uid > 0 ? String(uid) : rawU;
+
+        let displayLabel = '';
+        if (fullName && !fullName.startsWith('User ')) {
+          displayLabel = escapeHtml(fullName);
+          if (uid > 0) displayLabel += ` <span style="font-size: 10px; opacity: 0.7;">(${uid})</span>`;
+        } else if (uid > 0) {
+          displayLabel = `🆔 ID: ${uid}`;
+        } else {
+          displayLabel = `@${escapeHtml(rawU.replace(/^@/, ''))}`;
+        }
+
+        const modeMap = {
+          'emoji': { label: '💩 Emoji Bomb', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.18)' },
+          'ghost': { label: '👻 Ghost', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.18)' },
+          'troll': { label: '🤡 Troll', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.18)' },
+          'chaos': { label: '🎲 Chaos', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.18)' }
+        };
+        const mInfo = modeMap[mode] || modeMap['emoji'];
+
         const chip = document.createElement('div');
         chip.className = 'tag-chip';
         chip.style.borderColor = 'rgba(239, 68, 68, 0.4)';
         chip.style.background = 'rgba(239, 68, 68, 0.12)';
-        const cleanU = String(u).trim();
-        const isNumeric = /^\d+$/.test(cleanU);
-        const displayLabel = isNumeric ? `🆔 ID: ${escapeHtml(cleanU)}` : `@${escapeHtml(cleanU.replace(/^@/, ''))}`;
-        chip.innerHTML = `<span>${displayLabel}</span><button type="button" onclick="removePrankUser('${escapeHtml(cleanU)}')">&times;</button>`;
+        chip.style.display = 'inline-flex';
+        chip.style.alignItems = 'center';
+        chip.style.gap = '8px';
+        chip.style.padding = '6px 12px';
+
+        chip.innerHTML = `
+          <span style="font-weight: 600;">${displayLabel}</span>
+          <button type="button" 
+                  onclick="cyclePrankMode('${escapeHtml(targetIdent)}', '${escapeHtml(mode)}')" 
+                  style="background: ${mInfo.bg}; color: ${mInfo.color}; border: 1px solid ${mInfo.color}; border-radius: 12px; font-size: 11px; font-weight: 700; padding: 3px 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" 
+                  title="Rejimni almashtirish uchun bosing">
+            ${mInfo.label} 🔄
+          </button>
+          <button type="button" onclick="removePrankUser('${escapeHtml(targetIdent)}')" style="cursor: pointer; font-size: 18px; margin-left: 4px; line-height: 1; color: #f87171;" title="O'chirish">&times;</button>
+        `;
         container.appendChild(chip);
       });
     }
@@ -3210,13 +3253,14 @@
       haptic('medium');
       const input = document.getElementById('inputNewPrankUser');
       const username = input.value.trim();
+      const mode = document.getElementById('selectPrankMode')?.value || 'emoji';
       if (!username) return;
 
       try {
         const res = await apiFetch(`/api/group/${currentChatId}/prank_users`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username })
+          body: JSON.stringify({ username, mode })
         });
         const data = await res.json();
         if (data.ok) {
@@ -3235,18 +3279,47 @@
       if (e.key === 'Enter') document.getElementById('btnAddPrankUser')?.click();
     });
 
-    window.removePrankUser = async function(username) {
+    window.cyclePrankMode = async function(target, currentMode) {
+      if (!requireCurrentChat()) return;
+      haptic('selection');
+      const modes = ['emoji', 'ghost', 'troll', 'chaos'];
+      let idx = modes.indexOf(currentMode);
+      const nextMode = modes[(idx + 1) % modes.length];
+
+      try {
+        const res = await apiFetch(`/api/group/${currentChatId}/prank_users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: target, mode: nextMode })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          renderPrankUsers(data.prank_users);
+          const modeLabels = {
+            'emoji': '💩 Emoji Bomb',
+            'ghost': '👻 Ghost',
+            'troll': '🤡 Troll',
+            'chaos': '🎲 Chaos'
+          };
+          showToast(`Rejim: ${modeLabels[nextMode]}! 🔄`, "🎭");
+        }
+      } catch (err) {
+        showToast("Xatolik yuz berdi", "❌");
+      }
+    };
+
+    window.removePrankUser = async function(identifier) {
       if (!requireCurrentChat()) return;
       haptic('light');
       try {
         const res = await apiFetch(`/api/group/${currentChatId}/prank_users`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username })
+          body: JSON.stringify({ username: identifier })
         });
         const data = await res.json();
         renderPrankUsers(data.prank_users);
-        showToast("Foydalanuvchi o'chirildi!");
+        showToast("Foydalanuvchi hazildan chiqarildi!");
       } catch (err) {
         showToast("O'chirishda xatolik", "❌");
       }

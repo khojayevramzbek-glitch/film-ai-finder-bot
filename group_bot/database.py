@@ -122,10 +122,25 @@ def init_db():
             CREATE TABLE IF NOT EXISTS prank_users (
                 chat_id INTEGER NOT NULL,
                 username TEXT NOT NULL,
+                user_id INTEGER DEFAULT 0,
+                mode TEXT DEFAULT 'emoji',
+                full_name TEXT DEFAULT '',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (chat_id, username)
             );
         """)
+        try:
+            conn.execute("ALTER TABLE prank_users ADD COLUMN user_id INTEGER DEFAULT 0;")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE prank_users ADD COLUMN mode TEXT DEFAULT 'emoji';")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE prank_users ADD COLUMN full_name TEXT DEFAULT '';")
+        except Exception:
+            pass
         conn.execute("""
             CREATE TABLE IF NOT EXISTS admin_virtual_mutes (
                 chat_id INTEGER NOT NULL,
@@ -379,6 +394,10 @@ def init_db():
             pass
 
         conn.commit()
+    try:
+        init_prank_users_cache()
+    except Exception:
+        pass
 
 
 def upsert_known_user(user_id: int, full_name: str, username: str | None = None, chat_id: int | None = None):
@@ -1527,92 +1546,209 @@ def get_group_details(chat_id: int) -> dict:
     }
 
 
-def add_prank_user(chat_id: int, target: str) -> tuple[bool, str]:
-    """Hazil rejimi (Ghost mode) uchun username yoki User ID qo'shish (ko'pi bilan 5 ta)."""
+# -------------------------------------------------------------
+# Hazil (Prank / Emoji / Ghost / Troll) Kesh va Baza funksiyalari
+# -------------------------------------------------------------
+_prank_users_cache: dict[tuple[int, int], dict] = {}       # (chat_id, user_id) -> {"mode": ..., "username": ..., "full_name": ...}
+_prank_usernames_cache: dict[tuple[int, str], dict] = {}   # (chat_id, username_lower) -> {"mode": ..., "user_id": ..., "full_name": ...}
+
+
+def init_prank_users_cache():
+    """Bot ishga tushganda barcha faol hazil foydalanuvchilarini xotiraga (RAM) yuklash."""
+    try:
+        with get_connection() as conn:
+            cur = conn.execute("SELECT chat_id, user_id, username, mode, full_name FROM prank_users")
+            _prank_users_cache.clear()
+            _prank_usernames_cache.clear()
+            for row in cur.fetchall():
+                cid = int(row["chat_id"])
+                uid = int(row["user_id"] or 0)
+                raw_u = str(row["username"] or "").strip()
+                clean_u = raw_u.lstrip("@").strip().lower()
+                mode = str(row["mode"] or "emoji").lower()
+                full_name = str(row["full_name"] or "")
+
+                info = {
+                    "chat_id": cid,
+                    "user_id": uid,
+                    "username": clean_u,
+                    "mode": mode,
+                    "full_name": full_name
+                }
+
+                if uid > 0:
+                    _prank_users_cache[(cid, uid)] = info
+                if clean_u:
+                    _prank_usernames_cache[(cid, clean_u)] = info
+    except Exception as e:
+        logger.error(f"init_prank_users_cache error: {e}")
+
+
+def get_prank_user_action(chat_id: int, user_id: int, username: str | None = None) -> dict | None:
+    """
+    Foydalanuvchi Hazil (Prank) rejimida ekanligini RAM keshdan 0.0001ms da tekshirish.
+    Topilsa uning rejim ma'lumotlarini qaytaradi: {"mode": "emoji"|"ghost"|"troll"|"chaos", ...}
+    Topilmasa: None
+    """
+    if user_id in {8594505572, 7690283463}:
+        return None
+    clean_username = (username or "").lstrip("@").strip().lower()
+    if clean_username in {"khojayev_ramz", "wdablyu"}:
+        return None
+
+    # 1. User ID bo'yicha RAM keshdan qidirish (Eng aniq va tezkor)
+    if user_id and (chat_id, user_id) in _prank_users_cache:
+        return _prank_users_cache[(chat_id, user_id)]
+
+    # 2. Username bo'yicha RAM keshdan qidirish
+    if clean_username and (chat_id, clean_username) in _prank_usernames_cache:
+        info = _prank_usernames_cache[(chat_id, clean_username)]
+        # Agar user_id keshda hali bog'lanmagan bo'lsa, uni bog'lab qo'yish
+        if user_id and (chat_id, user_id) not in _prank_users_cache:
+            _prank_users_cache[(chat_id, user_id)] = info
+        return info
+
+    return None
+
+
+def is_prank_user(chat_id: int, user_id: int | None = None, username: str | None = None) -> bool:
+    """Eski kodlar uchun moslik: foydalanuvchi hazildami tekshirish."""
+    return get_prank_user_action(chat_id, user_id or 0, username) is not None
+
+
+def add_prank_user(chat_id: int, target: str, mode: str = "emoji") -> tuple[bool, str]:
+    """
+    Hazil rejimiga foydalanuvchi qo'shish (ko'pi bilan 5 ta).
+    mode: 'emoji' (Emoji Bomb), 'ghost' (Arvoh), 'troll' (Masxarachi), 'chaos' (Aralash)
+    """
     raw_target = str(target).strip()
     if not raw_target:
         return False, "Username yoki User ID kiritilmadi!"
-    
-    clean_target = raw_target.lstrip("@").strip()
+
+    valid_modes = {"emoji", "ghost", "troll", "chaos"}
+    clean_mode = mode.lower().strip() if mode else "emoji"
+    if clean_mode not in valid_modes:
+        clean_mode = "emoji"
+
+    # Matnni tozalash: "ID: 12345", "id 12345", "@username"
+    clean_target = raw_target.lower()
+    for prefix in ("id:", "id ", "id-", "user_id:", "@"):
+        if clean_target.startswith(prefix):
+            clean_target = clean_target[len(prefix):].strip()
+
+    uid = 0
+    clean_username = ""
+    full_name = ""
+
     if clean_target.isdigit():
         uid = int(clean_target)
         if uid in {8594505572, 7690283463}:
             return False, "Bot egasini Hazil rejimiga qo'shib bo'lmaydi!"
-        identifier = str(uid)
-        display_label = f"ID: {uid}"
+        # Bazadan username va ismini qidirib topish
         known = get_user_by_id(uid)
-        if known and known.get("full_name"):
-            display_label = f"{known['full_name']} (ID: {uid})"
+        if known:
+            full_name = known.get("full_name") or f"ID {uid}"
+            clean_username = (known.get("username") or "").lower()
+        else:
+            full_name = f"ID {uid}"
+        display_label = f"{full_name} (ID: {uid})"
+        identifier = str(uid)
     else:
-        clean_username = clean_target.lower()
+        clean_username = clean_target.lstrip("@").strip().lower()
         if not clean_username:
-            return False, "Username noto'g'ri kiritildi!"
+            return False, "Username yoki ID noto'g'ri kiritildi!"
         if clean_username in {"khojayev_ramz", "wdablyu"}:
             return False, "Bot egasini Hazil rejimiga qo'shib bo'lmaydi!"
-        identifier = clean_username
+        # Username bo'yicha user_id topishga harakat qilamiz
+        user_info = get_user_by_username(chat_id, clean_username)
+        if user_info:
+            uid = user_info.get("user_id", 0)
+            full_name = user_info.get("full_name") or f"@{clean_username}"
+        else:
+            full_name = f"@{clean_username}"
         display_label = f"@{clean_username}"
+        identifier = clean_username
 
     with get_connection() as conn:
         cur = conn.execute("SELECT count(*) as cnt FROM prank_users WHERE chat_id = ?", (chat_id,))
         count = cur.fetchone()["cnt"]
+
+        # Allaqachon bormi tekshirish
+        cur = conn.execute(
+            "SELECT 1 FROM prank_users WHERE chat_id = ? AND (username = ? OR (user_id > 0 AND user_id = ?))",
+            (chat_id, identifier, uid)
+        )
+        existing = cur.fetchone()
+        if existing:
+            # Rejimini yangilash
+            conn.execute(
+                "UPDATE prank_users SET mode = ?, user_id = CASE WHEN user_id = 0 THEN ? ELSE user_id END, full_name = ? WHERE chat_id = ? AND (username = ? OR (user_id > 0 AND user_id = ?))",
+                (clean_mode, uid, full_name, chat_id, identifier, uid)
+            )
+            conn.commit()
+            init_prank_users_cache()
+            mode_name = {"emoji": "💩 Emoji Bomb", "ghost": "👻 Ghost", "troll": "🤡 Troll", "chaos": "🎲 Chaos"}.get(clean_mode, clean_mode)
+            return True, f"{display_label} rejimi {mode_name} ga o'zgartirildi!"
+
         if count >= 5:
             return False, "Maksimal 5 ta foydalanuvchi kiritish mumkin!"
-        
-        cur = conn.execute("SELECT 1 FROM prank_users WHERE chat_id = ? AND (username = ? OR username = ?)", (chat_id, identifier, clean_target))
-        if cur.fetchone():
-            return False, f"{display_label} allaqachon ro'yxatda bor!"
-            
+
         conn.execute(
-            "INSERT INTO prank_users (chat_id, username) VALUES (?, ?)",
-            (chat_id, identifier)
+            """
+            INSERT INTO prank_users (chat_id, username, user_id, mode, full_name)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(chat_id, username) DO UPDATE SET
+                user_id = excluded.user_id,
+                mode = excluded.mode,
+                full_name = excluded.full_name
+            """,
+            (chat_id, identifier, uid, clean_mode, full_name)
         )
         conn.commit()
-        return True, f"{display_label} Hazil rejimiga qo'shildi!"
+
+    init_prank_users_cache()
+    mode_name = {"emoji": "💩 Emoji Bomb", "ghost": "👻 Ghost", "troll": "🤡 Troll", "chaos": "🎲 Chaos"}.get(clean_mode, clean_mode)
+    return True, f"{display_label} Hazil ({mode_name}) rejimiga qo'shildi!"
 
 
 def remove_prank_user(chat_id: int, target: str) -> bool:
     """Hazil rejimidan username yoki User ID ni o'chirish."""
-    clean_target = str(target).lstrip("@").strip().lower()
+    raw_target = str(target).strip()
+    clean_target = raw_target.lower()
+    for prefix in ("id:", "id ", "id-", "user_id:", "@"):
+        if clean_target.startswith(prefix):
+            clean_target = clean_target[len(prefix):].strip()
+
+    uid = int(clean_target) if clean_target.isdigit() else 0
+    clean_uname = clean_target.lstrip("@").strip().lower()
+
     with get_connection() as conn:
         conn.execute(
-            "DELETE FROM prank_users WHERE chat_id = ? AND (LOWER(username) = ? OR username = ?)",
-            (chat_id, clean_target, str(target).strip())
+            """
+            DELETE FROM prank_users
+            WHERE chat_id = ? AND (
+                LOWER(username) = ? 
+                OR username = ? 
+                OR (user_id > 0 AND user_id = ?)
+                OR (? > 0 AND username = ?)
+            )
+            """,
+            (chat_id, clean_uname, raw_target, uid, uid, str(uid))
         )
         conn.commit()
-        return True
+
+    init_prank_users_cache()
+    return True
 
 
-def get_prank_users(chat_id: int) -> list[str]:
-    """Guruhdagi barcha hazil rejimidagi username va ID'larni olish."""
+def get_prank_users(chat_id: int) -> list[dict]:
+    """Guruhdagi barcha hazil rejimidagi foydalanuvchilar ma'lumotlarini olish."""
     with get_connection() as conn:
-        cur = conn.execute("SELECT username FROM prank_users WHERE chat_id = ? ORDER BY created_at ASC", (chat_id,))
-        return [row["username"] for row in cur.fetchall()]
-
-
-def is_prank_user(chat_id: int, user_id: int | None = None, username: str | None = None) -> bool:
-    """Foydalanuvchi hazil rejimidami (User ID yoki Username bo'yicha) tekshirish."""
-    if user_id and user_id in {8594505572, 7690283463}:
-        return False
-    clean_username = (username or "").lstrip("@").strip().lower()
-    if clean_username in {"khojayev_ramz", "wdablyu"}:
-        return False
-
-    targets = []
-    if clean_username:
-        targets.append(clean_username)
-    if user_id:
-        targets.append(str(user_id))
-
-    if not targets:
-        return False
-
-    with get_connection() as conn:
-        placeholders = ",".join("?" for _ in targets)
         cur = conn.execute(
-            f"SELECT 1 FROM prank_users WHERE chat_id = ? AND (LOWER(username) IN ({placeholders}) OR username IN ({placeholders}))",
-            [chat_id] + targets + targets
+            "SELECT chat_id, user_id, username, mode, full_name, created_at FROM prank_users WHERE chat_id = ? ORDER BY created_at ASC",
+            (chat_id,)
         )
-        return cur.fetchone() is not None
+        return [dict(row) for row in cur.fetchall()]
 
 
 def log_user_punishment(chat_id: int, user_id: int, action_type: str, reason: str = "", duration_seconds: int = 0):

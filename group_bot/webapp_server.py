@@ -328,7 +328,8 @@ def attach_fastapi_routes(app: Any):
             chat_id = int(request.path_params.get("chat_id", 0))
             data = await request.json()
             username = str(data.get("username", "")).strip()
-            ok, msg = group_db.add_prank_user(chat_id, username)
+            mode = str(data.get("mode", "emoji")).strip()
+            ok, msg = group_db.add_prank_user(chat_id, username, mode=mode)
             users = group_db.get_prank_users(chat_id)
             return make_json_response({"ok": ok, "message": msg, "prank_users": users}, status_code=200 if ok else 400)
 
@@ -540,7 +541,8 @@ def attach_aiohttp_routes(app: Any):
             except Exception:
                 return web.json_response({"ok": False, "error": "Invalid payload"}, status=400)
             username = str(data.get("username", "")).strip()
-            ok, msg = group_db.add_prank_user(chat_id, username)
+            mode = str(data.get("mode", "emoji")).strip()
+            ok, msg = group_db.add_prank_user(chat_id, username, mode=mode)
             users = group_db.get_prank_users(chat_id)
             return web.json_response({"ok": ok, "message": msg, "prank_users": users}, status=200 if ok else 400)
 
