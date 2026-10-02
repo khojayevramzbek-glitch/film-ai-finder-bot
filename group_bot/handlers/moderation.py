@@ -730,15 +730,15 @@ async def cmd_user_info(message: types.Message, bot: Bot):
     else:
         joined_text = "Noma'lum"
 
-    # 4) Xabarlari soni
-    total_msgs = stats.get("total_msgs", 0)
-    if total_msgs == 0 and message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id == target_id:
-        total_msgs = 1
-    total_msgs_text = f"{total_msgs:,}".replace(",", " ")
-    msgs_line = f"💬 <b>Barcha xabarlari:</b> {total_msgs_text} ta"
+    # 4) Xabarlari soni (24 soatlik)
+    msgs_24h = stats.get("msgs_24h", 0)
+    if msgs_24h == 0 and message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id == target_id:
+        msgs_24h = 1
+    msgs_24h_text = f"{msgs_24h:,}".replace(",", " ")
+    msgs_line = f"💬 <b>24 soatlik xabarlari:</b> {msgs_24h_text} ta"
 
-    # 5) Olgan mutelari
-    mute_count = stats.get("mute_count", 0)
+    # 5) Olgan mutelari (24 soatlik)
+    mute_24h = stats.get("mute_24h", 0)
 
     # Qisqa va londa ma'lumot
     card_text = (
@@ -747,7 +747,7 @@ async def cmd_user_info(message: types.Message, bot: Bot):
         f"🆔 <b>ID:</b> <code>{target_id}</code>\n"
         f"📅 <b>Qo'shilgan sana:</b> {joined_text}\n"
         f"{msgs_line}\n"
-        f"🔇 <b>Olgan mutelari:</b> {mute_count} ta"
+        f"🔇 <b>24 soatlik mutelari:</b> {mute_24h} ta"
     )
 
     await message.reply(card_text, parse_mode="HTML")

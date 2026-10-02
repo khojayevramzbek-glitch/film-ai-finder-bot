@@ -13,6 +13,8 @@ try:
         get_user_sleep,
         get_user_sleep_by_username,
         remove_user_sleep,
+        get_user_sleep_count_24h,
+        log_user_sleep_usage,
     )
 except ImportError:
     from database import (
@@ -20,6 +22,8 @@ except ImportError:
         get_user_sleep,
         get_user_sleep_by_username,
         remove_user_sleep,
+        get_user_sleep_count_24h,
+        log_user_sleep_usage,
     )
 
 router = Router()
@@ -47,6 +51,17 @@ TRACKED_SLEEP_USERS = {
 # Guruhda bir xil odam uchun ketma-ket spam bo'lmasligi uchun cooldown (20 soniya)
 # (chat_id, target_user_id) -> float(timestamp)
 _last_notified: dict[tuple[int, int], float] = {}
+
+
+async def _auto_delete_msg(msg: types.Message | None, delay: int = 10):
+    """Xabarni ma'lum soniyadan keyin avtomatik o'chirish (guruhni toza saqlash uchun)."""
+    if not msg:
+        return
+    await asyncio.sleep(delay)
+    try:
+        await msg.delete()
+    except Exception:
+        pass
 
 
 def is_sleep_allowed(user: types.User | None) -> bool:
@@ -156,6 +171,22 @@ async def cmd_sleep(message: types.Message):
     if not is_sleep_allowed(message.from_user):
         return
 
+    user_id = message.from_user.id
+    # Bot egalari (@khojayev_ramz, @wdablyu) cheksiz foydalana oladi
+    is_owner = (user_id in ALLOWED_SLEEP_USER_IDS or (message.from_user.username and message.from_user.username.lower() in ALLOWED_SLEEP_USERNAMES))
+
+    if not is_owner:
+        used_count = get_user_sleep_count_24h(user_id)
+        if used_count >= 5:
+            warn_msg = await message.reply(
+                f"⚠️ <b>{escape(message.from_user.full_name)}</b>, siz 24 soatlik limitdan (<b>5/5 marta</b>) to'liq foydalandingiz!\n\n"
+                f"<i>Guruhda keraksiz spam bo'lmasligi uchun 24 soat ichida qayta uyqu rejimiga o'ta olmaysiz.</i>",
+                parse_mode="HTML"
+            )
+            asyncio.create_task(_auto_delete_msg(message, 7))
+            asyncio.create_task(_auto_delete_msg(warn_msg, 7))
+            return
+
     text = (message.text or message.caption or "").strip()
     # Buyruqdan keyingi qismni olish
     parts = text.split(maxsplit=1)
@@ -163,7 +194,7 @@ async def cmd_sleep(message: types.Message):
 
     duration_seconds, reason = parse_sleep_args(args_text)
     if not duration_seconds or duration_seconds <= 0:
-        await message.reply(
+        help_msg = await message.reply(
             "ℹ️ <b>Uyqu / bandlik rejimini o'rnatish:</b>\n"
             "<code>/sleep &lt;vaqt&gt; [sabab]</code>\n\n"
             "<b>Misollar:</b>\n"
@@ -174,6 +205,8 @@ async def cmd_sleep(message: types.Message):
             "• <code>/sleep 1d safardaman</code>",
             parse_mode="HTML"
         )
+        asyncio.create_task(_auto_delete_msg(message, 12))
+        asyncio.create_task(_auto_delete_msg(help_msg, 12))
         return
 
     # Foydalanuvchini bazaga saqlash
@@ -188,6 +221,7 @@ async def cmd_sleep(message: types.Message):
         duration_seconds=duration_seconds,
         reason=reason
     )
+    log_user_sleep_usage(message.from_user.id, message.chat.id)
 
     sleep_data = {
         "user_id": message.from_user.id,
@@ -197,12 +231,18 @@ async def cmd_sleep(message: types.Message):
         "reason": reason
     }
     info_text = format_sleep_info(sleep_data)
-    await message.reply(
+    new_used = get_user_sleep_count_24h(message.from_user.id)
+    limit_note = "" if is_owner else f"\n\n📊 <i>24 soatlik limitingiz: <b>{new_used}/5</b> marta ishlatildi.</i>"
+
+    reply_msg = await message.reply(
         f"✅ <b>Uyqu / bandlik rejimi yoqildi!</b>\n\n"
-        f"{info_text}\n\n"
+        f"{info_text}"
+        f"{limit_note}\n\n"
         f"<i>Guruhga xabar yozganingizda yoki <code>/wake</code> buyrug'i orqali rejim avtomatik yakunlanadi.</i>",
         parse_mode="HTML"
     )
+    asyncio.create_task(_auto_delete_msg(message, 15))
+    asyncio.create_task(_auto_delete_msg(reply_msg, 15))
 
 
 @router.message(lambda msg: bool(WAKE_COMMAND_REGEX.match((msg.text or msg.caption or "").strip())))
@@ -213,9 +253,13 @@ async def cmd_wake(message: types.Message):
     active_sleep = get_user_sleep(message.from_user.id)
     if active_sleep:
         remove_user_sleep(message.from_user.id)
-        await message.reply("✅ <b>Uyqu / bandlik rejimi o'chirildi! Xush kelibsiz!</b>", parse_mode="HTML")
+        wake_msg = await message.reply("✅ <b>Uyqu / bandlik rejimi o'chirildi! Xush kelibsiz!</b>", parse_mode="HTML")
+        asyncio.create_task(_auto_delete_msg(message, 8))
+        asyncio.create_task(_auto_delete_msg(wake_msg, 8))
     else:
-        await message.reply("ℹ️ Sizda faol uyqu rejimi yo'q edi.", parse_mode="HTML")
+        info_msg = await message.reply("ℹ️ Sizda faol uyqu rejimi yo'q edi.", parse_mode="HTML")
+        asyncio.create_task(_auto_delete_msg(message, 6))
+        asyncio.create_task(_auto_delete_msg(info_msg, 6))
 
 
 def is_sleep_mention_or_sleeping_user(message: types.Message) -> bool:
@@ -275,10 +319,11 @@ async def check_sleep_mentions(message: types.Message, bot: Bot):
     if active_sleep:
         remove_user_sleep(user_id)
         display_name = active_sleep.get("full_name") or message.from_user.full_name
-        await message.reply(
+        wake_msg = await message.reply(
             f"👋 Xush kelibsiz, <b>{escape(display_name)}</b>! Uyqu / bandlik rejimi yakunlandi.",
             parse_mode="HTML"
         )
+        asyncio.create_task(_auto_delete_msg(wake_msg, 8))
         # O'zi uyg'ongani haqida ma'lumot berildi, boshqa tekshiruvga hojat yo'q
         return
 
@@ -335,5 +380,6 @@ async def check_sleep_mentions(message: types.Message, bot: Bot):
             sleep_data["full_name"] = TRACKED_SLEEP_USERS[target_id]["display_name"]
 
         response_text = format_sleep_info(sleep_data)
-        await message.reply(response_text, parse_mode="HTML")
+        rep_msg = await message.reply(response_text, parse_mode="HTML")
+        asyncio.create_task(_auto_delete_msg(rep_msg, 12))
         break

@@ -79,6 +79,18 @@ def init_db():
             );
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_sleep_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                chat_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sleep_logs_user_time
+            ON user_sleep_logs(user_id, created_at);
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_censor_settings (
                 chat_id INTEGER PRIMARY KEY,
                 is_enabled INTEGER DEFAULT 1
@@ -858,6 +870,29 @@ def remove_user_sleep(user_id: int):
     """Foydalanuvchini uyqu rejimidan chiqarish."""
     with get_connection() as conn:
         conn.execute("DELETE FROM user_sleep WHERE user_id = ?", (user_id,))
+        conn.commit()
+
+
+def get_user_sleep_count_24h(user_id: int) -> int:
+    """Foydalanuvchi so'nggi 24 soat ichida necha marta sleep rejimiga o'tganini hisoblash."""
+    cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+    with get_connection() as conn:
+        cur = conn.execute(
+            "SELECT count(*) as cnt FROM user_sleep_logs WHERE user_id = ? AND created_at >= ?",
+            (user_id, cutoff_24h.isoformat())
+        )
+        row = cur.fetchone()
+        return row["cnt"] if row else 0
+
+
+def log_user_sleep_usage(user_id: int, chat_id: int | None = None):
+    """Foydalanuvchi uyqu rejimini ishlatganini log qilish (24 soatlik limit tekshiruvi uchun)."""
+    now_utc = datetime.now(timezone.utc)
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO user_sleep_logs (user_id, chat_id, created_at) VALUES (?, ?, ?)",
+            (user_id, chat_id, now_utc.isoformat())
+        )
         conn.commit()
 
 
@@ -2062,7 +2097,7 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
         # Jami barcha xabarlar soni
         total_msgs = max(member_total, table_msgs)
 
-        # 4. Mute jazolari soni
+        # 4. Mute jazolari soni (umumiy va 24 soatlik)
         cur = conn.execute(
             """
             SELECT count(*) as mute_cnt 
@@ -2072,6 +2107,16 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
             (chat_id, user_id)
         )
         mute_cnt = cur.fetchone()["mute_cnt"]
+
+        cur = conn.execute(
+            """
+            SELECT count(*) as mute_24h 
+            FROM user_punishments 
+            WHERE chat_id = ? AND user_id = ? AND action_type IN ('mute', 'virtual_mute') AND created_at >= ?
+            """,
+            (chat_id, user_id, cutoff_24h)
+        )
+        mute_24h = cur.fetchone()["mute_24h"]
 
         # 5. Faol ogohlantirishlar
         cur = conn.execute("SELECT count FROM warnings WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
@@ -2100,6 +2145,7 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
             "total_msgs": total_msgs,
             "msgs_24h": msgs_24h,
             "mute_count": mute_cnt,
+            "mute_24h": mute_24h,
             "warn_count": warn_cnt,
             "is_ghost": ghost_active,
             "is_virtually_muted": virt_muted
