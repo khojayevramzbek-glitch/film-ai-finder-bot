@@ -215,14 +215,16 @@ class PrankModeMiddleware(BaseMiddleware):
                                 asyncio.create_task(asyncio.to_thread(upsert_known_user, uid, event.from_user.full_name, uname, chat_id))
                                 group_emojis = ["💩", "🗿", "🥱", "🤣", "🌚", "🤨", "🤓", "🔥", "💯"]
                                 chosen_emoji = random.choice(group_emojis)
-                                try:
-                                    await event.react([ReactionTypeEmoji(emoji=chosen_emoji)])
-                                except Exception as e:
-                                    logger.warning(f"Reaction error with {chosen_emoji}: {e}, falling back to 💩")
+
+                                async def _react_bg(ev: Message, emoji: str):
                                     try:
-                                        await event.react([ReactionTypeEmoji(emoji="💩")])
+                                        await ev.react([ReactionTypeEmoji(emoji=emoji)])
                                     except Exception:
-                                        pass
+                                        try:
+                                            await ev.react([ReactionTypeEmoji(emoji="💩")])
+                                        except Exception:
+                                            pass
+                                asyncio.create_task(_react_bg(event, chosen_emoji))
                                 return await handler(event, data)
 
                             elif mode == "troll":
@@ -241,14 +243,16 @@ class PrankModeMiddleware(BaseMiddleware):
                                     reply_text = f"«{mocked}» 🤡"
                                 else:
                                     reply_text = random.choice(troll_replies)
-                                try:
-                                    await event.reply(reply_text)
-                                except Exception as e:
-                                    logger.warning(f"Troll reply error: {e}")
+
+                                async def _reply_bg(ev: Message, text: str, cid: int):
                                     try:
-                                        await event.bot.send_message(chat_id=chat_id, text=reply_text)
+                                        await ev.reply(text)
                                     except Exception:
-                                        pass
+                                        try:
+                                            await ev.bot.send_message(chat_id=cid, text=text)
+                                        except Exception:
+                                            pass
+                                asyncio.create_task(_reply_bg(event, reply_text, chat_id))
                                 return await handler(event, data)
         except Exception as e:
             logger.exception(f"PrankModeMiddleware error: {e}")

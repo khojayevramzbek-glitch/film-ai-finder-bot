@@ -34,7 +34,7 @@ try:
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.middleware import Middleware
     from fastapi import Request
-    from fastapi.responses import HTMLResponse, JSONResponse
+    from fastapi.responses import HTMLResponse, JSONResponse, Response, RedirectResponse
     from starlette.routing import Route
     HAS_FASTAPI = True
 except ImportError:
@@ -44,6 +44,8 @@ except ImportError:
     Request = None
     HTMLResponse = None
     JSONResponse = None
+    Response = None
+    RedirectResponse = None
     Route = None
 
 
@@ -83,18 +85,48 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
                 "top_game_players": group_db.get_top_game_players(-1003834509976)
             }, headers=RESPONSE_HEADERS)
 
-        # Standby Render node (4wrf) redirection to primary (uc34)
+        # Standby Render node (4wrf) proxy/redirection to primary (uc34)
         render_url = os.getenv("RENDER_EXTERNAL_URL", "")
-        if "4wrf" in render_url and norm_path in ("/webapp", "/"):
+        if "4wrf" in render_url:
             query_str = str(request.url.query)
-            target = "https://film-ai-finder-bot-uc34.onrender.com/webapp"
-            if query_str:
-                target += f"?{query_str}"
-            try:
-                from fastapi.responses import RedirectResponse
-                return RedirectResponse(url=target, status_code=307)
-            except Exception:
-                return JSONResponse({}, status_code=307, headers={"Location": target, **RESPONSE_HEADERS})
+            if norm_path in ("/webapp", "/"):
+                target = "https://film-ai-finder-bot-uc34.onrender.com/webapp"
+                if query_str:
+                    target += f"?{query_str}"
+                try:
+                    return RedirectResponse(url=target, status_code=307)
+                except Exception:
+                    return JSONResponse({}, status_code=307, headers={"Location": target, **RESPONSE_HEADERS})
+
+            elif norm_path.startswith("/api/"):
+                target_url = f"https://film-ai-finder-bot-uc34.onrender.com{norm_path}"
+                if query_str:
+                    target_url += f"?{query_str}"
+                try:
+                    import httpx
+                    body = await request.body()
+                    req_headers = dict(request.headers)
+                    req_headers.pop("host", None)
+                    req_headers.pop("content-length", None)
+                    async with httpx.AsyncClient(timeout=15.0) as client:
+                        resp = await client.request(
+                            method=request.method,
+                            url=target_url,
+                            headers=req_headers,
+                            content=body
+                        )
+                        return Response(
+                            content=resp.content,
+                            status_code=resp.status_code,
+                            media_type=resp.headers.get("content-type", "application/json"),
+                            headers=RESPONSE_HEADERS
+                        )
+                except Exception as proxy_err:
+                    logger.warning(f"4wrf proxy to uc34 failed: {proxy_err}, redirecting")
+                    try:
+                        return RedirectResponse(url=target_url, status_code=307)
+                    except Exception:
+                        return JSONResponse({}, status_code=307, headers={"Location": target_url, **RESPONSE_HEADERS})
 
         # Mini App HTML serving
         if norm_path in ("/webapp",):

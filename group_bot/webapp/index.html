@@ -2563,19 +2563,19 @@
         candidates.push(`${cleanBackend}/gradio_api${fullPath}`);
       }
 
-      const isRender = window.location.origin && window.location.origin.includes('onrender.com');
+      const isUc34 = window.location.origin && window.location.origin.includes('uc34.onrender.com');
 
-      if (isRender) {
+      if (isUc34) {
         candidates.push(fullPath);
         candidates.push('/gradio_api' + fullPath);
         candidates.push(`${currentOrigin}${fullPath}`);
       }
 
-      // Always prioritize active Render backend
+      // Always prioritize active primary Render backend (uc34)
       candidates.push(`https://film-ai-finder-bot-uc34.onrender.com${fullPath}`);
       candidates.push(`https://film-ai-finder-bot-uc34.onrender.com/gradio_api${fullPath}`);
 
-      if (!isRender) {
+      if (!isUc34) {
         candidates.push(fullPath);
         candidates.push(`${currentOrigin}${fullPath}`);
       }
