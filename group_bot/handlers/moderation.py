@@ -180,10 +180,14 @@ async def resolve_target_and_args(message: types.Message, bot: Bot) -> tuple[Tar
         args.append(a)
 
     # 1. Reply qilinganmi?
-    if message.reply_to_message and message.reply_to_message.from_user:
-        u = message.reply_to_message.from_user
-        upsert_known_user(u.id, u.full_name, u.username, message.chat.id)
-        return TargetUser(u.id, u.full_name, u.username), args, None
+    if message.reply_to_message:
+        if message.reply_to_message.sender_chat:
+            sc = message.reply_to_message.sender_chat
+            return TargetUser(sc.id, sc.title or "Kanal", sc.username), args, None
+        elif message.reply_to_message.from_user:
+            u = message.reply_to_message.from_user
+            upsert_known_user(u.id, u.full_name, u.username, message.chat.id)
+            return TargetUser(u.id, u.full_name, u.username), args, None
 
     # 2. Text mention entity (Telegram orqali ism bilan tag qilingan)
     entities = message.entities or message.caption_entities or []
@@ -589,6 +593,18 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
             return
 
         # 1. Telegram API orqali blokdan chiqarish (unban)
+        if target_user.id < 0:
+            try:
+                await bot.unban_chat_sender_chat(chat_id=message.chat.id, sender_chat_id=target_user.id)
+            except TelegramBadRequest:
+                pass
+            u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
+            await message.answer(
+                f"✅ Kanal <b>{escape(target_user.full_name)}</b>{u_tag} blokdan chiqarildi.",
+                parse_mode="HTML"
+            )
+            return
+
         try:
             await bot.unban_chat_member(chat_id=message.chat.id, user_id=target_user.id, only_if_banned=True)
         except TelegramBadRequest:

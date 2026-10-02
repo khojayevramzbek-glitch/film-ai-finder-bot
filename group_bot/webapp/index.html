@@ -1544,6 +1544,20 @@
           </label>
         </div>
 
+        <!-- 3b. Anti-Channel Filter (Shaxsiy profildan yozishga majburlash) -->
+        <div class="setting-item">
+          <div class="setting-info">
+            <div class="setting-title">
+              <span>🚫 Kanallar Nomidan Yozishni Taqiqlash</span>
+            </div>
+            <div class="setting-desc">A'zolar kanal nomidan yozishini taqiqlash, faqat shaxsiy profil orqali yozishga ruxsat berish</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="toggleAntiChannel" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
         <!-- 4. Number Game ("Raqamni Top" 🎯) -->
         <div class="setting-item">
           <div class="setting-info">
@@ -2808,6 +2822,9 @@
         document.getElementById('toggleStatsPublic').checked = !!g.is_stats_public;
         document.getElementById('toggleGameStatus').checked = (g.is_game_enabled !== false);
         document.getElementById('toggleLinkFilter').checked = !!currentSettings.link_filter_enabled;
+        if (document.getElementById('toggleAntiChannel')) {
+          document.getElementById('toggleAntiChannel').checked = (currentSettings.anti_channel_enabled !== 0);
+        }
         document.getElementById('toggleWelcome').checked = !!currentSettings.welcome_enabled;
 
         // Update Punishments Tab
@@ -3169,6 +3186,16 @@
       haptic('light');
       const enabled = e.target.checked ? 1 : 0;
       await savePartialSetting({ link_filter_enabled: enabled }, "Reklama filtri saqlandi!");
+    });
+
+    document.getElementById('toggleAntiChannel')?.addEventListener('change', async (e) => {
+      if (!requireCurrentChat()) {
+        e.target.checked = !e.target.checked;
+        return;
+      }
+      haptic('light');
+      const enabled = e.target.checked ? 1 : 0;
+      await savePartialSetting({ anti_channel_enabled: enabled }, "Kanal nomidan yozish filtri saqlandi!");
     });
 
     document.getElementById('toggleWelcome')?.addEventListener('change', async (e) => {

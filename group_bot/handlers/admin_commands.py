@@ -84,7 +84,23 @@ async def cmd_unban(message: types.Message, bot: Bot):
         await message.reply("❌ Bu buyruq faqat guruh adminlari uchun!")
         return
 
-    if not message.reply_to_message or not message.reply_to_message.from_user:
+    if not message.reply_to_message:
+        await message.reply("❗ Foydalanuvchini blokdan chiqarish uchun uning xabariga reply qiling.", parse_mode="HTML")
+        return
+
+    if message.reply_to_message.sender_chat:
+        sc = message.reply_to_message.sender_chat
+        try:
+            await bot.unban_chat_sender_chat(chat_id=message.chat.id, sender_chat_id=sc.id)
+            await message.answer(
+                f"✅ Kanal <b>{escape(sc.title or 'Kanal')}</b> blokdan chiqarildi.",
+                parse_mode="HTML"
+            )
+        except TelegramBadRequest as e:
+            await message.reply(f"⚠️ Xatolik: {e.message}")
+        return
+
+    if not message.reply_to_message.from_user:
         await message.reply("❗ Foydalanuvchini blokdan chiqarish uchun uning xabariga reply qiling.", parse_mode="HTML")
         return
 

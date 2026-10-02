@@ -281,6 +281,7 @@ def init_db():
                 "warn_action": "TEXT DEFAULT 'mute'",
                 "warn_mute_seconds": "INTEGER DEFAULT 86400",
                 "link_filter_enabled": "INTEGER DEFAULT 0",
+                "anti_channel_enabled": "INTEGER DEFAULT 1",
                 "welcome_enabled": "INTEGER DEFAULT 1",
                 "welcome_text": "TEXT DEFAULT 'Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!'",
                 "updated_at": "TIMESTAMP"
@@ -1508,6 +1509,7 @@ DEFAULT_CHAT_SETTINGS = {
     "warn_action": "smart",
     "warn_mute_seconds": 3600,
     "link_filter_enabled": 0,
+    "anti_channel_enabled": 1,
     "welcome_enabled": 1,
     "welcome_text": DEFAULT_WELCOME_TEXT
 }
@@ -1570,8 +1572,8 @@ def update_chat_settings(chat_id: int, settings: dict):
                 flood_msg_limit, flood_msg_window, flood_mute_seconds,
                 flood_sticker_limit, flood_sticker_window, flood_sticker_mute_seconds,
                 warn_limit, warn_action, warn_mute_seconds,
-                link_filter_enabled, welcome_enabled, welcome_text, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                link_filter_enabled, anti_channel_enabled, welcome_enabled, welcome_text, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(chat_id) DO UPDATE SET
                 censor_mute_seconds = excluded.censor_mute_seconds,
                 censor_action = excluded.censor_action,
@@ -1585,6 +1587,7 @@ def update_chat_settings(chat_id: int, settings: dict):
                 warn_action = excluded.warn_action,
                 warn_mute_seconds = excluded.warn_mute_seconds,
                 link_filter_enabled = excluded.link_filter_enabled,
+                anti_channel_enabled = excluded.anti_channel_enabled,
                 welcome_enabled = excluded.welcome_enabled,
                 welcome_text = excluded.welcome_text,
                 updated_at = excluded.updated_at
@@ -1602,6 +1605,7 @@ def update_chat_settings(chat_id: int, settings: dict):
             str(current.get("warn_action", "mute")),
             int(current.get("warn_mute_seconds", 86400)),
             int(current.get("link_filter_enabled", 0)),
+            int(current.get("anti_channel_enabled", 1)),
             int(current.get("welcome_enabled", 1)),
             str(current.get("welcome_text", "Assalomu alaykum, {name}! Guruhimizga xush kelibsiz!")),
             now_utc

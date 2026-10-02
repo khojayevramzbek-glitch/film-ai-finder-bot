@@ -33,7 +33,7 @@ from group_bot.database import (
     init_admin_virtual_mutes_cache, is_admin_virtually_muted,
     init_prank_users_cache, get_prank_user_action,
     get_admin_virtual_mute_remaining, format_duration,
-    upsert_known_user
+    upsert_known_user, get_chat_full_settings
 )
 from group_bot.handlers import main_router
 from group_bot.handlers.antiflood import AntiFloodMiddleware
@@ -329,6 +329,87 @@ class AdminVirtualMuteMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
+class AntiChannelMiddleware(BaseMiddleware):
+    """
+    Guruhda kanallar nomidan xabar yozishni taqiqlovchi middleware.
+    A'zo faqat o'zining shaxsiy Telegram profili orqali yoza oladi.
+    Kanal nomidan xabar kelsa:
+    1. Xabar darhol (0.01s) o'chiriladi.
+    2. Telegramda ushbu kanal sender_chat sifatida bloklanadi (ban_chat_sender_chat),
+       shunda Telegram avtomatik tarzda a'zoni shaxsiy profiliga o'tkazadi.
+    3. 6 soniyalik avtomatik o'chuvchi ogohlantirish beriladi.
+    4. Bog'langan rasmiy kanal posti yoki guruhning o'zining anonim admini bo'lsa tegilmaydi.
+    """
+    def __init__(self):
+        super().__init__()
+        self._last_warn: dict[tuple[int, int], float] = {}
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        if isinstance(event, Message) and event.chat:
+            if event.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
+                chat_id = event.chat.id
+                sender_chat = event.sender_chat
+                if sender_chat:
+                    # 1. Guruhning o'zining anonim admini bo'lsa ruxsat beriladi
+                    if sender_chat.id == chat_id:
+                        return await handler(event, data)
+
+                    # 2. Bog'langan rasmiy kanalning avtomatik forward posti bo'lsa ruxsat beriladi
+                    if getattr(event, "is_automatic_forward", False):
+                        return await handler(event, data)
+
+                    # 3. Guruh sozlamalarida anti_channel yoqilganmi tekshirish
+                    settings = get_chat_full_settings(chat_id)
+                    if settings.get("anti_channel_enabled", 1):
+                        # Kanal nomidan yozilgan xabarni darhol o'chirish
+                        try:
+                            await event.delete()
+                        except Exception:
+                            try:
+                                await event.bot.delete_message(chat_id=chat_id, message_id=event.message_id)
+                            except Exception:
+                                pass
+
+                        # Baza yozuvini tozalash
+                        asyncio.create_task(asyncio.to_thread(delete_message_record, chat_id, event.message_id))
+
+                        # Kanalni sender_chat sifatida taqiqlash (shaxsiy profil majburiy bo'lishi uchun)
+                        try:
+                            await event.bot.ban_chat_sender_chat(chat_id=chat_id, sender_chat_id=sender_chat.id)
+                        except Exception:
+                            pass
+
+                        # Ogohlantirish yuborish (har bir kanal uchun 10 soniyada ko'pi bilan 1 marta spam bo'lmasligi uchun)
+                        now = time.time()
+                        last_w = self._last_warn.get((chat_id, sender_chat.id), 0.0)
+                        if now - last_w > 10.0:
+                            self._last_warn[(chat_id, sender_chat.id)] = now
+                            channel_title = escape(sender_chat.title or "Kanal")
+                            channel_uname = f" (@{sender_chat.username})" if sender_chat.username else ""
+                            warn_text = (
+                                f"🚫 <b>{channel_title}{channel_uname}</b>, ushbu guruhda kanallar nomidan xabar yozish taqiqlangan!\n\n"
+                                f"<i>Iltimos, o'zingizning shaxsiy Telegram profilingizdan yozing.</i>"
+                            )
+                            async def _send_and_clean(bot: Bot, cid: int, txt: str):
+                                try:
+                                    w_msg = await bot.send_message(chat_id=cid, text=txt, parse_mode="HTML")
+                                    await asyncio.sleep(6)
+                                    await w_msg.delete()
+                                except Exception:
+                                    pass
+
+                            asyncio.create_task(_send_and_clean(event.bot, chat_id, warn_text))
+
+                        return  # Boshqa middleware va handlerlarga o'tkazilmaydi!
+
+        return await handler(event, data)
+
+
 async def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -354,13 +435,15 @@ async def main():
     dp.message.outer_middleware(PrankModeMiddleware())
     # 2. Adminlar uchun «Super Virtual Mute» - 0.05s chaqmoqdek tezlik
     dp.message.outer_middleware(AdminVirtualMuteMiddleware())
-    # 3. Har bir xabarni hisobga oluvchi va log qiluvchi middleware
+    # 3. Kanallar nomidan yozishni taqiqlash (Faqat shaxsiy profildan yozishga ruxsat)
+    dp.message.outer_middleware(AntiChannelMiddleware())
+    # 4. Har bir xabarni hisobga oluvchi va log qiluvchi middleware
     dp.message.outer_middleware(MessageTrackerMiddleware())
-    # 4. Bot umumiy holati: Agar bot o'chirilgan bo'lsa, xabarlarni to'xtatadi
+    # 5. Bot umumiy holati: Agar bot o'chirilgan bo'lsa, xabarlarni to'xtatadi
     dp.message.outer_middleware(BotStatusEnforcerMiddleware())
-    # 5. So'kinish va haqorat filtri (Censor) - barcha xabarlardan oldin tekshiradi
+    # 6. So'kinish va haqorat filtri (Censor) - barcha xabarlardan oldin tekshiradi
     dp.message.outer_middleware(CensorMiddleware())
-    # 6. Qoida 2 bo'yicha Anti-Flood middleware (barcha xabar va stikerlarni tekshirish uchun outer_middleware)
+    # 7. Qoida 2 bo'yicha Anti-Flood middleware (barcha xabar va stikerlarni tekshirish uchun outer_middleware)
     dp.message.outer_middleware(AntiFloodMiddleware())
     main_router._parent_router = None
     dp.include_router(main_router)
