@@ -1024,4 +1024,197 @@ async def cmd_demote_admin(message: types.Message, bot: Bot):
     )
 
 
+TAG_SET_REGEX = re.compile(r"^/(?:tag|addtag|settag|тег|таг|сеттег|аддтег)\b", re.IGNORECASE)
+TAG_DEL_REGEX = re.compile(r"^/(?:deltag|removetag|untag|делтег|унтаг|очиртек)\b", re.IGNORECASE)
+
+
+def is_tag_set_cmd(message: types.Message) -> bool:
+    """Xabar /tag, /addtag, /settag bilan boshlanganini tekshirish."""
+    text = (message.text or message.caption or "").strip()
+    if not text.startswith("/"):
+        return False
+    tokens = text.split()
+    cmd = tokens[0].split("@")[0] if tokens else ""
+    return bool(TAG_SET_REGEX.match(cmd))
+
+
+def is_tag_del_cmd(message: types.Message) -> bool:
+    """Xabar /deltag, /untag, /removetag bilan boshlanganini tekshirish."""
+    text = (message.text or message.caption or "").strip()
+    if not text.startswith("/"):
+        return False
+    tokens = text.split()
+    cmd = tokens[0].split("@")[0] if tokens else ""
+    return bool(TAG_DEL_REGEX.match(cmd))
+
+
+@router.message(is_tag_set_cmd)
+async def cmd_set_member_tag(message: types.Message, bot: Bot):
+    """
+    Guruh a'zosiga yashil rangda yonib turuvchi maxsus teg (member tag) berish.
+    Faqat guruh adminlari va bot egalari uchun ruxsat etilgan.
+    """
+    if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
+        await message.reply("ℹ️ Ushbu buyruq faqat guruhlarda ishlaydi!", parse_mode="HTML")
+        return
+
+    # 1. Ruxsatni tekshirish (admin yoki bot egasi)
+    if not await is_admin_or_allowed(message.chat.id, message.from_user, bot):
+        await message.reply("❌ Bu buyruq faqat guruh adminlari va bot egalari uchun!", parse_mode="HTML")
+        return
+
+    # 2. Nishondagi foydalanuvchini aniqlash
+    target_user, remaining_args, error_msg = await resolve_target_and_args(message, bot)
+    if error_msg or not target_user:
+        await message.reply(
+            "❗ <b>Foydalanuvchini ko'rsating va teg matnini yozing:</b>\n"
+            "• Foydalanuvchining xabariga <b>reply</b> qilib: <code>/tag VIP</code>\n"
+            "• Yoki username bilan: <code>/tag @username yor yor</code>\n"
+            "• Yoki ID bilan: <code>/tag 123456789 Nazoratchi</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    # 3. Kanallarga teg berib bo'lmaydi
+    if target_user.id < 0:
+        await message.reply("⚠️ Kanallarga teg berib bo'lmaydi, faqat shaxsiy profil foydalanuvchilariga berish mumkin.")
+        return
+
+    # 4. Teg matnini aniqlash
+    raw_tag = " ".join(remaining_args).strip()
+    if not raw_tag:
+        await message.reply(
+            "❗ <b>Teg matnini kiriting!</b>\n"
+            "Masalan: <code>/tag yor yor</code> yoki <code>/tag @username dablyuniki</code>\n"
+            "<i>(Maksimal 16 ta belgigacha bo'lishi mumkin)</i>",
+            parse_mode="HTML"
+        )
+        return
+
+    tag_text = raw_tag[:16]
+
+    # 5. Botning guruhdagi can_manage_tags huquqini tekshirish
+    try:
+        bot_member = await bot.get_chat_member(message.chat.id, bot.id)
+    except Exception as e:
+        await message.reply(f"⚠️ Guruh ma'lumotlarini olishda xatolik: {e}")
+        return
+
+    if not getattr(bot_member, "can_manage_tags", False):
+        await message.reply(
+            "⚠️ Botning o'zida <b>'A'zolar teglarini tahrirlash' (Edit member tags)</b> huquqi yoqilmagan!\n"
+            "💡 Guruh sozlamalarida botning admin huquqlari bo'limiga kirib <b>'Edit member tags'</b> funksiyasini yoqing.",
+            parse_mode="HTML"
+        )
+        return
+
+    # 6. Telegram API orqali tegni o'rnatish
+    try:
+        await bot.set_chat_member_tag(
+            chat_id=message.chat.id,
+            user_id=target_user.id,
+            tag=tag_text
+        )
+    except TelegramBadRequest as e:
+        # Agar foydalanuvchi admin bo'lsa va CHAT_CREATOR_REQUIRED qaytsa
+        if "CHAT_CREATOR_REQUIRED" in e.message.upper():
+            try:
+                # Agar bot uni o'zi tahrirlay oladigan admin bo'lsa, custom title qilib qo'yish
+                await bot.set_chat_administrator_custom_title(
+                    chat_id=message.chat.id,
+                    user_id=target_user.id,
+                    custom_title=tag_text
+                )
+            except Exception:
+                await message.reply(
+                    f"⚠️ <b>{escape(target_user.full_name)}</b> guruh administratori bo'lgani sababli, uning tegi/unvonini faqat guruh egasi (Creator) o'zgartira oladi.",
+                    parse_mode="HTML"
+                )
+                return
+        else:
+            await message.reply(f"⚠️ Teg berishda xatolik yuz berdi: {escape(e.message)}")
+            return
+
+    u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
+    setter_name = escape(message.from_user.full_name) if message.from_user else "Admin"
+
+    await message.answer(
+        f"🏷 <b>Yangi yashil teg o'rnatildi!</b> 🟢\n\n"
+        f"👤 <b>Foydalanuvchi:</b> <b>{escape(target_user.full_name)}</b>{u_tag}\n"
+        f"🟢 <b>Yashil Teg:</b> <code>{escape(tag_text)}</code>\n"
+        f"👮‍♂️ <b>O'rnatdi:</b> {setter_name}\n\n"
+        f"<i>(Ushbu teg xabarlar yonida yashil yorliq ko'rinishida doimiy yonib turadi)</i>",
+        parse_mode="HTML"
+    )
+
+
+@router.message(is_tag_del_cmd)
+async def cmd_del_member_tag(message: types.Message, bot: Bot):
+    """
+    Guruh a'zosining yashil tegini (member tag) olib tashlash.
+    Faqat guruh adminlari va bot egalari uchun ruxsat etilgan.
+    """
+    if message.chat.type in [ChatType.PRIVATE, ChatType.CHANNEL]:
+        await message.reply("ℹ️ Ushbu buyruq faqat guruhlarda ishlaydi!", parse_mode="HTML")
+        return
+
+    # 1. Ruxsatni tekshirish
+    if not await is_admin_or_allowed(message.chat.id, message.from_user, bot):
+        await message.reply("❌ Bu buyruq faqat guruh adminlari va bot egalari uchun!", parse_mode="HTML")
+        return
+
+    # 2. Nishondagi foydalanuvchini aniqlash
+    target_user, remaining_args, error_msg = await resolve_target_and_args(message, bot)
+    if error_msg or not target_user:
+        await message.reply(
+            "❗ <b>Foydalanuvchini ko'rsating:</b>\n"
+            "• Foydalanuvchining xabariga <b>reply</b> qilib: <code>/deltag</code>\n"
+            "• Yoki username bilan: <code>/deltag @username</code>\n"
+            "• Yoki ID bilan: <code>/deltag 123456789</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    # 3. Kanallarga teg berib bo'lmaydi
+    if target_user.id < 0:
+        await message.reply("⚠️ Kanallarga teg berilmagan.")
+        return
+
+    # 4. Telegram API orqali tegni olib tashlash
+    try:
+        await bot.set_chat_member_tag(
+            chat_id=message.chat.id,
+            user_id=target_user.id,
+            tag=""
+        )
+    except TelegramBadRequest as e:
+        if "CHAT_CREATOR_REQUIRED" in e.message.upper():
+            try:
+                await bot.set_chat_administrator_custom_title(
+                    chat_id=message.chat.id,
+                    user_id=target_user.id,
+                    custom_title=""
+                )
+            except Exception:
+                await message.reply(
+                    f"⚠️ <b>{escape(target_user.full_name)}</b> admin bo'lgani sababli, uning tegi/unvonini faqat guruh egasi olib tashlay oladi.",
+                    parse_mode="HTML"
+                )
+                return
+        else:
+            await message.reply(f"⚠️ Tegni olib tashlashda xatolik: {escape(e.message)}")
+            return
+
+    u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
+    remover_name = escape(message.from_user.full_name) if message.from_user else "Admin"
+
+    await message.answer(
+        f"🗑 <b>Foydalanuvchi tegi olib tashlandi!</b>\n\n"
+        f"👤 <b>Foydalanuvchi:</b> <b>{escape(target_user.full_name)}</b>{u_tag}\n"
+        f"👮‍♂️ <b>Olib tashladi:</b> {remover_name}",
+        parse_mode="HTML"
+    )
+
+
+
 
