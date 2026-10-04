@@ -291,9 +291,11 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
     tokens = text.split()
     cmd = tokens[0].split("@")[0] if tokens else ""
 
-    # Faqat admin yoki ruxsat berilganlar uchun tekshirish
+    # Faqat admin yoki ruxsat berilganlar uchun tekshirish (ammo Self-ban va shaxsiy statistika barcha a'zolar uchun ochiq)
     is_authorized = await is_admin_or_allowed(message.chat.id, message.from_user, bot)
-    if not is_authorized:
+    is_ban_cmd = bool(BAN_REGEX.match(cmd))
+    is_stat_cmd = bool(USER_STAT_REGEX.match(cmd))
+    if not is_authorized and not is_ban_cmd and not is_stat_cmd:
         return
 
     # 1. MUTE: /mute, mute, мут
@@ -571,20 +573,40 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
     # 5. BAN: /ban, ban, бан
     if BAN_REGEX.match(cmd):
         target_user, rem_args, err = await resolve_target_and_args(message, bot)
-        if err:
-            await message.reply(err, parse_mode="HTML")
+        if err or not target_user:
+            await message.reply(
+                "❗ <b>Foydalanuvchini ko'rsating:</b>\n"
+                "• Foydalanuvchining xabariga <b>reply</b> qilib <code>/ban</code> deb yozing\n"
+                "• Yoki username bilan: <code>/ban @username</code>\n\n"
+                "💡 <i>O'zingizni guruhdan chiqarish (Self-ban) uchun: <code>/ban me</code> deb yozing yoki o'z xabaringizga reply qilib <code>/ban</code> yozing.</i>",
+                parse_mode="HTML"
+            )
             return
 
         sender_id = message.from_user.id if message.from_user else 0
         sender_uname = (message.from_user.username or "").lower() if message.from_user else ""
-        is_sender_owner = (sender_id in ALLOWED_USER_IDS or sender_uname in ALLOWED_USERNAMES)
-        is_self_ban = is_sender_owner and (target_user.id == sender_id or (target_user.username and target_user.username.lower() == sender_uname))
+        
+        # Self-ban: Har qanday guruh a'zosiga (oddiy a'zo, admin, bot egasi) ruxsat beriladi!
+        is_self_ban = (target_user.id == sender_id or (target_user.username and target_user.username.lower() == sender_uname))
 
         if not is_self_ban:
+            # Boshqalarni ban qilish faqat guruh adminlari yoki bot egalari uchun ruxsat etilgan!
+            if not is_authorized:
+                await message.reply("❌ Boshqa foydalanuvchilarni ban qilish faqat guruh adminlari uchun ruxsat etilgan!", parse_mode="HTML")
+                return
+
             if target_user.id == bot.id or await is_admin_or_allowed(message.chat.id, target_user, bot):
                 await message.reply("❌ Admin yoki botni guruhdan chiqarib bo'lmaydi!")
                 return
         else:
+            # Self-ban: Guruh asosiy egasini (Creator) bot chiqara olmaydi (Telegram API cheklovi)
+            if await is_group_creator(message.chat.id, target_user.id, bot):
+                await message.reply(
+                    "👑 <b>Guruh asosiy egasini (Creator)</b> Telegram xavfsizlik qoidalariga ko'ra bot guruhdan chiqara olmaydi. Istasangiz guruhni o'zingiz tark etishingiz mumkin.",
+                    parse_mode="HTML"
+                )
+                return
+
             # Self-ban: agar admin bo'lsa, Telegram API 'can\'t restrict administrator' xatosini bermasligi uchun avval adminlikdan olinadi
             try:
                 await bot.promote_chat_member(
