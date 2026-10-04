@@ -2203,7 +2203,7 @@ def remove_admin_virtual_mute(chat_id: int, user_id: int) -> bool:
 
 
 def is_admin_virtually_muted(chat_id: int, user_id: int) -> bool:
-    """Admin ayni damda virtual mutedami (O(1) mikrosoniya tekshiruv)."""
+    """Admin ayni damda virtual mutedami (O(1) kesh tekshiruv, bazaga avto-fallback bilan)."""
     now = time.time()
     until_ts = _admin_virtual_mutes_cache.get((chat_id, user_id))
     if until_ts is not None:
@@ -2219,6 +2219,23 @@ def is_admin_virtually_muted(chat_id: int, user_id: int) -> bool:
             except Exception:
                 pass
             return False
+
+    # Keshda bo'lmasa, bazadan tekshirish (server restart yoki kesh yangilanishida yo'qolmasligi uchun)
+    try:
+        with get_connection() as conn:
+            row = conn.execute("SELECT until_ts FROM admin_virtual_mutes WHERE chat_id = ? AND user_id = ?", (chat_id, user_id)).fetchone()
+            if row:
+                db_until = float(row["until_ts"])
+                if now < db_until:
+                    _admin_virtual_mutes_cache[(chat_id, user_id)] = db_until
+                    return True
+                else:
+                    conn.execute("DELETE FROM admin_virtual_mutes WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
+                    conn.commit()
+                    return False
+    except Exception:
+        pass
+
     return False
 
 
@@ -2228,6 +2245,18 @@ def get_admin_virtual_mute_remaining(chat_id: int, user_id: int) -> int | None:
     until_ts = _admin_virtual_mutes_cache.get((chat_id, user_id))
     if until_ts and until_ts > now:
         return int(until_ts - now)
+
+    try:
+        with get_connection() as conn:
+            row = conn.execute("SELECT until_ts FROM admin_virtual_mutes WHERE chat_id = ? AND user_id = ?", (chat_id, user_id)).fetchone()
+            if row:
+                db_until = float(row["until_ts"])
+                if db_until > now:
+                    _admin_virtual_mutes_cache[(chat_id, user_id)] = db_until
+                    return int(db_until - now)
+    except Exception:
+        pass
+
     return None
 
 

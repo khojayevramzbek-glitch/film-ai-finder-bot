@@ -304,8 +304,8 @@ class AdminVirtualMuteMiddleware(BaseMiddleware):
                 if event.from_user:
                     uid = event.from_user.id
                     uname = (event.from_user.username or "").lower()
-                    # Bot egalari daxlsiz
-                    if uid in {8594505572, 7690283463} or uname in {"khojayev_ramz", "wdablyu"}:
+                    # Bot egalari daxlsiz (agar o'zlari sinov tariqasida virtual mute qilinmagan bo'lsa)
+                    if (uid in {8594505572, 7690283463} or uname in {"khojayev_ramz", "wdablyu"}) and not is_admin_virtually_muted(event.chat.id, uid):
                         return await handler(event, data)
 
                     if is_admin_virtually_muted(event.chat.id, uid):
@@ -326,6 +326,7 @@ class AdminVirtualMuteMiddleware(BaseMiddleware):
                             rem_secs = get_admin_virtual_mute_remaining(event.chat.id, uid) or 0
                             rem_text = format_duration(rem_secs) if rem_secs > 0 else "noma'lum muddat"
                             asyncio.create_task(self._send_virtual_mute_warn(event.bot, event.chat.id, event.from_user.full_name, rem_text))
+                        return
         return await handler(event, data)
 
 
