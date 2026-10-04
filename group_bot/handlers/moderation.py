@@ -209,6 +209,12 @@ async def resolve_target_and_args(message: types.Message, bot: Bot) -> tuple[Tar
             remaining_args.append(arg)
             continue
 
+        if arg.lower() in ("me", "men", "o'zim", "ozim", "self") and message.from_user:
+            u = message.from_user
+            upsert_known_user(u.id, u.full_name, u.username, message.chat.id)
+            target_user = TargetUser(u.id, u.full_name, u.username)
+            continue
+
         raw_username = None
         if arg.startswith("@"):
             raw_username = arg.lstrip("@").strip()
@@ -569,18 +575,49 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
             await message.reply(err, parse_mode="HTML")
             return
 
-        if target_user.id == bot.id or await is_admin_or_allowed(message.chat.id, target_user, bot):
-            await message.reply("❌ Admin yoki botni guruhdan chiqarib bo'lmaydi!")
-            return
+        sender_id = message.from_user.id if message.from_user else 0
+        sender_uname = (message.from_user.username or "").lower() if message.from_user else ""
+        is_sender_owner = (sender_id in ALLOWED_USER_IDS or sender_uname in ALLOWED_USERNAMES)
+        is_self_ban = is_sender_owner and (target_user.id == sender_id or (target_user.username and target_user.username.lower() == sender_uname))
+
+        if not is_self_ban:
+            if target_user.id == bot.id or await is_admin_or_allowed(message.chat.id, target_user, bot):
+                await message.reply("❌ Admin yoki botni guruhdan chiqarib bo'lmaydi!")
+                return
+        else:
+            # Self-ban: agar admin bo'lsa, Telegram API 'can\'t restrict administrator' xatosini bermasligi uchun avval adminlikdan olinadi
+            try:
+                await bot.promote_chat_member(
+                    chat_id=message.chat.id,
+                    user_id=target_user.id,
+                    is_anonymous=False,
+                    can_manage_chat=False,
+                    can_delete_messages=False,
+                    can_manage_video_chats=False,
+                    can_restrict_members=False,
+                    can_promote_members=False,
+                    can_change_info=False,
+                    can_invite_users=False,
+                    can_pin_messages=False,
+                    can_manage_topics=False
+                )
+            except Exception:
+                pass
 
         try:
             await bot.ban_chat_member(chat_id=message.chat.id, user_id=target_user.id)
-            log_user_punishment(message.chat.id, target_user.id, action_type="ban", reason="Admin ban")
+            log_user_punishment(message.chat.id, target_user.id, action_type="ban", reason="Self-ban" if is_self_ban else "Admin ban")
             u_tag = f" (@{escape(target_user.username)})" if target_user.username else ""
-            await message.answer(
-                f"🚫 Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} guruhdan chiqarildi va bloklandi.",
-                parse_mode="HTML"
-            )
+            if is_self_ban:
+                await message.answer(
+                    f"🚫 <b>{escape(target_user.full_name)}</b>{u_tag} o'z xohishiga ko'ra guruhdan chiqarildi va bloklandi (Self-Ban)!",
+                    parse_mode="HTML"
+                )
+            else:
+                await message.answer(
+                    f"🚫 Foydalanuvchi <b>{escape(target_user.full_name)}</b>{u_tag} guruhdan chiqarildi va bloklandi.",
+                    parse_mode="HTML"
+                )
         except TelegramBadRequest as e:
             await message.reply(f"⚠️ Xatolik: {e.message}")
         return
@@ -769,12 +806,12 @@ async def cmd_user_info(message: types.Message, bot: Bot):
     await message.reply(card_text, parse_mode="HTML")
 
 
-ADMIN_PROMOTE_REGEX = re.compile(r"^/(?:admin|promote|setadmin|админ|промоут)\b", re.IGNORECASE)
-ADMIN_DEMOTE_REGEX = re.compile(r"^/(?:unadmin|demote|deladmin|разадмин|демоут)\b", re.IGNORECASE)
+ADMIN_PROMOTE_REGEX = re.compile(r"^/(?:admin|promote|setadmin|moderator|mod|setmod|админ|промоут|модератор|мод)\b", re.IGNORECASE)
+ADMIN_DEMOTE_REGEX = re.compile(r"^/(?:unadmin|demote|deladmin|unmod|delmod|разадмин|демоут|размод)\b", re.IGNORECASE)
 
 
 def is_admin_promote_cmd(message: types.Message) -> bool:
-    """Xabar /admin, /promote, /setadmin bilan boshlanganini tekshirish."""
+    """Xabar /admin, /promote, /setadmin, /mod, /moderator bilan boshlanganini tekshirish."""
     text = (message.text or message.caption or "").strip()
     if not text.startswith("/"):
         return False
@@ -784,7 +821,7 @@ def is_admin_promote_cmd(message: types.Message) -> bool:
 
 
 def is_admin_demote_cmd(message: types.Message) -> bool:
-    """Xabar /unadmin, /demote, /deladmin bilan boshlanganini tekshirish."""
+    """Xabar /unadmin, /demote, /deladmin, /unmod bilan boshlanganini tekshirish."""
     text = (message.text or message.caption or "").strip()
     if not text.startswith("/"):
         return False
@@ -796,8 +833,8 @@ def is_admin_demote_cmd(message: types.Message) -> bool:
 @router.message(is_admin_promote_cmd)
 async def cmd_promote_admin(message: types.Message, bot: Bot):
     """
-    Faqat bot egalari (@khojayev_ramz va @wdablyu) uchun maxsus /admin buyrug'i.
-    Guruh a'zosiga botdagi mavjud adminlik huquqlarini beradi va unvonini sozlaydi.
+    Faqat bot egalari (@khojayev_ramz va @wdablyu) uchun maxsus /admin va /moderator buyrug'i.
+    Guruh a'zosiga yoki bot egasining o'ziga adminlik/moderatorlik huquqlarini beradi va unvonini sozlaydi.
     """
     sender_id = message.from_user.id if message.from_user else 0
     sender_uname = (message.from_user.username or "").lower() if message.from_user else ""
@@ -805,7 +842,7 @@ async def cmd_promote_admin(message: types.Message, bot: Bot):
     # 1. Ruxsatni qat'iy tekshirish: faqat @khojayev_ramz va @wdablyu
     if sender_id not in ALLOWED_USER_IDS and sender_uname not in ALLOWED_USERNAMES:
         await message.reply(
-            "⛔️ <b>Admin tayinlash</b> buyrug'i faqat bot egalari (<b>@khojayev_ramz</b> va <b>@wdablyu</b>) uchun maxsus ruxsat etilgan!",
+            "⛔️ <b>Admin yoki Moderator tayinlash</b> huquqi faqat bot egalari (<b>@khojayev_ramz</b> va <b>@wdablyu</b>) uchun maxsus ruxsat etilgan!",
             parse_mode="HTML"
         )
         return
@@ -814,13 +851,25 @@ async def cmd_promote_admin(message: types.Message, bot: Bot):
         await message.reply("ℹ️ Ushbu buyruq faqat guruhlarda ishlaydi!", parse_mode="HTML")
         return
 
+    text = (message.text or message.caption or "").strip()
+    tokens = text.split()
+    cmd = tokens[0].split("@")[0].lower() if tokens else ""
+    is_mod_cmd = any(m in cmd for m in ["mod", "мод"])
+
     # 2. Nishondagi foydalanuvchini aniqlash
     target_user, remaining_args, error_msg = await resolve_target_and_args(message, bot)
+    if not target_user and message.from_user:
+        # Bot egasi o'zini o'zi admin/moderator qilmoqda (masalan: /admin, /admin kallakesar, /mod)
+        target_user = TargetUser(message.from_user.id, message.from_user.full_name, message.from_user.username)
+        remaining_args = [a for a in tokens[1:] if not a.startswith("/")]
+        error_msg = None
+
     if error_msg or not target_user:
         await message.reply(
             "❗ <b>Foydalanuvchini ko'rsating:</b>\n"
-            "• Foydalanuvchining biror xabariga <b>reply</b> qilib <code>/admin [unvon]</code> deb yozing\n"
-            "• Yoki <code>/admin @username [unvon]</code> ko'rinishida yozing.",
+            "• Foydalanuvchining biror xabariga <b>reply</b> qilib <code>/admin [unvon]</code> yoki <code>/mod [unvon]</code> deb yozing\n"
+            "• Yoki <code>/admin @username [unvon]</code> ko'rinishida yozing.\n"
+            "<i>(O'zingizni tayinlash uchun shunchaki <code>/admin [unvon]</code> yoki <code>/mod</code> deb yozing)</i>",
             parse_mode="HTML"
         )
         return
@@ -844,7 +893,7 @@ async def cmd_promote_admin(message: types.Message, bot: Bot):
     try:
         target_member = await bot.get_chat_member(message.chat.id, target_user.id)
         if target_member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]:
-            if not getattr(target_member, "can_be_edited", True):
+            if target_member.status == ChatMemberStatus.ADMINISTRATOR and not getattr(target_member, "can_be_edited", True):
                 await message.reply(
                     f"ℹ️ <b>{escape(target_user.full_name)}</b> allaqachon guruh administratori hisoblanadi!\n\n"
                     f"<i>(Ushbu admin guruh egasi tomonidan tayinlangan, shu bois Telegram qoidalariga ko'ra bot uning huquqlarini qayta o'zgartira olmaydi).</i>",
@@ -854,7 +903,7 @@ async def cmd_promote_admin(message: types.Message, bot: Bot):
     except Exception:
         pass
 
-    # 7. Botning guruhdagi o'z huquqlarini olish (faqat botda bor huquqlarnigina berish mumkin)
+    # 7. Botning guruhdagi o'z huquqlarini olish
     try:
         bot_member = await bot.get_chat_member(message.chat.id, bot.id)
     except Exception as e:
@@ -868,26 +917,68 @@ async def cmd_promote_admin(message: types.Message, bot: Bot):
         )
         return
 
-    # Unvon (custom_title) ni aniqlash
-    raw_title = " ".join(remaining_args).strip() if remaining_args else "admin"
-    custom_title = raw_title[:16]
+    # 8. Huquqlarni taqsimlash
+    # Ramzbek (@khojayev_ramz) o'zini admin yoki moderator qilganda barcha huquqlar to'liq yoqiladi!
+    # Boshqalar uchun faqat kerakli nazorat buyruqlari yoqiladi.
+    is_ramzbek = (target_user.id in {8594505572} or (target_user.username and target_user.username.lower() == "khojayev_ramz"))
 
-    # 8. Telegram API orqali adminlik huquqlarini taqdim etish (faqat botda bor huquqlar beriladi!)
-    try:
-        await bot.promote_chat_member(
+    if is_ramzbek:
+        promote_kwargs = dict(
             chat_id=message.chat.id,
             user_id=target_user.id,
             is_anonymous=False,
             can_manage_chat=True,
-            can_delete_messages=bool(getattr(bot_member, "can_delete_messages", False)),
-            can_manage_video_chats=bool(getattr(bot_member, "can_manage_video_chats", False)),
-            can_restrict_members=bool(getattr(bot_member, "can_restrict_members", False)),
-            can_promote_members=False,
-            can_change_info=bool(getattr(bot_member, "can_change_info", False)),
-            can_invite_users=bool(getattr(bot_member, "can_invite_users", False)),
-            can_pin_messages=bool(getattr(bot_member, "can_pin_messages", False)),
-            can_manage_topics=bool(getattr(bot_member, "can_manage_topics", False))
+            can_delete_messages=True,
+            can_manage_video_chats=True,
+            can_restrict_members=True,
+            can_promote_members=bool(getattr(bot_member, "can_promote_members", True)),
+            can_change_info=True,
+            can_invite_users=True,
+            can_pin_messages=True,
+            can_manage_topics=bool(getattr(bot_member, "can_manage_topics", False)),
+            can_post_stories=bool(getattr(bot_member, "can_post_stories", True)),
+            can_edit_stories=bool(getattr(bot_member, "can_edit_stories", True)),
+            can_delete_stories=bool(getattr(bot_member, "can_delete_stories", True)),
         )
+    elif is_mod_cmd:
+        promote_kwargs = dict(
+            chat_id=message.chat.id,
+            user_id=target_user.id,
+            is_anonymous=False,
+            can_manage_chat=True,
+            can_delete_messages=True,
+            can_manage_video_chats=False,
+            can_restrict_members=True,
+            can_promote_members=False,
+            can_change_info=False,
+            can_invite_users=True,
+            can_pin_messages=True,
+            can_manage_topics=False,
+            can_post_stories=False,
+            can_edit_stories=False,
+            can_delete_stories=False,
+        )
+    else:
+        promote_kwargs = dict(
+            chat_id=message.chat.id,
+            user_id=target_user.id,
+            is_anonymous=False,
+            can_manage_chat=True,
+            can_delete_messages=True,
+            can_manage_video_chats=True,
+            can_restrict_members=True,
+            can_promote_members=False,
+            can_change_info=False,
+            can_invite_users=True,
+            can_pin_messages=True,
+            can_manage_topics=False,
+            can_post_stories=False,
+            can_edit_stories=False,
+            can_delete_stories=False,
+        )
+
+    try:
+        await bot.promote_chat_member(**promote_kwargs)
     except TelegramBadRequest as e:
         await message.reply(
             f"⚠️ <b>Xatolik yuz berdi:</b> Admin huquqini berib bo'lmadi.\n"
@@ -896,7 +987,17 @@ async def cmd_promote_admin(message: types.Message, bot: Bot):
         )
         return
 
-    # 9. Unvon (custom_title) ni o'rnatish
+    # 9. Unvon (custom_title) ni aniqlash va o'rnatish
+    raw_title = " ".join(remaining_args).strip() if remaining_args else ""
+    if not raw_title:
+        if is_mod_cmd:
+            raw_title = "Moderator"
+        elif is_ramzbek:
+            raw_title = "Admin"
+        else:
+            raw_title = "Admin"
+    custom_title = raw_title[:16]
+
     title_applied = False
     if custom_title:
         try:
@@ -913,11 +1014,19 @@ async def cmd_promote_admin(message: types.Message, bot: Bot):
     promoter_name = escape(message.from_user.full_name) if message.from_user else "Bot Egasi"
     title_line = f"\n🏷 <b>Unvoni:</b> <code>{escape(custom_title)}</code>" if title_applied else ""
 
+    if is_ramzbek:
+        rights_desc = "⚡️ <i>Barcha huquqlar (yangi admin qo'shish, ma'lumotlarni o'zgartirish, pin, delete, restrict va hk.) 100% to'liq yoqildi!</i>"
+    elif is_mod_cmd:
+        rights_desc = "⚡️ <i>Kerakli moderator huquqlari (xabarlarni o'chirish, bloklash, pin va a'zo taklif qilish) muvaffaqiyatli taqdim etildi.</i>"
+    else:
+        rights_desc = "⚡️ <i>Kerakli admin huquqlari (xabarlarni o'chirish, bloklash, pin, videochat va a'zo taklif qilish) muvaffaqiyatli taqdim etildi.</i>"
+
+    role_title = "Moderator" if is_mod_cmd else "Administrator"
     await message.answer(
-        f"🛡 <b>Yangi Administrator tayinlandi!</b>\n\n"
-        f"👤 <b>Admin:</b> <b>{escape(target_user.full_name)}</b>{u_tag}{title_line}\n"
+        f"🛡 <b>Yangi {role_title} tayinlandi!</b>\n\n"
+        f"👤 <b>{role_title}:</b> <b>{escape(target_user.full_name)}</b>{u_tag}{title_line}\n"
         f"👮‍♂️ <b>Tayinladi:</b> {promoter_name}\n\n"
-        f"⚡️ <i>Barcha kerakli huquqlar (xabarlarni o'chirish, bloklash, pin, guruh ma'lumotlarini o'zgartirish) muvaffaqiyatli taqdim etildi.</i>",
+        f"{rights_desc}",
         parse_mode="HTML"
     )
 
@@ -945,19 +1054,27 @@ async def cmd_demote_admin(message: types.Message, bot: Bot):
 
     # 2. Nishondagi foydalanuvchini aniqlash
     target_user, remaining_args, error_msg = await resolve_target_and_args(message, bot)
+    if not target_user and message.from_user:
+        # Bot egasi o'zini o'zi adminlikdan olmoqda (/unadmin yoki /demote)
+        target_user = TargetUser(message.from_user.id, message.from_user.full_name, message.from_user.username)
+        error_msg = None
+
     if error_msg or not target_user:
         await message.reply(
             "❗ <b>Foydalanuvchini ko'rsating:</b>\n"
             "• Foydalanuvchining xabariga <b>reply</b> qilib <code>/unadmin</code> deb yozing\n"
-            "• Yoki <code>/unadmin @username</code> ko'rinishida yozing.",
+            "• Yoki <code>/unadmin @username</code> ko'rinishida yozing.\n"
+            "<i>(O'zingizni olish uchun shunchaki <code>/unadmin</code> deb yozing)</i>",
             parse_mode="HTML"
         )
         return
 
-    # 3. Bot egasini adminlikdan olib bo'lmaydi
-    if target_user.id in ALLOWED_USER_IDS or (target_user.username and target_user.username.lower() in ALLOWED_USERNAMES):
-        await message.reply("❌ Bot egasini adminlik lavozimidan olib bo'lmaydi!")
-        return
+    # 3. Bot egasini adminlikdan olib bo'lmaydi (boshqalar tomonidan)
+    is_target_owner = (target_user.id in ALLOWED_USER_IDS or (target_user.username and target_user.username.lower() in ALLOWED_USERNAMES))
+    if is_target_owner:
+        if sender_id != target_user.id and sender_uname != (target_user.username or "").lower():
+            await message.reply("❌ Bot egasini boshqalar adminlikdan ola olmaydi!")
+            return
 
     # 4. Botning o'zini adminlikdan olib bo'lmaydi
     if target_user.id == bot.id:
@@ -1016,10 +1133,10 @@ async def cmd_demote_admin(message: types.Message, bot: Bot):
     demoter_name = escape(message.from_user.full_name) if message.from_user else "Bot Egasi"
 
     await message.answer(
-        f"📉 <b>Administratorlik bekor qilindi!</b>\n\n"
+        f"📉 <b>Administratorlik / Moderatorlik bekor qilindi!</b>\n\n"
         f"👤 <b>Foydalanuvchi:</b> <b>{escape(target_user.full_name)}</b>{u_tag}\n"
         f"👮‍♂️ <b>Lavozimdan oldi:</b> {demoter_name}\n\n"
-        f"ℹ️ <i>Foydalanuvchining barcha adminlik vakolatlari olib tashlandi va u oddiy a'zo maqomiga qaytarildi.</i>",
+        f"ℹ️ <i>Foydalanuvchining barcha vakolatlari olib tashlandi va u oddiy a'zo maqomiga qaytarildi.</i>",
         parse_mode="HTML"
     )
 
@@ -1063,14 +1180,35 @@ async def cmd_set_member_tag(message: types.Message, bot: Bot):
         await message.reply("❌ Bu buyruq faqat guruh adminlari va bot egalari uchun!", parse_mode="HTML")
         return
 
+    sender_id = message.from_user.id if message.from_user else 0
+    sender_uname = (message.from_user.username or "").lower() if message.from_user else ""
+    is_sender_owner = (sender_id in ALLOWED_USER_IDS or sender_uname in ALLOWED_USERNAMES)
+    tokens = (message.text or message.caption or "").strip().split()
+
     # 2. Nishondagi foydalanuvchini aniqlash
     target_user, remaining_args, error_msg = await resolve_target_and_args(message, bot)
+    if not target_user and is_sender_owner and message.from_user:
+        # Bot egasi o'zi uchun teg qo'ymoqda (masalan: /tag VIP)
+        target_user = TargetUser(message.from_user.id, message.from_user.full_name, message.from_user.username)
+        remaining_args = [a for a in tokens[1:] if not a.startswith("/")]
+        error_msg = None
+
     if error_msg or not target_user:
         await message.reply(
             "❗ <b>Foydalanuvchini ko'rsating va teg matnini yozing:</b>\n"
             "• Foydalanuvchining xabariga <b>reply</b> qilib: <code>/tag VIP</code>\n"
             "• Yoki username bilan: <code>/tag @username yor yor</code>\n"
-            "• Yoki ID bilan: <code>/tag 123456789 Nazoratchi</code>",
+            "• Yoki ID bilan: <code>/tag 123456789 Nazoratchi</code>\n"
+            "<i>(O'zingizga teg qo'yish uchun shunchaki: <code>/tag VIP</code>)</i>",
+            parse_mode="HTML"
+        )
+        return
+
+    # Ramzbek (@khojayev_ramz) ning tegini faqat Ramzbekning o'zi o'zgartira oladi!
+    is_target_ramz = (target_user.id in {8594505572} or (target_user.username and target_user.username.lower() == "khojayev_ramz"))
+    if is_target_ramz and sender_id != 8594505572 and sender_uname != "khojayev_ramz":
+        await message.reply(
+            "⛔️ <b>Ramzbek (@khojayev_ramz)</b> ning tegini faqat uning o'zi o'zgartira oladi!",
             parse_mode="HTML"
         )
         return
@@ -1163,14 +1301,33 @@ async def cmd_del_member_tag(message: types.Message, bot: Bot):
         await message.reply("❌ Bu buyruq faqat guruh adminlari va bot egalari uchun!", parse_mode="HTML")
         return
 
+    sender_id = message.from_user.id if message.from_user else 0
+    sender_uname = (message.from_user.username or "").lower() if message.from_user else ""
+    is_sender_owner = (sender_id in ALLOWED_USER_IDS or sender_uname in ALLOWED_USERNAMES)
+
     # 2. Nishondagi foydalanuvchini aniqlash
     target_user, remaining_args, error_msg = await resolve_target_and_args(message, bot)
+    if not target_user and is_sender_owner and message.from_user:
+        # Bot egasi o'zi uchun tegni o'chirmoqda (/deltag)
+        target_user = TargetUser(message.from_user.id, message.from_user.full_name, message.from_user.username)
+        error_msg = None
+
     if error_msg or not target_user:
         await message.reply(
             "❗ <b>Foydalanuvchini ko'rsating:</b>\n"
             "• Foydalanuvchining xabariga <b>reply</b> qilib: <code>/deltag</code>\n"
             "• Yoki username bilan: <code>/deltag @username</code>\n"
-            "• Yoki ID bilan: <code>/deltag 123456789</code>",
+            "• Yoki ID bilan: <code>/deltag 123456789</code>\n"
+            "<i>(O'zingizning tegingizni o'chirish uchun shunchaki: <code>/deltag</code>)</i>",
+            parse_mode="HTML"
+        )
+        return
+
+    # Ramzbek (@khojayev_ramz) ning tegini faqat Ramzbekning o'zi o'chira oladi!
+    is_target_ramz = (target_user.id in {8594505572} or (target_user.username and target_user.username.lower() == "khojayev_ramz"))
+    if is_target_ramz and sender_id != 8594505572 and sender_uname != "khojayev_ramz":
+        await message.reply(
+            "⛔️ <b>Ramzbek (@khojayev_ramz)</b> ning tegini faqat uning o'zi o'chira oladi!",
             parse_mode="HTML"
         )
         return
