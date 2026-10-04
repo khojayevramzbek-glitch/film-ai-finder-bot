@@ -133,20 +133,19 @@ async def unmute_after(bot: Bot, chat_id: int, user_id: int, delay: int):
 
 
 # Buyruqlar regexlari (Lotin va Kirill alifbosida)
-# Moderatsiya buyruqlari qat'iy ravishda '/' belgisi bilan boshlanishi SHART!
-# Bu oddiy suhbatdagi 'ban', 'mute', 'ban qilaman' kabi so'zlarni tasodifan buyruq deb tushunmaslik uchun zarur.
-MUTE_REGEX = re.compile(r"^/(?:[sс]?[mм][uу][tт][eе]?|[mм][uу][tт][eе]?)\b", re.IGNORECASE)
-UNMUTE_REGEX = re.compile(r"^/(?:[uу][nн][mм][uу][tт][eе]?|[aа][nн][mм][uу][tт][eе]?)\b", re.IGNORECASE)
-WARN_REGEX = re.compile(r"^/([wв][aа][rр][nн])\b", re.IGNORECASE)
-UNWARN_REGEX = re.compile(r"^/([uу][nн][wв][aа][rр][nн]|[aа][nн][wв][aа][rр][nн])\b", re.IGNORECASE)
-BAN_REGEX = re.compile(r"^/([bб][aа][nн])\b", re.IGNORECASE)
-UNBAN_REGEX = re.compile(r"^/([uу][nн][bб][aа][nн]|[rр][aа][zз][bб][aа][nн])\b", re.IGNORECASE)
-USER_STAT_REGEX = re.compile(r"^/([sс][tт][aа][tт][aа][sс][iі]|[mм][yу][sс][tт][aа][tт])\b", re.IGNORECASE)
+# Moderatsiya buyruqlari '/', '.' yoki '!' belgisi bilan boshlanishi mumkin (.mute, /mute, !mute)
+MUTE_REGEX = re.compile(r"^[/\.!](?:[sс]?[mм][uу][tт][eе]?|[mм][uу][tт][eе]?)\b", re.IGNORECASE)
+UNMUTE_REGEX = re.compile(r"^[/\.!](?:[uу][nн][mм][uу][tт][eе]?|[aа][nн][mм][uу][tт][eе]?)\b", re.IGNORECASE)
+WARN_REGEX = re.compile(r"^[/\.!]([wв][aа][rр][nн])\b", re.IGNORECASE)
+UNWARN_REGEX = re.compile(r"^[/\.!]([uу][nн][wв][aа][rр][nн]|[aа][nн][wв][aа][rр][nн])\b", re.IGNORECASE)
+BAN_REGEX = re.compile(r"^[/\.!]([bб][aа][nн])\b", re.IGNORECASE)
+UNBAN_REGEX = re.compile(r"^[/\.!]([uу][nн][bб][aа][nн]|[rр][aа][zз][bб][aа][nн])\b", re.IGNORECASE)
+USER_STAT_REGEX = re.compile(r"^[/\.!]([sс][tт][aа][tт][aа][sс][iі]|[mм][yу][sс][tт][aа][tт])\b", re.IGNORECASE)
 
 
 def is_moderation_command(message: types.Message) -> bool:
     text = (message.text or message.caption or "").strip()
-    if not text or not text.startswith("/"):
+    if not text or not (text.startswith("/") or text.startswith(".") or text.startswith("!")):
         return False
     tokens = text.split()
     cmd = tokens[0].split("@")[0] if tokens else ""
@@ -175,7 +174,7 @@ async def resolve_target_and_args(message: types.Message, bot: Bot) -> tuple[Tar
     # Ketma-ket yozilgan buyruqlarni (masalan: /unmute /unban @username) tozalash
     args = []
     for a in raw_args:
-        if a.startswith("/") and any(r.match(a) for r in [MUTE_REGEX, UNMUTE_REGEX, WARN_REGEX, UNWARN_REGEX, BAN_REGEX, UNBAN_REGEX]):
+        if (a.startswith("/") or a.startswith(".") or a.startswith("!")) and any(r.match(a) for r in [MUTE_REGEX, UNMUTE_REGEX, WARN_REGEX, UNWARN_REGEX, BAN_REGEX, UNBAN_REGEX]):
             continue
         args.append(a)
 
@@ -730,11 +729,11 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
         return
 
 
-INFO_CMD_REGEX = re.compile(r"^[./](info|инфо)\b", re.IGNORECASE)
+INFO_CMD_REGEX = re.compile(r"^[./!](?:info|инфо)\b", re.IGNORECASE)
 
 
 def is_info_command(message: types.Message) -> bool:
-    """Xabar .info yoki /info bilan boshlanganini tekshirish."""
+    """Xabar .info, /info yoki !info bilan boshlanganini tekshirish."""
     text = (message.text or message.caption or "").strip()
     return bool(INFO_CMD_REGEX.match(text))
 

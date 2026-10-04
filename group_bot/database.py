@@ -7,12 +7,24 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 DB_PATH = Path(__file__).resolve().parent / "bot_data.db"
+UZB_TZ = timezone(timedelta(hours=5))
+
+
+def get_uzb_now() -> datetime:
+    """O'zbekiston vaqti (Toshkent, UTC+5)."""
+    return datetime.now(UZB_TZ)
+
+
+def get_uzb_now_str() -> str:
+    """O'zbekiston vaqti ISO satri: 'YYYY-MM-DD HH:MM:SS+05:00'."""
+    return get_uzb_now().strftime("%Y-%m-%d %H:%M:%S+05:00")
 
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     try:
+        conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
         conn.execute("PRAGMA temp_store=MEMORY;")
     except Exception:
@@ -52,6 +64,10 @@ def init_db():
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_messages_username
             ON messages(username);
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_messages_chat_user_created
+            ON messages(chat_id, user_id, created_at);
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS warnings (
@@ -211,6 +227,10 @@ def init_db():
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_punishments_chat_user
             ON user_punishments(chat_id, user_id);
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_punishments_chat_user_act_created
+            ON user_punishments(chat_id, user_id, action_type, created_at);
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS game_stats (
@@ -465,8 +485,9 @@ def delete_message_record(chat_id: int, message_id: int):
 
 def add_message(chat_id: int, user_id: int, full_name: str, username: str | None = None, message_id: int | None = None):
     """Yangi kelgan xabarni bazaga yozish va doimiy katalogga muhrlash (yagona tranzaksiya)."""
-    now_utc = datetime.now(timezone.utc)
-    now_iso = now_utc.isoformat()
+    now_uzb = get_uzb_now()
+    now_uzb_str = now_uzb.strftime("%Y-%m-%d %H:%M:%S+05:00")
+    now_iso = now_uzb.isoformat()
     clean_username = username.lstrip("@").strip() if username else None
     clean_full_name = (full_name or "").strip() or f"Foydalanuvchi [{user_id}]"
 
@@ -477,7 +498,7 @@ def add_message(chat_id: int, user_id: int, full_name: str, username: str | None
             INSERT INTO messages (chat_id, user_id, full_name, username, created_at, message_id)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (chat_id, user_id, full_name, username, now_utc, message_id)
+            (chat_id, user_id, full_name, username, now_uzb_str, message_id)
         )
         # 2. known_users katalogiga yozish
         if user_id and user_id > 0:
@@ -504,7 +525,7 @@ def add_message(chat_id: int, user_id: int, full_name: str, username: str | None
                 last_seen = excluded.last_seen,
                 total_messages = COALESCE(group_members.total_messages, 0) + 1
             """,
-            (chat_id, user_id, full_name, username, now_utc, now_utc, now_utc)
+            (chat_id, user_id, full_name, username, now_uzb_str, now_uzb_str, now_uzb_str)
         )
         conn.commit()
 
@@ -519,32 +540,32 @@ def delete_flood_messages(chat_id: int, user_id: int, message_ids: list[int]):
                 [chat_id, *message_ids]
             )
         # Qo'shimcha xavfsizlik: o'sha foydalanuvchining so'nggi 10 soniyalik xabarlarini ham tozalash
-        cutoff = datetime.now(timezone.utc) - timedelta(seconds=10)
+        cutoff_ts = int(time.time()) - 10
         conn.execute(
-            "DELETE FROM messages WHERE chat_id = ? AND user_id = ? AND created_at >= ?",
-            (chat_id, user_id, cutoff)
+            "DELETE FROM messages WHERE chat_id = ? AND user_id = ? AND (unixepoch(created_at) >= ? OR datetime(created_at) >= datetime(?, 'unixepoch'))",
+            (chat_id, user_id, cutoff_ts, cutoff_ts)
         )
         conn.commit()
 
 
 def get_24h_stats(chat_id: int, limit: int = 50) -> tuple[list[dict], int, int]:
     """
-    So'nggi 24 soat ichida guruhdagi faol a'zolar statistikasini olish.
+    So'nggi 24 soat ichida guruhdagi faol a'zolar statistikasini olish (O'zbekiston vaqti).
     Qaytaradi: (faol a'zolar ro'yxati, jami xabarlar soni, faol a'zolar soni)
     """
-    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff_24h_ts = int(time.time()) - (24 * 3600)
     with get_connection() as conn:
         # Har bir a'zo bo'yicha hisob
         cursor = conn.execute(
             """
             SELECT user_id, full_name, username, COUNT(*) as msg_count
             FROM messages
-            WHERE chat_id = ? AND created_at >= ?
+            WHERE chat_id = ? AND (unixepoch(created_at) >= ? OR datetime(created_at) >= datetime(?, 'unixepoch'))
             GROUP BY user_id
             ORDER BY msg_count DESC
             LIMIT ?
             """,
-            (chat_id, cutoff_time, limit)
+            (chat_id, cutoff_24h_ts, cutoff_24h_ts, limit)
         )
         rows = [dict(row) for row in cursor.fetchall()]
 
@@ -553,9 +574,9 @@ def get_24h_stats(chat_id: int, limit: int = 50) -> tuple[list[dict], int, int]:
             """
             SELECT COUNT(*) as total_msgs, COUNT(DISTINCT user_id) as total_users
             FROM messages
-            WHERE chat_id = ? AND created_at >= ?
+            WHERE chat_id = ? AND (unixepoch(created_at) >= ? OR datetime(created_at) >= datetime(?, 'unixepoch'))
             """,
-            (chat_id, cutoff_time)
+            (chat_id, cutoff_24h_ts, cutoff_24h_ts)
         )
         summary = summary_cur.fetchone()
         total_msgs = summary["total_msgs"] if summary else 0
@@ -566,9 +587,9 @@ def get_24h_stats(chat_id: int, limit: int = 50) -> tuple[list[dict], int, int]:
 
 def cleanup_old_messages(days: int = 3):
     """3 kundan eski xabarlarni bazadan tozalash."""
-    cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_ts = int(time.time()) - (days * 86400)
     with get_connection() as conn:
-        conn.execute("DELETE FROM messages WHERE created_at < ?", (cutoff_time,))
+        conn.execute("DELETE FROM messages WHERE (unixepoch(created_at) < ? OR datetime(created_at) < datetime(?, 'unixepoch'))", (cutoff_ts, cutoff_ts))
         conn.commit()
 
 
@@ -655,12 +676,17 @@ def get_rules(chat_id: int) -> str | None:
 
 
 def get_user_24h_stat(chat_id: int, user_id: int) -> int:
-    """Bitta foydalanuvchining so'nggi 24 soatdagi xabarlar soni."""
-    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+    """Bitta foydalanuvchining so'nggi 24 soatdagi xabarlar soni (O'zbekiston vaqti)."""
+    cutoff_24h_ts = int(time.time()) - (24 * 3600)
     with get_connection() as conn:
         cur = conn.execute(
-            "SELECT COUNT(*) as cnt FROM messages WHERE chat_id = ? AND user_id = ? AND created_at >= ?",
-            (chat_id, user_id, cutoff_time)
+            """
+            SELECT COUNT(*) as cnt 
+            FROM messages 
+            WHERE chat_id = ? AND user_id = ? 
+              AND (unixepoch(created_at) >= ? OR datetime(created_at) >= datetime(?, 'unixepoch'))
+            """,
+            (chat_id, user_id, cutoff_24h_ts, cutoff_24h_ts)
         )
         row = cur.fetchone()
         return row["cnt"] if row else 0
@@ -1353,7 +1379,7 @@ def get_manager_overview() -> dict:
     Faqat bot egasi (@khojayev_ramz) uchun:
     Barcha qo'shilgan guruhlar, ularning silkalari, a'zolari va bot holati haqida to'liq hisobot.
     """
-    cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff_24h_ts = int(time.time()) - (24 * 3600)
     with get_connection() as conn:
         cur = conn.execute("""
             SELECT 
@@ -1370,7 +1396,7 @@ def get_manager_overview() -> dict:
                 COALESCE(cs.is_enabled, 1) AS is_censor_enabled,
                 COALESCE(st.is_enabled, 1) AS is_stats_enabled,
                 COALESCE(gm.is_enabled, 1) AS is_game_enabled,
-                (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.chat_id AND m.created_at >= ?) AS msg_count_24h,
+                (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.chat_id AND (unixepoch(m.created_at) >= ? OR datetime(m.created_at) >= datetime(?, 'unixepoch'))) AS msg_count_24h,
                 c.updated_at
             FROM chats c
             LEFT JOIN chat_bot_status b ON c.chat_id = b.chat_id
@@ -1379,7 +1405,7 @@ def get_manager_overview() -> dict:
             LEFT JOIN chat_game_settings gm ON c.chat_id = gm.chat_id
             WHERE c.chat_id < 0
             ORDER BY msg_count_24h DESC, c.updated_at DESC
-        """, (cutoff_24h,))
+        """, (cutoff_24h_ts, cutoff_24h_ts))
         groups = [dict(r) for r in cur.fetchall()]
 
         # Generate default telegram link if invite_link is missing but username exists
@@ -1415,7 +1441,7 @@ def get_chat_title(chat_id: int) -> str:
 
 def get_all_managed_groups() -> list[dict]:
     """Mini App uchun barcha faol guruhlar va ularning asosiy sozlamalarini olish."""
-    cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff_24h_ts = int(time.time()) - (24 * 3600)
     with get_connection() as conn:
         cur = conn.execute("""
             SELECT 
@@ -1426,7 +1452,7 @@ def get_all_managed_groups() -> list[dict]:
                 COALESCE(st.is_enabled, 1) AS is_stats_enabled,
                 COALESCE(st.is_public, 0) AS is_stats_public,
                 COALESCE(gm.is_enabled, 1) AS is_game_enabled,
-                (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.chat_id AND m.created_at >= ?) AS msg_count_24h
+                (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.chat_id AND (unixepoch(m.created_at) >= ? OR datetime(m.created_at) >= datetime(?, 'unixepoch'))) AS msg_count_24h
             FROM chats c
             LEFT JOIN chat_bot_status b ON c.chat_id = b.chat_id
             LEFT JOIN chat_censor_settings cs ON c.chat_id = cs.chat_id
@@ -1434,7 +1460,7 @@ def get_all_managed_groups() -> list[dict]:
             LEFT JOIN chat_game_settings gm ON c.chat_id = gm.chat_id
             WHERE c.chat_id < 0
             ORDER BY msg_count_24h DESC, c.updated_at DESC
-        """, (cutoff_24h,))
+        """, (cutoff_24h_ts, cutoff_24h_ts))
         rows = [dict(r) for r in cur.fetchall()]
         
         # Qachondir qo'shilgan, sozlamasi o'zgartirilgan yoki xabar yozilgan BARCHA guruhlarni to'plash:
@@ -1992,13 +2018,14 @@ def get_prank_users(chat_id: int) -> list[dict]:
 
 def log_user_punishment(chat_id: int, user_id: int, action_type: str, reason: str = "", duration_seconds: int = 0):
     """Foydalanuvchi jazolanganini (mute, virtual_mute, warn, ban va h.k.) bazaga qayd etish."""
+    now_uzb_str = get_uzb_now_str()
     with get_connection() as conn:
         conn.execute(
             """
-            INSERT INTO user_punishments (chat_id, user_id, action_type, reason, duration_seconds)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO user_punishments (chat_id, user_id, action_type, reason, duration_seconds, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (chat_id, user_id, action_type, reason, duration_seconds)
+            (chat_id, user_id, action_type, reason, duration_seconds, now_uzb_str)
         )
         conn.commit()
 
@@ -2020,7 +2047,7 @@ def get_user_punishments_count(chat_id: int, user_id: int) -> int:
 
 def record_member_join(chat_id: int, user_id: int, full_name: str, username: str | None = None, is_exact: bool = False):
     """A'zo guruhga qo'shilgan vaqtini qayd etish."""
-    now_utc = datetime.now(timezone.utc)
+    now_uzb_str = get_uzb_now_str()
     is_exact_val = 1 if is_exact else 0
     with get_connection() as conn:
         conn.execute(
@@ -2033,7 +2060,7 @@ def record_member_join(chat_id: int, user_id: int, full_name: str, username: str
                 last_seen = excluded.last_seen,
                 is_exact_join = MAX(group_members.is_exact_join, excluded.is_exact_join)
             """,
-            (chat_id, user_id, full_name, username, now_utc, now_utc, now_utc, is_exact_val)
+            (chat_id, user_id, full_name, username, now_uzb_str, now_uzb_str, now_uzb_str, is_exact_val)
         )
         conn.commit()
 
@@ -2042,12 +2069,13 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
     """
     Foydalanuvchining to'liq hisoboti (.info buyrug'i uchun):
     - Guruhga qachon qo'shilgan / birinchi ko'rilgan
-    - Necha marta mute olgani
+    - Necha marta mute olgani (jami va so'nggi 24 soat)
     - Qo'shilganidan beri jami qancha xabar yozgani
-    - 24 soatlik xabarlari
+    - 24 soatlik xabarlari (O'zbekiston vaqti bo'yicha aniq 24 soat)
     - Ogohlantirishlari
     - Hazil (Ghost) rejimi holati
     """
+    cutoff_24h_ts = int(time.time()) - (24 * 3600)
     with get_connection() as conn:
         # 1. messages jadvalidan umumiy xabarlar va birinchi/oxirgi xabar vaqti
         cur = conn.execute(
@@ -2063,11 +2091,15 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
         first_msg = msg_row["first_msg"] if msg_row else None
         last_msg = msg_row["last_msg"] if msg_row else None
 
-        # 2. 24 soatlik xabarlar soni
-        cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+        # 2. 24 soatlik xabarlar soni (O'zbekiston vaqti bo'yicha aniq 24 soat)
         cur = conn.execute(
-            "SELECT count(*) as cnt_24h FROM messages WHERE chat_id = ? AND user_id = ? AND created_at >= ?",
-            (chat_id, user_id, cutoff_24h)
+            """
+            SELECT count(*) as cnt_24h 
+            FROM messages 
+            WHERE chat_id = ? AND user_id = ? 
+              AND (unixepoch(created_at) >= ? OR datetime(created_at) >= datetime(?, 'unixepoch'))
+            """,
+            (chat_id, user_id, cutoff_24h_ts, cutoff_24h_ts)
         )
         msgs_24h = cur.fetchone()["cnt_24h"]
 
@@ -2101,7 +2133,7 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
         # Jami barcha xabarlar soni
         total_msgs = max(member_total, table_msgs)
 
-        # 4. Mute jazolari soni (umumiy va 24 soatlik)
+        # 4. Mute jazolari soni (umumiy va 24 soatlik O'zbekiston vaqti)
         cur = conn.execute(
             """
             SELECT count(*) as mute_cnt 
@@ -2116,9 +2148,11 @@ def get_user_info_stats(chat_id: int, user_id: int) -> dict:
             """
             SELECT count(*) as mute_24h 
             FROM user_punishments 
-            WHERE chat_id = ? AND user_id = ? AND action_type IN ('mute', 'virtual_mute') AND created_at >= ?
+            WHERE chat_id = ? AND user_id = ? 
+              AND action_type IN ('mute', 'virtual_mute') 
+              AND (unixepoch(created_at) >= ? OR datetime(created_at) >= datetime(?, 'unixepoch'))
             """,
-            (chat_id, user_id, cutoff_24h)
+            (chat_id, user_id, cutoff_24h_ts, cutoff_24h_ts)
         )
         mute_24h = cur.fetchone()["mute_24h"]
 
@@ -2179,15 +2213,16 @@ def set_admin_virtual_mute(chat_id: int, user_id: int, duration_seconds: int) ->
     """Adminni virtual mute qilish va bazaga hamda xotiraga saqlash."""
     until_ts = time.time() + duration_seconds
     _admin_virtual_mutes_cache[(chat_id, user_id)] = until_ts
+    now_uzb_str = get_uzb_now_str()
     with get_connection() as conn:
         conn.execute("""
-            INSERT INTO admin_virtual_mutes (chat_id, user_id, until_ts, duration_seconds)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO admin_virtual_mutes (chat_id, user_id, until_ts, duration_seconds, created_at)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(chat_id, user_id) DO UPDATE SET
                 until_ts = excluded.until_ts,
                 duration_seconds = excluded.duration_seconds,
-                created_at = CURRENT_TIMESTAMP
-        """, (chat_id, user_id, until_ts, duration_seconds))
+                created_at = excluded.created_at
+        """, (chat_id, user_id, until_ts, duration_seconds, now_uzb_str))
         conn.commit()
     log_user_punishment(chat_id, user_id, action_type="virtual_mute", reason="Admin Virtual Mute", duration_seconds=duration_seconds)
     return until_ts

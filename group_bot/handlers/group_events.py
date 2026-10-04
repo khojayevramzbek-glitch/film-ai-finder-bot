@@ -127,9 +127,9 @@ async def on_my_chat_member(event: types.ChatMemberUpdated, bot: Bot):
 async def on_chat_member_generic(event: types.ChatMemberUpdated):
     """
     Guruh a'zolari holati o'zgarganda (chiqdi, cheklandi, admin bo'ldi va h.k.)
-    foydalanuvchini doimiy katalogga (known_users) muhrlash.
+    foydalanuvchini doimiy katalogga (known_users) muhrlash va jazolarni qayd etish.
     """
-    from group_bot.database import upsert_known_user
+    from group_bot.database import upsert_known_user, log_user_punishment
     user = event.new_chat_member.user if event.new_chat_member else event.from_user
     if user and not user.is_bot:
         upsert_known_user(
@@ -138,6 +138,18 @@ async def on_chat_member_generic(event: types.ChatMemberUpdated):
             username=user.username,
             chat_id=event.chat.id
         )
+
+        # Telegram interfeysi orqali berilgan jazolarni qayd etish
+        new_status = event.new_chat_member.status
+        old_status = event.old_chat_member.status if event.old_chat_member else None
+
+        if new_status == "restricted":
+            can_send_new = getattr(event.new_chat_member, "can_send_messages", True)
+            can_send_old = getattr(event.old_chat_member, "can_send_messages", True) if old_status == "restricted" else True
+            if not can_send_new and can_send_old:
+                log_user_punishment(event.chat.id, user.id, action_type="mute", reason="Telegram Admin Mute")
+        elif new_status == "kicked" and old_status != "kicked":
+            log_user_punishment(event.chat.id, user.id, action_type="ban", reason="Telegram Admin Ban")
 
 
 @router.message(F.left_chat_member)
