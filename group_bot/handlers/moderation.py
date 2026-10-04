@@ -573,6 +573,14 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
     # 5. BAN: /ban, ban, бан
     if BAN_REGEX.match(cmd):
         target_user, rem_args, err = await resolve_target_and_args(message, bot)
+        sender_id = message.from_user.id if message.from_user else 0
+        sender_uname = (message.from_user.username or "").lower() if message.from_user else ""
+
+        # Agar oddiy a'zo /ban deb yozsa (reply yoki boshqa user ko'rsatilmagan bo'lsa), o'zini o'zi ban qilmoqda deb hisoblansin:
+        if not target_user and not is_authorized and message.from_user:
+            target_user = TargetUser(message.from_user.id, message.from_user.full_name, message.from_user.username)
+            err = None
+
         if err or not target_user:
             await message.reply(
                 "❗ <b>Foydalanuvchini ko'rsating:</b>\n"
@@ -583,9 +591,6 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
             )
             return
 
-        sender_id = message.from_user.id if message.from_user else 0
-        sender_uname = (message.from_user.username or "").lower() if message.from_user else ""
-        
         # Self-ban: Har qanday guruh a'zosiga (oddiy a'zo, admin, bot egasi) ruxsat beriladi!
         is_self_ban = (target_user.id == sender_id or (target_user.username and target_user.username.lower() == sender_uname))
 
@@ -607,22 +612,35 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
                 )
                 return
 
-            # Self-ban: agar admin bo'lsa, Telegram API 'can\'t restrict administrator' xatosini bermasligi uchun avval adminlikdan olinadi
+            # Agar foydalanuvchi admin bo'lsa:
             try:
-                await bot.promote_chat_member(
-                    chat_id=message.chat.id,
-                    user_id=target_user.id,
-                    is_anonymous=False,
-                    can_manage_chat=False,
-                    can_delete_messages=False,
-                    can_manage_video_chats=False,
-                    can_restrict_members=False,
-                    can_promote_members=False,
-                    can_change_info=False,
-                    can_invite_users=False,
-                    can_pin_messages=False,
-                    can_manage_topics=False
-                )
+                target_member = await bot.get_chat_member(message.chat.id, target_user.id)
+                if target_member.status == ChatMemberStatus.ADMINISTRATOR:
+                    # Agar admin guruh egasi tomonidan tayinlangan bo'lsa (can_be_edited == False):
+                    if not getattr(target_member, "can_be_edited", True):
+                        await message.reply(
+                            f"⚠️ <b>{escape(target_user.full_name)}</b>, siz guruh egasi (@wdablyu) tomonidan tayinlangan adminsiz!\n\n"
+                            f"<i>Telegram qoidalariga ko'ra, bot faqat o'zi tayinlagan adminlarnigina lavozimdan ola oladi va ban qila oladi. Guruh egasi tayinlagan adminlarga botning kuchi yetmaydi.\n\n"
+                            f"👉 Guruhdan chiqish uchun Telegram menyusidagi <b>«Guruhni tark etish» (Leave group)</b> tugmasidan foydalanishingiz yoki guruh egasi sizni adminlikdan yechishi lozim.</i>",
+                            parse_mode="HTML"
+                        )
+                        return
+
+                    # Agar bot tahrirlay oladigan admin bo'lsa (masalan: bot orqali tayinlangan admin):
+                    await bot.promote_chat_member(
+                        chat_id=message.chat.id,
+                        user_id=target_user.id,
+                        is_anonymous=False,
+                        can_manage_chat=False,
+                        can_delete_messages=False,
+                        can_manage_video_chats=False,
+                        can_restrict_members=False,
+                        can_promote_members=False,
+                        can_change_info=False,
+                        can_invite_users=False,
+                        can_pin_messages=False,
+                        can_manage_topics=False
+                    )
             except Exception:
                 pass
 
@@ -641,7 +659,7 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
                     parse_mode="HTML"
                 )
         except TelegramBadRequest as e:
-            await message.reply(f"⚠️ Xatolik: {e.message}")
+            await message.reply(f"⚠️ Xatolik yuz berdi: {e.message}")
         return
 
     # 6. UNBAN: /unban, unban, разбан
