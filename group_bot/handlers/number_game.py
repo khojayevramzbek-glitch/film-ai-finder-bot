@@ -33,6 +33,34 @@ GIFT_MILESTONES = {
     100: {"name": "Telegram Gift (Oltin Kubok)", "stars": 100, "icon": "🏆"}
 }
 BOT_OWNER_NOTIFY_IDS = [8594505572, 7690283463]
+GAME_OWNER_IDS = {8594505572, 7690283463}
+GAME_OWNER_USERNAMES = {"khojayev_ramz", "wdablyu"}
+
+
+def is_game_owner(user: types.User | int | None) -> bool:
+    """Faqat Ramzbek (@khojayev_ramz) va Dubl (@wdablyu) o‘yinni yoqa/o‘chira oladi."""
+    if not user:
+        return False
+    if isinstance(user, int):
+        return user in GAME_OWNER_IDS
+    uid = getattr(user, "id", None)
+    uname = (getattr(user, "username", "") or "").lower()
+    if uid and uid in GAME_OWNER_IDS:
+        return True
+    if uname in GAME_OWNER_USERNAMES:
+        return True
+    return False
+
+
+def is_ramzbek_only(user: types.User | int | None) -> bool:
+    """Faqat shaxsan Ramzbek (@khojayev_ramz / 8594505572)."""
+    if not user:
+        return False
+    if isinstance(user, int):
+        return user == 8594505572
+    uid = getattr(user, "id", None)
+    uname = (getattr(user, "username", "") or "").lower()
+    return uid == 8594505572 or uname == "khojayev_ramz"
 
 
 class GameState:
@@ -673,19 +701,9 @@ async def handle_game_messages(message: types.Message, bot: Bot):
     if GAME_CMD_REGEX.match(text):
         tokens = text.split()
         if len(tokens) >= 2 and tokens[1].lower() in ("on", "off", "yoqish", "ochirish", "o'chirish", "o‘chirish"):
-            is_admin = False
-            try:
-                member = await bot.get_chat_member(chat_id, message.from_user.id)
-                is_admin = member.status in ("creator", "administrator")
-            except Exception:
-                pass
-            if message.from_user and message.from_user.username and message.from_user.username.lower() in ("khojayev_ramz", "wdablyu"):
-                is_admin = True
-            if message.from_user and message.from_user.id in BOT_OWNER_NOTIFY_IDS:
-                is_admin = True
-
-            if not is_admin:
-                await message.reply("⛔️ O‘yin tizimini yoqish yoki o‘chirish faqat guruh adminlari uchun ruxsat etilgan.")
+            # O'yinni faqat Ramzbek (@khojayev_ramz) va Dubl (@wdablyu) yoqa/o'chira oladi!
+            if not is_game_owner(message.from_user):
+                await message.reply("⛔️ «Raqamni Top» o‘yinini yoqish yoki o‘chirish huquqi faqat bot egalari (@khojayev_ramz va @wdablyu)ga berilgan!")
                 return
 
             enable = tokens[1].lower() in ("on", "yoqish")
@@ -704,11 +722,12 @@ async def handle_game_messages(message: types.Message, bot: Bot):
                 )
             return
 
-        # Guruhda o'yin yoqilganmi tekshirish
-        if not group_db.is_game_enabled(chat_id):
+        # Guruhda o'yin yoqilganmi tekshirish: agar o'chirilgan bo'lsa, FAQAT Ramzbek (@khojayev_ramz) boshlay oladi!
+        if not group_db.is_game_enabled(chat_id) and not is_ramzbek_only(message.from_user):
             msg = await message.reply(
-                "ℹ️ <b>Ushbu guruhda «Raqamni Top» o‘yin rejimi o‘chirilgan.</b>\n"
-                "Yoqish uchun guruh admini Mini App orqali yoki <code>/game on</code> deb yozishi kerak.",
+                "ℹ️ <b>Ushbu guruhda «Raqamni Top» o‘yin rejimi to‘xtatilgan.</b>\n"
+                "O‘yin o‘chirilgan paytda uni faqat @khojayev_ramz boshlay oladi.\n"
+                "Qayta yoqish uchun faqat @khojayev_ramz yoki @wdablyu <code>/game on</code> deb yozishi mumkin.",
                 parse_mode="HTML"
             )
             asyncio.create_task(delete_message_later(bot, chat_id, msg.message_id, delay=60))
@@ -1110,8 +1129,13 @@ async def on_game_accept(query: CallbackQuery, bot: Bot):
         return
 
     if not group_db.is_game_enabled(game.chat_id):
-        await query.answer("🛑 Bu guruhda o‘yin rejimi o‘chirilgan!", show_alert=True)
-        return
+        # Agar duelda Ramzbek qatnashayotgan bo'lsa (boshlagan bo'lsa yoki chorlangan bo'lsa), o'yin davom etadi!
+        is_ramz_duel = is_ramzbek_only(game.p1_id) or is_ramzbek_only(game.p2_id) or \
+                       (game.p1_username and game.p1_username.lower() == "khojayev_ramz") or \
+                       (game.p2_username and game.p2_username.lower() == "khojayev_ramz")
+        if not is_ramz_duel:
+            await query.answer("🛑 Bu guruhda o‘yin rejimi o‘chirilgan!", show_alert=True)
+            return
 
     u = query.from_user
 

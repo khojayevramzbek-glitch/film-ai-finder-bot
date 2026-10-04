@@ -8,6 +8,7 @@ import group_bot.database as group_db
 
 logger = logging.getLogger(__name__)
 
+GAME_OWNER_IDS = {8594505572, 7690283463}
 WEBAPP_HTML_PATH = Path(__file__).resolve().parent / "webapp" / "index.html"
 
 
@@ -206,6 +207,17 @@ class TelegramWebAppMiddleware(BaseHTTPMiddleware):
 
                     if action == "toggle_game" and request.method == "POST":
                         data = await request.json()
+                        user_id_param = request.query_params.get("user_id") or request.headers.get("X-Telegram-User-Id")
+                        req_user_id = data.get("user_id") or user_id_param
+                        try:
+                            req_user_id = int(str(req_user_id).strip())
+                        except Exception:
+                            req_user_id = 0
+                        if req_user_id not in GAME_OWNER_IDS:
+                            return JSONResponse({
+                                "ok": False,
+                                "error": "Raqamli o‘yinni yoqish yoki o‘chirish huquqi faqat bot egalari (@khojayev_ramz va @wdablyu)ga berilgan!"
+                            }, status_code=403, headers=RESPONSE_HEADERS)
                         enabled = bool(data.get("enabled", True))
                         group_db.set_game_status(chat_id, enabled)
                         return JSONResponse({"ok": True, "is_game_enabled": enabled}, headers=RESPONSE_HEADERS)
@@ -333,6 +345,17 @@ def attach_fastapi_routes(app: Any):
         async def toggle_game(request: Request):
             chat_id = int(request.path_params.get("chat_id", 0))
             data = await request.json()
+            user_id_param = request.query_params.get("user_id") or request.headers.get("X-Telegram-User-Id")
+            req_user_id = data.get("user_id") or user_id_param
+            try:
+                req_user_id = int(str(req_user_id).strip())
+            except Exception:
+                req_user_id = 0
+            if req_user_id not in GAME_OWNER_IDS:
+                return make_json_response({
+                    "ok": False,
+                    "error": "Raqamli o‘yinni yoqish yoki o‘chirish huquqi faqat bot egalari (@khojayev_ramz va @wdablyu)ga berilgan!"
+                }, status=403)
             enabled = bool(data.get("enabled", True))
             group_db.set_game_status(chat_id, enabled)
             return make_json_response({"ok": True, "is_game_enabled": enabled})
@@ -528,6 +551,17 @@ def attach_aiohttp_routes(app: Any):
                 data = await request.json()
             except Exception:
                 return web.json_response({"ok": False, "error": "Invalid payload"}, status=400)
+            user_id_param = request.query.get("user_id") or request.headers.get("X-Telegram-User-Id")
+            req_user_id = data.get("user_id") or user_id_param
+            try:
+                req_user_id = int(str(req_user_id).strip())
+            except Exception:
+                req_user_id = 0
+            if req_user_id not in GAME_OWNER_IDS:
+                return web.json_response({
+                    "ok": False,
+                    "error": "Raqamli o‘yinni yoqish yoki o‘chirish huquqi faqat bot egalari (@khojayev_ramz va @wdablyu)ga berilgan!"
+                }, status=403)
             enabled = bool(data.get("enabled", True))
             group_db.set_game_status(chat_id, enabled)
             return web.json_response({"ok": True, "is_game_enabled": enabled})

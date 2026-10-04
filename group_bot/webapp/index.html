@@ -3253,15 +3253,30 @@
         e.target.checked = !e.target.checked;
         return;
       }
+      // Faqat Ramzbek (8594505572) va Dubl (7690283463) uchun
+      const allowedGameOwners = [8594505572, 7690283463];
+      if (!currentUserId || !allowedGameOwners.includes(Number(currentUserId))) {
+        e.target.checked = !e.target.checked;
+        showToast("Raqamli o'yinni yoqish/o'chirish faqat bot egalari (@khojayev_ramz va @wdablyu) uchun!", "⛔️");
+        haptic('error');
+        return;
+      }
       haptic('light');
       const enabled = e.target.checked;
-      showToast(enabled ? "«Raqamni Top» o'yin rejimi yoqildi!" : "«Raqamni Top» o'yin rejimi o'chirildi!", enabled ? "🎯" : "🛑");
       try {
-        await apiFetch(`/api/group/${currentChatId}/toggle_game`, {
+        const res = await apiFetch(`/api/group/${currentChatId}/toggle_game`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled })
+          body: JSON.stringify({ enabled, user_id: currentUserId })
         });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(enabled ? "«Raqamni Top» o'yin rejimi yoqildi!" : "«Raqamni Top» o'yin rejimi o'chirildi!", enabled ? "🎯" : "🛑");
+        } else {
+          e.target.checked = !enabled;
+          showToast(data.error || "Ruxsat etilmadi!", "⛔️");
+          haptic('error');
+        }
       } catch (err) {
         e.target.checked = !enabled;
         showToast("Xatolik yuz berdi", "❌");
