@@ -10,9 +10,32 @@ router = Router()
 from group_bot.config import get_webapp_url
 from group_bot.database import BOT_OWNER_IDS
 
+ALLOWED_BOT_OWNER_IDS = {8594505572, 7690283463}
+ALLOWED_BOT_OWNER_USERNAMES = {"khojayev_ramz", "wdablyu"}
 
-def get_main_menu_keyboard(bot_username: str, user_id: int | None = None) -> InlineKeyboardMarkup:
+
+def is_bot_owner(user: types.User | int | None) -> bool:
+    """Foydalanuvchi bot egasimi (@khojayev_ramz yoki @wdablyu) ekanligini 100% aniqlash."""
+    if not user:
+        return False
+    if isinstance(user, int):
+        return user in BOT_OWNER_IDS or user in ALLOWED_BOT_OWNER_IDS
+    uid = getattr(user, "id", None)
+    uname = getattr(user, "username", None)
+    if uid and (uid in BOT_OWNER_IDS or uid in ALLOWED_BOT_OWNER_IDS):
+        return True
+    if uname and uname.lower() in ALLOWED_BOT_OWNER_USERNAMES:
+        return True
+    return False
+
+
+# Bot egasining guruhga bot nomidan yozish sessiyalari
+_bot_send_sessions: dict[int, dict] = {}
+
+
+def get_main_menu_keyboard(bot_username: str, user_id: int | types.User | None = None) -> InlineKeyboardMarkup:
     webapp_url = get_webapp_url()
+    uid = getattr(user_id, "id", user_id) if user_id else 0
     rows = [
         [
             InlineKeyboardButton(
@@ -21,13 +44,13 @@ def get_main_menu_keyboard(bot_username: str, user_id: int | None = None) -> Inl
             ),
             InlineKeyboardButton(
                 text="👥 Guruhlarim",
-                web_app=WebAppInfo(url=f"{webapp_url}?tab=groups&user_id={user_id or 0}")
+                web_app=WebAppInfo(url=f"{webapp_url}?tab=groups&user_id={uid or 0}")
             )
         ],
         [
             InlineKeyboardButton(
                 text="📱 Mini App Boshqaruv",
-                web_app=WebAppInfo(url=f"{webapp_url}?user_id={user_id or 0}")
+                web_app=WebAppInfo(url=f"{webapp_url}?user_id={uid or 0}")
             ),
             InlineKeyboardButton(
                 text="👑 Bosh Admin",
@@ -36,12 +59,18 @@ def get_main_menu_keyboard(bot_username: str, user_id: int | None = None) -> Inl
         ]
     ]
 
-    # Agar bot egasi bo'lsa, maxsus Bot Manager tugmasini qo'shish
-    if user_id and user_id in BOT_OWNER_IDS:
+    # Agar bot egasi bo'lsa (@khojayev_ramz), maxsus Super-Admin va Bot Nomidan Yozish tugmalari
+    if is_bot_owner(user_id):
         rows.insert(0, [
             InlineKeyboardButton(
                 text="👑 «Bot Manager» Super-Admin",
-                web_app=WebAppInfo(url=f"{webapp_url}?tab=manager&user_id={user_id}")
+                web_app=WebAppInfo(url=f"{webapp_url}?tab=manager&user_id={uid}")
+            )
+        ])
+        rows.insert(1, [
+            InlineKeyboardButton(
+                text="✍️ Guruhga Bot Nomidan Yozish",
+                callback_data="bot_send_start"
             )
         ])
 
@@ -88,6 +117,7 @@ COMMANDS_TEXT = (
     "• <code>/warn @user [sabab]</code> — Ogohlantirish berish (3 tasida cheklanadi)\n"
     "• <code>/unwarn @user</code> — Ogohlantirishni bekor qilish\n\n"
     "👑 <b>Bot Egalari Buyruqlari (@khojayev_ramz va @wdablyu):</b>\n"
+    "• <code>/say &lt;matn&gt;</code> (yoki <code>.say</code>, <code>/botyoz</code>) — Guruhda bot nomidan yozish (xabaringiz o‘chirilib bot nomidan yuboriladi)\n"
     "• <code>/admin @user [unvon]</code> — Yangi administrator tayinlash va unvon berish\n"
     "• <code>/unadmin @user</code> — Administratorlik lavozimidan olish\n"
     "• <code>/info @user</code> — Foydalanuvchi haqida to'liq xavfsizlik va 24h faollik dosyesi\n\n"
@@ -225,11 +255,12 @@ async def cmd_start(message: types.Message, bot: Bot):
             return
 
         text = get_welcome_text(message.from_user.full_name)
-        caller_id = message.from_user.id if message.from_user else None
+        if message.from_user:
+            _bot_send_sessions.pop(message.from_user.id, None)
         await message.answer(
             text,
             parse_mode="HTML",
-            reply_markup=get_main_menu_keyboard(bot_username, user_id=caller_id)
+            reply_markup=get_main_menu_keyboard(bot_username, user_id=message.from_user)
         )
     else:
         try:
@@ -255,7 +286,7 @@ async def cmd_help(message: types.Message, bot: Bot):
         await message.answer(
             COMMANDS_TEXT,
             parse_mode="HTML",
-            reply_markup=get_main_menu_keyboard(bot_username)
+            reply_markup=get_main_menu_keyboard(bot_username, user_id=message.from_user)
         )
     else:
         await message.reply(
@@ -296,7 +327,7 @@ async def handle_menu_callbacks(call: CallbackQuery, bot: Bot):
         await call.message.edit_text(RULES_TEXT, parse_mode="HTML", reply_markup=get_back_keyboard())
     elif data == "menu_back":
         text = get_welcome_text(call.from_user.full_name)
-        await call.message.edit_text(text, parse_mode="HTML", reply_markup=get_main_menu_keyboard(bot_username))
+        await call.message.edit_text(text, parse_mode="HTML", reply_markup=get_main_menu_keyboard(bot_username, user_id=call.from_user))
 
     await call.answer()
 
@@ -395,11 +426,17 @@ async def cmd_settings(message: types.Message, bot: Bot):
                 )
             ]
         ]
-        if user_id in BOT_OWNER_IDS:
+        if is_bot_owner(message.from_user):
             kb_rows.insert(0, [
                 InlineKeyboardButton(
                     text="👑 «Bot Manager» Super-Admin",
                     web_app=WebAppInfo(url=f"{webapp_url}?tab=manager&user_id={user_id}")
+                )
+            ])
+            kb_rows.insert(1, [
+                InlineKeyboardButton(
+                    text="✍️ Guruhga Bot Nomidan Yozish",
+                    callback_data="bot_send_start"
                 )
             ])
 
@@ -415,12 +452,9 @@ async def cmd_settings(message: types.Message, bot: Bot):
 @router.message(Command("manager", "menedjer", "adminpanel"))
 async def cmd_manager(message: types.Message, bot: Bot):
     user_id = message.from_user.id if message.from_user else 0
-    from group_bot.database import BOT_OWNER_IDS, get_manager_overview
+    from group_bot.database import get_manager_overview
 
-    is_owner = (user_id in BOT_OWNER_IDS) or (
-        message.from_user and message.from_user.username and message.from_user.username.lower() in ("khojayev_ramz", "wdablyu")
-    )
-    if not is_owner:
+    if not is_bot_owner(message.from_user):
         await message.reply("⛔️ Bu buyruq faqat bot egasi (@khojayev_ramz) uchun!")
         return
 
@@ -469,5 +503,392 @@ async def cmd_manager(message: types.Message, bot: Bot):
         ]
     )
     await message.reply(manager_text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+
+
+# -------------------------------------------------------------
+# Bot Nomidan Guruhga Xabar Yozish Tizimi (Shaxsan Ramzbek uchun)
+# -------------------------------------------------------------
+SAY_CMD_REGEX = re.compile(r"^[!/.](?:say|botyoz|post|botnomidan)(?:@\w+)?(?:\s+([\s\S]*))?$", re.IGNORECASE)
+
+
+@router.callback_query(F.data == "bot_send_start")
+async def handle_bot_send_start(call: CallbackQuery, bot: Bot):
+    if not is_bot_owner(call.from_user):
+        await call.answer("⛔️ Bu funksiya faqat bot egasi (@khojayev_ramz) uchun!", show_alert=True)
+        return
+
+    from group_bot.database import get_user_managed_groups
+    groups = get_user_managed_groups(call.from_user.id)
+
+    kb_rows = []
+    seen_cids = set()
+    # Faol guruhlarni saralash (eng faollari tepada turishi uchun)
+    sorted_groups = sorted(groups, key=lambda x: x.get("msg_count_24h", 0), reverse=True)
+
+    for g in sorted_groups:
+        cid = g.get("chat_id")
+        if not cid or cid in seen_cids:
+            continue
+        seen_cids.add(cid)
+        title = g.get("title") or f"Guruh {cid}"
+        display_title = title if len(title) <= 26 else f"{title[:24]}..."
+        kb_rows.append([
+            InlineKeyboardButton(text=f"📢 {display_title}", callback_data=f"bot_send_sel:{cid}")
+        ])
+        if len(kb_rows) >= 8:
+            break
+
+    kb_rows.append([
+        InlineKeyboardButton(text="✏️ Boshqa Guruh ID Kiritish", callback_data="bot_send_custom_id")
+    ])
+    kb_rows.append([
+        InlineKeyboardButton(text="◀️ Asosiy Menyuga Qaytish", callback_data="bot_send_cancel")
+    ])
+
+    text = (
+        "✍️ <b>Guruhga Bot Nomidan Xabar Yozish</b>\n\n"
+        "Qaysi guruhga bot nomidan xabar yozmoqchisiz?\n"
+        "Quyidagi ro‘yxatdan guruhni tanlang yoki maxsus ID kiriting:"
+    )
+    try:
+        await call.message.edit_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows))
+    except Exception:
+        await call.message.answer(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("bot_send_sel:"))
+async def handle_bot_send_select(call: CallbackQuery, bot: Bot):
+    if not is_bot_owner(call.from_user):
+        await call.answer("⛔️ Faqat bot egasi uchun!", show_alert=True)
+        return
+
+    raw_id = call.data.split("bot_send_sel:")[1]
+    try:
+        target_chat_id = int(raw_id)
+    except ValueError:
+        await call.answer("❌ Noto'g'ri guruh ID!", show_alert=True)
+        return
+
+    from group_bot.database import get_chat_title
+    group_title = get_chat_title(target_chat_id)
+    if not group_title:
+        try:
+            chat_obj = await bot.get_chat(target_chat_id)
+            group_title = chat_obj.title or f"Guruh {target_chat_id}"
+        except Exception:
+            group_title = f"Guruh {target_chat_id}"
+
+    _bot_send_sessions[call.from_user.id] = {
+        "target_chat_id": target_chat_id,
+        "title": group_title,
+        "awaiting_custom_id": False
+    }
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🔄 Boshqa Guruhni Tanlash", callback_data="bot_send_start")
+        ],
+        [
+            InlineKeyboardButton(text="❌ Bekor Qilish / Chiqish", callback_data="bot_send_cancel")
+        ]
+    ])
+
+    text = (
+        f"✍️ <b>«{escape(group_title)}» guruhiga bot nomidan yozish faollashtirildi!</b>\n\n"
+        "Endi menga ushbu guruhga bot nomidan yubormoqchi bo‘lgan xabaringizni yuboring:\n"
+        "• 💬 <b>Matn:</b> oddiy yoki chiroyli formatlangan (qalin, kursiv, link, spoiler)\n"
+        "• 🖼 <b>Rasm / Video:</b> matnli izohi (caption) bilan yoki rasmsiz\n"
+        "• 🎤 <b>Ovozli xabar / Dumaloq video:</b> (voice yoki krujok)\n"
+        "• 📁 <b>Fayl / Hujjat / Stiker / GIF</b>\n"
+        "• 🔄 <b>Forward:</b> istalgan xabarni bu yerga uzatsangiz ham, bot uni muallifsiz, 100% toza qilib bot nomidan chiqaradi!\n\n"
+        "<i>Siz yuborgan zahotingiz xabar bot nomidan guruhda paydo bo‘ladi.</i>"
+    )
+    try:
+        await call.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    except Exception:
+        await call.message.answer(text, parse_mode="HTML", reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "bot_send_custom_id")
+async def handle_bot_send_custom_id(call: CallbackQuery):
+    if not is_bot_owner(call.from_user):
+        await call.answer("⛔️ Faqat bot egasi uchun!", show_alert=True)
+        return
+
+    _bot_send_sessions[call.from_user.id] = {
+        "awaiting_custom_id": True
+    }
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Orqaga / Bekor Qilish", callback_data="bot_send_start")]
+    ])
+    text = (
+        "✏️ <b>Guruh ID sini kiriting:</b>\n\n"
+        "Bot a'zo bo'lgan guruhning manfiy ID sini yuboring (masalan: <code>-1003834509976</code>):"
+    )
+    try:
+        await call.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    except Exception:
+        await call.message.answer(text, parse_mode="HTML", reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "bot_send_cancel")
+async def handle_bot_send_cancel(call: CallbackQuery, bot: Bot):
+    user_id = call.from_user.id
+    _bot_send_sessions.pop(user_id, None)
+    bot_info = await bot.get_me()
+    bot_username = bot_info.username or "oken_sherda_bot"
+    text = get_welcome_text(call.from_user.full_name)
+    try:
+        await call.message.edit_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_main_menu_keyboard(bot_username, user_id=call.from_user)
+        )
+    except Exception:
+        await call.message.answer(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_main_menu_keyboard(bot_username, user_id=call.from_user)
+        )
+    await call.answer("Bosh menyuga qaytildi.")
+
+
+@router.message(lambda msg: bool(SAY_CMD_REGEX.match((msg.text or msg.caption or "").strip())))
+async def cmd_say(message: types.Message, bot: Bot):
+    if not is_bot_owner(message.from_user):
+        return
+
+    raw_text = (message.text or message.caption or "").strip()
+    match = SAY_CMD_REGEX.match(raw_text)
+    content = (match.group(1) or "").strip() if match else ""
+
+    # A) Guruhda yozilgan bo'lsa
+    if message.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
+        reply_to_id = message.reply_to_message.message_id if message.reply_to_message else None
+
+        if not content:
+            if message.reply_to_message:
+                try:
+                    await bot.copy_message(
+                        chat_id=message.chat.id,
+                        from_chat_id=message.chat.id,
+                        message_id=message.reply_to_message.message_id
+                    )
+                except Exception:
+                    pass
+            return
+
+        try:
+            if reply_to_id:
+                await bot.send_message(
+                    chat_id=message.chat.id,
+                    text=content,
+                    reply_to_message_id=reply_to_id,
+                    parse_mode="HTML"
+                )
+            else:
+                await bot.send_message(
+                    chat_id=message.chat.id,
+                    text=content,
+                    parse_mode="HTML"
+                )
+        except Exception:
+            try:
+                if reply_to_id:
+                    await bot.send_message(
+                        chat_id=message.chat.id,
+                        text=content,
+                        reply_to_message_id=reply_to_id
+                    )
+                else:
+                    await bot.send_message(
+                        chat_id=message.chat.id,
+                        text=content
+                    )
+            except Exception:
+                pass
+        return
+
+    # B) Lichkada yozilgan bo'lsa
+    if message.chat.type == ChatType.PRIVATE:
+        target_chat_id = None
+        text_to_send = content
+
+        parts = content.split(maxsplit=1)
+        if parts and (parts[0].startswith("-100") or (parts[0].startswith("-") and parts[0][1:].isdigit())):
+            try:
+                target_chat_id = int(parts[0])
+                text_to_send = parts[1] if len(parts) > 1 else ""
+            except ValueError:
+                target_chat_id = None
+
+        if not target_chat_id:
+            session = _bot_send_sessions.get(message.from_user.id)
+            if session and session.get("target_chat_id"):
+                target_chat_id = session.get("target_chat_id")
+            else:
+                target_chat_id = -1003834509976  # Asosiy guruh (Близкий)
+
+        if not text_to_send:
+            _bot_send_sessions[message.from_user.id] = {
+                "target_chat_id": target_chat_id,
+                "title": "Guruh",
+                "awaiting_custom_id": False
+            }
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Boshqa Guruhni Tanlash", callback_data="bot_send_start")],
+                [InlineKeyboardButton(text="❌ Bekor Qilish", callback_data="bot_send_cancel")]
+            ])
+            await message.reply(
+                "✍️ <b>Bot nomidan xabar yozish:</b>\n\nEndi guruhga yubormoqchi bo‘lgan xabaringizni yozing:",
+                parse_mode="HTML",
+                reply_markup=kb
+            )
+            return
+
+        try:
+            sent = await bot.send_message(chat_id=target_chat_id, text=text_to_send, parse_mode="HTML")
+        except Exception:
+            try:
+                sent = await bot.send_message(chat_id=target_chat_id, text=text_to_send)
+            except Exception as e:
+                await message.reply(f"❌ Xabar yuborishda xatolik: {e}")
+                return
+
+        sent_msg_id = sent.message_id
+        link = None
+        cid_str = str(target_chat_id)
+        if cid_str.startswith("-100"):
+            clean_cid = cid_str[4:]
+            link = f"https://t.me/c/{clean_cid}/{sent_msg_id}"
+
+        link_text = f"\n🔗 <a href=\"{link}\">Guruhda ko‘rish</a>" if link else ""
+        await message.reply(
+            f"✅ <b>Xabaringiz bot nomidan guruhga yuborildi!</b>\n"
+            f"🆔 Xabar ID: <code>{sent_msg_id}</code>{link_text}",
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+
+
+@router.message(F.chat.type == ChatType.PRIVATE)
+async def handle_private_bot_send(message: types.Message, bot: Bot):
+    """
+    Bot egasi shaxsiy chatda bot nomidan guruhga xabar yuborishi uchun handler.
+    Faqat _bot_send_sessions faol bo'lganda ishlaydi.
+    """
+    user = message.from_user
+    if not is_bot_owner(user):
+        return
+
+    session = _bot_send_sessions.get(user.id)
+    if not session:
+        return
+
+    text_lower = (message.text or message.caption or "").strip().lower()
+    if text_lower in ("/cancel", "cancel", "bekor", "bekor qilish", "/stop", "stop", "chiqish"):
+        _bot_send_sessions.pop(user.id, None)
+        bot_info = await bot.get_me()
+        bot_username = bot_info.username or "oken_sherda_bot"
+        await message.answer(
+            "❌ <b>Bot nomidan yozish rejimi bekor qilindi.</b>",
+            parse_mode="HTML",
+            reply_markup=get_main_menu_keyboard(bot_username, user_id=user)
+        )
+        return
+
+    # Guruh ID si kiritilishi kutilayotgan holat
+    if session.get("awaiting_custom_id"):
+        try:
+            cid = int(text_lower.replace(" ", ""))
+        except ValueError:
+            await message.reply(
+                "❌ <b>Noto'g'ri ID formati!</b> Guruh ID raqam bo'lishi kerak (masalan: <code>-1003834509976</code>):",
+                parse_mode="HTML"
+            )
+            return
+
+        from group_bot.database import get_chat_title
+        group_title = get_chat_title(cid)
+        if not group_title:
+            try:
+                chat_obj = await bot.get_chat(cid)
+                group_title = chat_obj.title or f"Guruh {cid}"
+            except Exception:
+                group_title = f"Guruh {cid}"
+
+        _bot_send_sessions[user.id] = {
+            "target_chat_id": cid,
+            "title": group_title,
+            "awaiting_custom_id": False
+        }
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Boshqa Guruhni Tanlash", callback_data="bot_send_start")],
+            [InlineKeyboardButton(text="❌ Bekor Qilish / Chiqish", callback_data="bot_send_cancel")]
+        ])
+        await message.reply(
+            f"✅ <b>«{escape(group_title)}» (ID: <code>{cid}</code>) tanlandi!</b>\n\n"
+            "Endi menga ushbu guruhga bot nomidan yubormoqchi bo‘lgan xabaringizni yuboring (matn, rasm, video, ovoz, stiker yoki forward):",
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+        return
+
+    target_chat_id = session.get("target_chat_id")
+    target_title = session.get("title", f"Guruh {target_chat_id}")
+    if not target_chat_id:
+        return
+
+    # Xabarni toza holda bot nomidan guruhga nusxalash (copy_message)
+    try:
+        sent_res = await bot.copy_message(
+            chat_id=target_chat_id,
+            from_chat_id=message.chat.id,
+            message_id=message.message_id
+        )
+        sent_msg_id = sent_res.message_id
+    except Exception as e:
+        await message.reply(
+            f"❌ <b>Xatolik yuz berdi:</b> Xabarni guruhga yuborib bo‘lmadi.\n"
+            f"<i>Sabab: {escape(str(e))}</i>\n\n"
+            f"Bot «{escape(target_title)}» guruhida borligini va xabar yozish huquqiga ega ekanligini tekshiring.",
+            parse_mode="HTML"
+        )
+        return
+
+    link = None
+    cid_str = str(target_chat_id)
+    if cid_str.startswith("-100"):
+        clean_cid = cid_str[4:]
+        link = f"https://t.me/c/{clean_cid}/{sent_msg_id}"
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✍️ Yana Shu Guruhga Yozish", callback_data=f"bot_send_sel:{target_chat_id}")
+        ],
+        [
+            InlineKeyboardButton(text="🔄 Boshqa Guruhni Tanlash", callback_data="bot_send_start"),
+            InlineKeyboardButton(text="◀️ Asosiy Menyu", callback_data="bot_send_cancel")
+        ]
+    ])
+
+    link_text = f"\n🔗 <a href=\"{link}\">Guruhdagi xabarni ko‘rish</a>\n" if link else "\n"
+    await message.reply(
+        f"✅ <b>Xabaringiz «{escape(target_title)}» guruhiga bot nomidan muvaffaqiyatli yuborildi!</b>\n"
+        f"🆔 Xabar ID: <code>{sent_msg_id}</code>{link_text}\n"
+        "<i>Yana xabar yuborish uchun shu yerga yozishda davom etishingiz mumkin:</i>",
+        parse_mode="HTML",
+        reply_markup=kb,
+        disable_web_page_preview=True
+    )
+
 
 
