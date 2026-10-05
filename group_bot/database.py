@@ -264,6 +264,19 @@ def init_db():
             ON known_users(last_chat_id);
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS authorized_taggers (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                full_name TEXT,
+                added_by INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_authorized_taggers_uname
+            ON authorized_taggers(username COLLATE NOCASE);
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_settings (
                 chat_id INTEGER PRIMARY KEY,
                 censor_mute_seconds INTEGER DEFAULT 15,
@@ -2429,9 +2442,131 @@ def get_user_id_by_username_global(username: str) -> dict | None:
     return get_user_by_username(0, username)
 
 
-# Auto-initialize database schema on module import so tables always exist immediately
+# -------------------------------------------------------------
+# Teg Berish Huquqiga Ega Foydalanuvchilar (Authorized Taggers)
+# -------------------------------------------------------------
+_authorized_taggers_cache: dict[int, dict] = {}
+_authorized_taggers_uname_cache: dict[str, int] = {}
+
+
+def init_authorized_taggers_cache():
+    """Bot ishga tushganda ruxsat berilgan taggerlarni xotiraga yuklash."""
+    try:
+        with get_connection() as conn:
+            cur = conn.execute("SELECT user_id, username, full_name, added_by, created_at FROM authorized_taggers")
+            _authorized_taggers_cache.clear()
+            _authorized_taggers_uname_cache.clear()
+            for row in cur.fetchall():
+                uid = int(row["user_id"])
+                uname = (row["username"] or "").lstrip("@").strip().lower()
+                data = {
+                    "user_id": uid,
+                    "username": row["username"],
+                    "full_name": row["full_name"],
+                    "added_by": row["added_by"],
+                    "created_at": str(row["created_at"] or "")
+                }
+                _authorized_taggers_cache[uid] = data
+                if uname:
+                    _authorized_taggers_uname_cache[uname] = uid
+    except Exception as e:
+        logger.error(f"init_authorized_taggers_cache error: {e}")
+
+
+def add_authorized_tagger(user_id: int, username: str | None = None, full_name: str | None = None, added_by: int | None = None) -> bool:
+    """Teg berish huquqiga ega yangi foydalanuvchi qo'shish."""
+    clean_u = (username or "").lstrip("@").strip()
+    f_name = full_name or (f"@{clean_u}" if clean_u else f"Foydalanuvchi {user_id}")
+    now_str = get_uzb_now_str()
+
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO authorized_taggers (user_id, username, full_name, added_by, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                username = COALESCE(excluded.username, username),
+                full_name = COALESCE(excluded.full_name, full_name),
+                added_by = excluded.added_by,
+                created_at = excluded.created_at
+        """, (user_id, clean_u, f_name, added_by, now_str))
+        conn.commit()
+
+    info = {
+        "user_id": user_id,
+        "username": clean_u,
+        "full_name": f_name,
+        "added_by": added_by,
+        "created_at": now_str
+    }
+    _authorized_taggers_cache[user_id] = info
+    if clean_u:
+        _authorized_taggers_uname_cache[clean_u.lower()] = user_id
+    return True
+
+
+def remove_authorized_tagger(user_id: int) -> bool:
+    """Teg berish huquqidan mahrum qilish."""
+    info = _authorized_taggers_cache.pop(user_id, None)
+    if info and info.get("username"):
+        _authorized_taggers_uname_cache.pop(info["username"].lower(), None)
+
+    with get_connection() as conn:
+        conn.execute("DELETE FROM authorized_taggers WHERE user_id = ?", (user_id,))
+        conn.commit()
+    return True
+
+
+def get_all_authorized_taggers() -> list[dict]:
+    """Barcha ruxsat berilgan taggerlar ro'yxatini olish."""
+    if not _authorized_taggers_cache:
+        init_authorized_taggers_cache()
+    return list(_authorized_taggers_cache.values())
+
+
+def is_user_authorized_tagger(user_id: int | None, username: str | None = None) -> bool:
+    """Foydalanuvchi teg berishga ruxsat etilganmi."""
+    if not user_id and not username:
+        return False
+
+    # 1. Asosiy bot egalari (@khojayev_ramz, @wdablyu) doim ruxsatga ega
+    if user_id and (user_id in BOT_OWNER_IDS or user_id in (8594505572, 7690283463)):
+        return True
+    clean_u = (username or "").lstrip("@").strip().lower()
+    if clean_u in ("khojayev_ramz", "wdablyu"):
+        return True
+
+    # 2. Qo'shilgan vakillar keshidan tekshirish
+    if user_id and user_id in _authorized_taggers_cache:
+        return True
+    if clean_u and clean_u in _authorized_taggers_uname_cache:
+        return True
+
+    # 3. Keshda bo'lmasa, bazadan tekshirish
+    try:
+        with get_connection() as conn:
+            cur = conn.execute("""
+                SELECT user_id, username, full_name, added_by, created_at
+                FROM authorized_taggers
+                WHERE user_id = ? OR (username != '' AND LOWER(username) = ?)
+                LIMIT 1
+            """, (user_id or 0, clean_u))
+            row = cur.fetchone()
+            if row:
+                uid = int(row["user_id"])
+                _authorized_taggers_cache[uid] = dict(row)
+                if row["username"]:
+                    _authorized_taggers_uname_cache[row["username"].lower()] = uid
+                return True
+    except Exception:
+        pass
+
+    return False
+
+
+# Auto-initialize database schema and caches on module import so tables always exist immediately
 try:
     init_db()
+    init_authorized_taggers_cache()
 except Exception:
     pass
 

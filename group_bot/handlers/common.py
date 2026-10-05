@@ -31,6 +31,8 @@ def is_bot_owner(user: types.User | int | None) -> bool:
 
 # Bot egasining guruhga bot nomidan yozish sessiyalari
 _bot_send_sessions: dict[int, dict] = {}
+# Bot egasining teg berish huquqini berish sessiyalari
+_tagger_add_sessions: dict[int, bool] = {}
 
 
 def get_main_menu_keyboard(bot_username: str, user_id: int | types.User | None = None) -> InlineKeyboardMarkup:
@@ -59,7 +61,7 @@ def get_main_menu_keyboard(bot_username: str, user_id: int | types.User | None =
         ]
     ]
 
-    # Agar bot egasi bo'lsa (@khojayev_ramz), maxsus Super-Admin va Bot Nomidan Yozish tugmalari
+    # Agar bot egasi bo'lsa (@khojayev_ramz, @wdablyu), maxsus Super-Admin, Bot Nomidan Yozish va Taggerlar tugmalari
     if is_bot_owner(user_id):
         rows.insert(0, [
             InlineKeyboardButton(
@@ -71,6 +73,12 @@ def get_main_menu_keyboard(bot_username: str, user_id: int | types.User | None =
             InlineKeyboardButton(
                 text="✍️ Guruhga Bot Nomidan Yozish",
                 callback_data="bot_send_start"
+            )
+        ])
+        rows.insert(2, [
+            InlineKeyboardButton(
+                text="🏷 Teg Berish Huquqini Boshqarish",
+                callback_data="taggers_manage"
             )
         ])
 
@@ -118,11 +126,14 @@ COMMANDS_TEXT = (
     "• <code>/unwarn @user</code> — Ogohlantirishni bekor qilish\n\n"
     "👑 <b>Bot Egalari Buyruqlari (@khojayev_ramz va @wdablyu):</b>\n"
     "• <code>/say &lt;matn&gt;</code> (yoki <code>.say</code>, <code>/botyoz</code>) — Guruhda bot nomidan yozish (xabaringiz o‘chirilib bot nomidan yuboriladi)\n"
+    "• <code>/addtagger @user</code> — Foydalanuvchiga guruhda teg berish huquqini berish (Lichka yoki guruhda)\n"
+    "• <code>/deltagger @user</code> — Teg berish huquqini bekor qilish\n"
+    "• <code>/taggers</code> — Ruxsat berilgan shaxslar ro‘yxatini ko‘rish\n"
     "• <code>/admin @user [unvon]</code> — Yangi administrator tayinlash va unvon berish\n"
     "• <code>/unadmin @user</code> — Administratorlik lavozimidan olish\n"
     "• <code>/info @user</code> — Foydalanuvchi haqida to'liq xavfsizlik va 24h faollik dosyesi\n\n"
     "🏷 <b>Yashil Teglar (Member Tags) Buyruqlari:</b>\n"
-    "• <code>/tag @user &lt;matn&gt;</code> (yoki reply qilib <code>/tag &lt;matn&gt;</code>) — Xabarlar yonida yashil yonib turuvchi maxsus teg berish\n"
+    "• <code>/tag @user &lt;matn&gt;</code> (yoki reply qilib <code>/tag &lt;matn&gt;</code>) — Yashil teg berish (faqat bot egalari va ruxsat berilganlar)\n"
     "• <code>/deltag @user</code> (yoki reply qilib <code>/deltag</code>) — Foydalanuvchi tegini olib tashlash\n\n"
     "📊 <b>Statistika (Stata) Buyruqlari:</b>\n"
     "• <code>stata</code> / <code>/stata</code> — Guruh faolligi reytingi (Top aktivlar)\n"
@@ -257,6 +268,7 @@ async def cmd_start(message: types.Message, bot: Bot):
         text = get_welcome_text(message.from_user.full_name)
         if message.from_user:
             _bot_send_sessions.pop(message.from_user.id, None)
+            _tagger_add_sessions.pop(message.from_user.id, None)
         await message.answer(
             text,
             parse_mode="HTML",
@@ -437,6 +449,12 @@ async def cmd_settings(message: types.Message, bot: Bot):
                 InlineKeyboardButton(
                     text="✍️ Guruhga Bot Nomidan Yozish",
                     callback_data="bot_send_start"
+                )
+            ])
+            kb_rows.insert(2, [
+                InlineKeyboardButton(
+                    text="🏷 Teg Berish Huquqini Boshqarish",
+                    callback_data="taggers_manage"
                 )
             ])
 
@@ -789,6 +807,99 @@ async def handle_private_bot_send(message: types.Message, bot: Bot):
     if not is_bot_owner(user):
         return
 
+    # A) Agar teg berish huquqini berish sessiyasi faol bo'lsa:
+    if _tagger_add_sessions.get(user.id):
+        text_lower = (message.text or message.caption or "").strip().lower()
+        if text_lower in ("/cancel", "cancel", "bekor", "bekor qilish", "/stop", "stop", "chiqish"):
+            _tagger_add_sessions.pop(user.id, None)
+            await show_taggers_manage_menu(message, bot, is_edit=False)
+            return
+
+        target_uid = None
+        target_name = None
+        target_uname = None
+
+        if message.forward_from and not message.forward_from.is_bot:
+            target_uid = message.forward_from.id
+            target_name = message.forward_from.full_name
+            target_uname = message.forward_from.username
+
+        raw_val = (message.text or message.caption or "").strip()
+        if not target_uid and raw_val:
+            if raw_val.isdigit() or (raw_val.startswith("-") and raw_val[1:].isdigit()):
+                try:
+                    target_uid = int(raw_val)
+                    from group_bot.database import get_user_by_id
+                    known = get_user_by_id(target_uid)
+                    if known:
+                        target_name = known.get("full_name") or f"Foydalanuvchi {target_uid}"
+                        target_uname = known.get("username")
+                    else:
+                        try:
+                            c_obj = await bot.get_chat(target_uid)
+                            target_name = c_obj.full_name or c_obj.title or f"Foydalanuvchi {target_uid}"
+                            target_uname = c_obj.username
+                        except Exception:
+                            target_name = f"Foydalanuvchi {target_uid}"
+                except Exception:
+                    target_uid = None
+            else:
+                clean_u = raw_val.lstrip("@").strip().lower()
+                from group_bot.database import get_user_id_by_username_global
+                known = get_user_id_by_username_global(clean_u)
+                if known:
+                    target_uid = known.get("user_id")
+                    target_name = known.get("full_name") or f"@{clean_u}"
+                    target_uname = known.get("username") or clean_u
+                else:
+                    try:
+                        c_obj = await bot.get_chat(f"@{clean_u}")
+                        target_uid = c_obj.id
+                        target_name = c_obj.full_name or c_obj.title or f"@{clean_u}"
+                        target_uname = c_obj.username or clean_u
+                    except Exception:
+                        pass
+
+        if not target_uid:
+            await message.reply(
+                "❌ <b>Foydalanuvchi aniqlanmadi!</b>\n\n"
+                "Iltimos, foydalanuvchining to‘g‘ri <b>@username</b> yoki raqamli <b>Telegram ID</b> sini yuboring, "
+                "yoki uning guruhdagi biror xabarini shu yerga <b>Forward</b> qilib yuboring.\n\n"
+                "<i>Bekor qilish uchun: /cancel deb yozing.</i>",
+                parse_mode="HTML"
+            )
+            return
+
+        from group_bot.database import add_authorized_tagger
+        add_authorized_tagger(
+            user_id=target_uid,
+            username=target_uname,
+            full_name=target_name,
+            added_by=user.id
+        )
+        _tagger_add_sessions.pop(user.id, None)
+
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🏷 Taggerlar Ro‘yxati", callback_data="taggers_manage"),
+                InlineKeyboardButton(text="➕ Yana Qo‘shish", callback_data="tagger_add")
+            ],
+            [
+                InlineKeyboardButton(text="◀️ Asosiy Menyu", callback_data="menu_back")
+            ]
+        ])
+
+        u_display = f"@{target_uname}" if target_uname else f"<code>{target_uid}</code>"
+        await message.reply(
+            f"✅ <b>Muvaffaqiyatli ruxsat berildi!</b> 🟢\n\n"
+            f"👤 <b>Foydalanuvchi:</b> <b>{escape(target_name or '')}</b> ({u_display})\n"
+            f"🆔 <b>ID:</b> <code>{target_uid}</code>\n\n"
+            f"Endi ushbu shaxs guruhda a'zolarga bemalol <code>/tag</code> va <code>/deltag</code> buyruqlarini bera oladi.",
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+        return
+
     session = _bot_send_sessions.get(user.id)
     if not session:
         return
@@ -889,6 +1000,230 @@ async def handle_private_bot_send(message: types.Message, bot: Bot):
         reply_markup=kb,
         disable_web_page_preview=True
     )
+
+
+# -------------------------------------------------------------
+# Teg Berish Huquqini Boshqarish Tizimi (Authorized Taggers)
+# -------------------------------------------------------------
+TAGGER_CMD_REGEX = re.compile(
+    r"^[!/.](?:addtagger|\+tagger|deltagger|-tagger|taggers|taggerlar|taggerlist)\b",
+    re.IGNORECASE
+)
+
+
+async def show_taggers_manage_menu(event: types.Message | CallbackQuery, bot: Bot, is_edit: bool = True):
+    from group_bot.database import get_all_authorized_taggers
+    taggers = get_all_authorized_taggers()
+
+    lines = [
+        "🏷 <b>«Teg Berish Huquqlari» Boshqaruvi:</b>\n",
+        "Guruhda a'zolarga yashil teg (<code>/tag</code> va <code>/deltag</code>) berish huquqi faqat siz va Dublga berilgan. "
+        "Ushbu bo‘limda boshqa ishonchli shaxslarga ham teg berish huquqini taqdim etishingiz mumkin.\n",
+        "👑 <b>Doimiy Bot Egalari:</b>",
+        "• @khojayev_ramz (Ramzbek)",
+        "• @wdablyu (Dubl)\n",
+        "👥 <b>Qo‘shimcha Ruxsat Berilganlar:</b>"
+    ]
+
+    if taggers:
+        for idx, t in enumerate(taggers, 1):
+            name = escape(t.get("full_name") or f"User {t['user_id']}")
+            uname = f" (@{t['username']})" if t.get("username") else ""
+            lines.append(f"{idx}. <b>{name}</b>{uname} — ID: <code>{t['user_id']}</code>")
+    else:
+        lines.append("<i>Hozircha qo‘shimcha hech kimga ruxsat berilmagan.</i>")
+
+    lines.append("\n<i>Ruxsat berish yoki olib tashlash uchun quyidagi tugmalardan foydalaning:</i>")
+    text = "\n".join(lines)
+
+    kb_rows = [
+        [
+            InlineKeyboardButton(text="➕ Yangi Odam Qo‘shish", callback_data="tagger_add")
+        ]
+    ]
+    if taggers:
+        kb_rows.append([
+            InlineKeyboardButton(text="➖ Ruxsatni Olib Tashlash", callback_data="tagger_remove_menu")
+        ])
+    kb_rows.append([
+        InlineKeyboardButton(text="◀️ Asosiy Menyuga Qaytish", callback_data="menu_back")
+    ])
+    kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
+
+    if isinstance(event, CallbackQuery):
+        try:
+            if is_edit:
+                await event.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            else:
+                await event.message.answer(text, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            await event.message.answer(text, parse_mode="HTML", reply_markup=kb)
+        await event.answer()
+    else:
+        await event.reply(text, parse_mode="HTML", reply_markup=kb)
+
+
+@router.callback_query(F.data == "taggers_manage")
+async def callback_taggers_manage(call: CallbackQuery, bot: Bot):
+    if not is_bot_owner(call.from_user):
+        await call.answer("⛔️ Faqat bot egalari uchun!", show_alert=True)
+        return
+    _tagger_add_sessions.pop(call.from_user.id, None)
+    await show_taggers_manage_menu(call, bot, is_edit=True)
+
+
+@router.callback_query(F.data == "tagger_add")
+async def callback_tagger_add(call: CallbackQuery):
+    if not is_bot_owner(call.from_user):
+        await call.answer("⛔️ Faqat bot egalari uchun!", show_alert=True)
+        return
+    _tagger_add_sessions[call.from_user.id] = True
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Bekor Qilish", callback_data="taggers_manage")]
+    ])
+    text = (
+        "➕ <b>Teg Berishga Yangi Shaxsga Ruxsat Berish:</b>\n\n"
+        "Iltimos, ruxsat bermoqchi bo‘lgan shaxsingizning:\n"
+        "• <b>@username</b> sini yozing (masalan: <code>@alisher</code>)\n"
+        "• Yoki raqamli <b>Telegram ID</b> sini yuboring (masalan: <code>123456789</code>)\n"
+        "• Yoki uning guruhdagi biror xabarini shu yerga <b>Forward</b> qilib yuboring!\n\n"
+        "<i>Bekor qilish uchun pastdagi tugmani bosing yoki /cancel deb yozing.</i>"
+    )
+    try:
+        await call.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    except Exception:
+        await call.message.answer(text, parse_mode="HTML", reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "tagger_remove_menu")
+async def callback_tagger_remove_menu(call: CallbackQuery):
+    if not is_bot_owner(call.from_user):
+        await call.answer("⛔️ Faqat bot egalari uchun!", show_alert=True)
+        return
+    from group_bot.database import get_all_authorized_taggers
+    taggers = get_all_authorized_taggers()
+    if not taggers:
+        await call.answer("Ruxsat berilgan foydalanuvchilar mavjud emas.", show_alert=True)
+        return
+    kb_rows = []
+    for t in taggers:
+        name = t.get("full_name") or f"User {t['user_id']}"
+        uname = f"@{t['username']}" if t.get("username") else str(t['user_id'])
+        btn_text = f"❌ {name[:16]} ({uname})"
+        kb_rows.append([
+            InlineKeyboardButton(text=btn_text, callback_data=f"tagger_del:{t['user_id']}")
+        ])
+    kb_rows.append([
+        InlineKeyboardButton(text="◀️ Orqaga", callback_data="taggers_manage")
+    ])
+    text = (
+        "➖ <b>Ruxsatni Olib Tashlash:</b>\n\n"
+        "Teg berish huquqini bekor qilmoqchi bo‘lgan shaxsingiz ustiga bosing:"
+    )
+    try:
+        await call.message.edit_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows))
+    except Exception:
+        await call.message.answer(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("tagger_del:"))
+async def callback_tagger_del(call: CallbackQuery, bot: Bot):
+    if not is_bot_owner(call.from_user):
+        await call.answer("⛔️ Faqat bot egalari uchun!", show_alert=True)
+        return
+    uid_str = call.data.split("tagger_del:")[1]
+    try:
+        uid = int(uid_str)
+        from group_bot.database import remove_authorized_tagger
+        remove_authorized_tagger(uid)
+        await call.answer("✅ Foydalanuvchi teg berish huquqidan mahrum qilindi!", show_alert=True)
+    except Exception as e:
+        await call.answer(f"Xatolik: {e}", show_alert=True)
+    await show_taggers_manage_menu(call, bot, is_edit=True)
+
+
+@router.message(lambda msg: bool(TAGGER_CMD_REGEX.match((msg.text or msg.caption or "").strip())))
+async def cmd_manage_taggers_direct(message: types.Message, bot: Bot):
+    if not is_bot_owner(message.from_user):
+        return
+
+    text = (message.text or message.caption or "").strip()
+    cmd = text.split()[0].lower().lstrip("!/.")
+
+    if cmd in ("taggers", "taggerlar", "taggerlist"):
+        await show_taggers_manage_menu(message, bot, is_edit=False)
+        return
+
+    tokens = text.split(maxsplit=1)
+    arg = tokens[1].strip() if len(tokens) > 1 else ""
+
+    target_uid = None
+    target_name = None
+    target_uname = None
+
+    if message.reply_to_message and message.reply_to_message.from_user:
+        ru = message.reply_to_message.from_user
+        target_uid = ru.id
+        target_name = ru.full_name
+        target_uname = ru.username
+    elif arg:
+        if arg.isdigit() or (arg.startswith("-") and arg[1:].isdigit()):
+            try:
+                target_uid = int(arg)
+                from group_bot.database import get_user_by_id
+                known = get_user_by_id(target_uid)
+                if known:
+                    target_name = known.get("full_name") or f"User {target_uid}"
+                    target_uname = known.get("username")
+                else:
+                    target_name = f"User {target_uid}"
+            except Exception:
+                pass
+        else:
+            clean_u = arg.lstrip("@").strip().lower()
+            from group_bot.database import get_user_id_by_username_global
+            known = get_user_id_by_username_global(clean_u)
+            if known:
+                target_uid = known.get("user_id")
+                target_name = known.get("full_name") or f"@{clean_u}"
+                target_uname = known.get("username") or clean_u
+            else:
+                try:
+                    c_obj = await bot.get_chat(f"@{clean_u}")
+                    target_uid = c_obj.id
+                    target_name = c_obj.full_name or c_obj.title or f"@{clean_u}"
+                    target_uname = c_obj.username or clean_u
+                except Exception:
+                    pass
+
+    if not target_uid:
+        await message.reply(
+            "❗ <b>Foydalanuvchini ko'rsating:</b>\n"
+            "• Foydalanuvchining xabariga <b>reply</b> qilib: <code>/addtagger</code>\n"
+            "• Yoki username bilan: <code>/addtagger @username</code>\n"
+            "• Yoki ID bilan: <code>/addtagger 123456789</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    from group_bot.database import add_authorized_tagger, remove_authorized_tagger
+
+    if cmd in ("addtagger", "+tagger"):
+        add_authorized_tagger(target_uid, username=target_uname, full_name=target_name, added_by=message.from_user.id)
+        u_display = f"@{target_uname}" if target_uname else f"<code>{target_uid}</code>"
+        await message.reply(
+            f"✅ <b>{escape(target_name or '')}</b> ({u_display}) ga guruhda <code>/tag</code> va <code>/deltag</code> buyruqlaridan foydalanish huquqi muvaffaqiyatli berildi! 🟢",
+            parse_mode="HTML"
+        )
+    elif cmd in ("deltagger", "-tagger"):
+        remove_authorized_tagger(target_uid)
+        u_display = f"@{target_uname}" if target_uname else f"<code>{target_uid}</code>"
+        await message.reply(
+            f"❌ <b>{escape(target_name or '')}</b> ({u_display}) ning teg berish huquqi bekor qilindi.",
+            parse_mode="HTML"
+        )
 
 
 

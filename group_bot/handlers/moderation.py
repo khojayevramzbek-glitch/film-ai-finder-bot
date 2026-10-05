@@ -1214,9 +1214,17 @@ async def cmd_set_member_tag(message: types.Message, bot: Bot):
         await message.reply("ℹ️ Ushbu buyruq faqat guruhlarda ishlaydi!", parse_mode="HTML")
         return
 
-    # 1. Ruxsatni tekshirish (admin yoki bot egasi)
-    if not await is_admin_or_allowed(message.chat.id, message.from_user, bot):
-        await message.reply("❌ Bu buyruq faqat guruh adminlari va bot egalari uchun!", parse_mode="HTML")
+    # 1. Ruxsatni tekshirish (faqat Ramzbek, Dubl va lichkadan ruxsat berilganlar)
+    from group_bot.database import is_user_authorized_tagger
+    sender_id = message.from_user.id if message.from_user else 0
+    sender_uname = (message.from_user.username or "").lower() if message.from_user else ""
+    if not is_user_authorized_tagger(sender_id, sender_uname):
+        await message.reply(
+            "⛔️ <b>Teg berish huquqi cheklangan!</b>\n\n"
+            "Guruhda a'zolarga teg berish (<code>/tag</code>) faqat bot egalari (<b>@khojayev_ramz</b> va <b>@wdablyu</b>) "
+            "hamda bot lichkasidan ruxsat berilgan maxsus shaxslar uchun mumkin.",
+            parse_mode="HTML"
+        )
         return
 
     sender_id = message.from_user.id if message.from_user else 0
@@ -1335,9 +1343,17 @@ async def cmd_del_member_tag(message: types.Message, bot: Bot):
         await message.reply("ℹ️ Ushbu buyruq faqat guruhlarda ishlaydi!", parse_mode="HTML")
         return
 
-    # 1. Ruxsatni tekshirish
-    if not await is_admin_or_allowed(message.chat.id, message.from_user, bot):
-        await message.reply("❌ Bu buyruq faqat guruh adminlari va bot egalari uchun!", parse_mode="HTML")
+    # 1. Ruxsatni tekshirish (faqat Ramzbek, Dubl va lichkadan ruxsat berilganlar)
+    from group_bot.database import is_user_authorized_tagger
+    sender_id = message.from_user.id if message.from_user else 0
+    sender_uname = (message.from_user.username or "").lower() if message.from_user else ""
+    if not is_user_authorized_tagger(sender_id, sender_uname):
+        await message.reply(
+            "⛔️ <b>Tegni o'chirish huquqi cheklangan!</b>\n\n"
+            "Guruhda a'zolarning tegini o'chirish (<code>/deltag</code>) faqat bot egalari (<b>@khojayev_ramz</b> va <b>@wdablyu</b>) "
+            "hamda bot lichkasidan ruxsat berilgan maxsus shaxslar uchun mumkin.",
+            parse_mode="HTML"
+        )
         return
 
     sender_id = message.from_user.id if message.from_user else 0
