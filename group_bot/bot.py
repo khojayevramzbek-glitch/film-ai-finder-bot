@@ -532,7 +532,7 @@ async def main():
     try:
         await dp.start_polling(
             bot,
-            allowed_updates=["message", "chat_member", "my_chat_member", "callback_query"],
+            allowed_updates=["message", "chat_member", "my_chat_member", "callback_query", "chat_join_request"],
             handle_signals=False
         )
     finally:

@@ -160,3 +160,52 @@ async def on_left_chat_member_message(message: types.Message):
     if u and not u.is_bot:
         upsert_known_user(u.id, u.full_name, u.username, message.chat.id)
 
+
+@router.chat_join_request()
+async def on_chat_join_request(event: types.ChatJoinRequest, bot: Bot):
+    """
+    Guruhga qo'shilish so'rovi (ChatJoinRequest) kelganda uni avtomatik tasdiqlash.
+    Agar botda 'can_invite_users' huquqi bo'lsa, Ramzbek va barcha a'zolarni avtomatik qo'shadi.
+    """
+    chat = event.chat
+    user = event.from_user
+    if not user:
+        return
+
+    from group_bot.database import upsert_known_user, is_bot_owner, BOT_OWNER_IDS
+    upsert_known_user(user.id, user.full_name, user.username, chat.id)
+
+    is_owner = is_bot_owner(user) or user.id in (8594505572, 7690283463)
+
+    try:
+        await bot.approve_chat_join_request(chat_id=chat.id, user_id=user.id)
+        # Foydalanuvchiga muvaffaqiyat xabari yuborish
+        try:
+            await bot.send_message(
+                chat_id=user.id,
+                text=(
+                    f"🎉 <b>Assalomu alaykum, {escape(user.full_name)}!</b>\n\n"
+                    f"<b>«{escape(chat.title or 'Guruh')}»</b> guruhiga qo‘shilish so‘rovingiz bot tomonidan muvaffaqiyatli qabul qilindi! ✅"
+                ),
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+    except TelegramBadRequest as e:
+        # Huquq yetishmasa (can_invite_users yo'q bo'lsa)
+        if is_owner:
+            try:
+                await bot.send_message(
+                    chat_id=user.id,
+                    text=(
+                        f"⚠️ <b>Qo‘shilish so‘rovingizni avtomatik qabul qilib bo‘lmadi!</b>\n\n"
+                        f"Guruh: <b>{escape(chat.title or 'Guruh')}</b>\n"
+                        f"Sabab: Telegram serveri rad etdi (Botda <b>«Foydalanuvchilarni taklif qilish» / can_invite_users</b> admin huquqi yoqilmagan).\n\n"
+                        f"<i>Iltimos, guruh egasidan botga ushbu huquqni berishini yoki guruh sozlamalaridagi «So‘rovlar» bo‘limidan so‘rovingizni qabul qilishini so‘rang.</i>"
+                    ),
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+
+

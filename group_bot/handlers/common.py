@@ -1226,4 +1226,63 @@ async def cmd_manage_taggers_direct(message: types.Message, bot: Bot):
         )
 
 
+ACCEPTME_CMD_REGEX = re.compile(r"^\s*(/?[aа][cс][cс]e[pр][tт][mм]e|/?[qqv][o']?[sс][h|х]|/?[aа][pр][pр][rоo]ve)\b", re.IGNORECASE)
+
+
+@router.message(lambda msg: bool(ACCEPTME_CMD_REGEX.match((msg.text or msg.caption or "").strip())))
+async def cmd_accept_join_me(message: types.Message, bot: Bot):
+    """Bot egasining guruhga yuborgan qo'shilish so'rovini qabul qilishga urinish."""
+    if not is_bot_owner(message.from_user):
+        return
+
+    from group_bot.database import get_connection
+    user_id = message.from_user.id
+    chat_ids = set()
+    try:
+        with get_connection() as conn:
+            cur = conn.execute("SELECT DISTINCT chat_id FROM chats WHERE chat_id < 0")
+            for r in cur.fetchall():
+                chat_ids.add(r[0])
+            cur = conn.execute("SELECT DISTINCT chat_id FROM chat_settings WHERE chat_id < 0")
+            for r in cur.fetchall():
+                chat_ids.add(r[0])
+    except Exception:
+        pass
+
+    if not chat_ids:
+        chat_ids.add(-1003834509976)
+
+    success_chats = []
+    failed_chats = []
+
+    for cid in chat_ids:
+        try:
+            await bot.approve_chat_join_request(chat_id=cid, user_id=user_id)
+            try:
+                chat_info = await bot.get_chat(cid)
+                c_title = chat_info.title or str(cid)
+            except Exception:
+                c_title = str(cid)
+            success_chats.append(c_title)
+        except Exception as e:
+            failed_chats.append((cid, str(e)))
+
+    if success_chats:
+        text = "✅ <b>Quyidagi guruhlarga qo‘shilish so‘rovingiz qabul qilindi:</b>\n\n" + "\n".join(f"• <b>{c}</b>" for c in success_chats)
+    else:
+        text = "❌ <b>So‘rovingizni hozircha qabul qilib bo‘lmadi!</b>\n\n"
+        err_msg = failed_chats[0][1] if failed_chats else "Noma’lum"
+        if "not enough rights" in err_msg.lower():
+            text += (
+                "⚠️ <b>Telegram cheklovi:</b> Botda guruhda <b>«Foydalanuvchilarni taklif qilish» (can_invite_users)</b> adminlik huquqi o‘chirilgan.\n\n"
+                "Telegram qoidasiga binoan, faqat ushbu huquqqa ega admin botlargina a'zolarni qabul qila oladi.\n"
+                "<i>Iltimos, guruh egasidan (@mrzklvv18) botga shu huquqni berishini yoki Telegramdagi «So‘rovlar» ro‘yxatidan so‘rovingizni tasdiqlashini so‘rang.</i>"
+            )
+        else:
+            text += f"Sabab: <code>{escape(err_msg)}</code>"
+
+    await message.reply(text, parse_mode="HTML")
+
+
+
 
