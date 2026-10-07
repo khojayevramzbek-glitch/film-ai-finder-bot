@@ -658,7 +658,15 @@ async def handle_moderation_commands(message: types.Message, bot: Bot):
                     parse_mode="HTML"
                 )
         except TelegramBadRequest as e:
-            await message.reply(f"⚠️ Xatolik yuz berdi: {e.message}")
+            if "not enough rights" in e.message.lower() or "right_forbidden" in e.message.lower():
+                await message.reply(
+                    "⚠️ <b>Bot foydalanuvchini chiqara olmadi (Ban)!</b>\n\n"
+                    "Sabab: Botning guruhdagi adminlik huquqlarida <b>«Foydalanuvchilarni bloklash» (can_restrict_members)</b> huquqi o‘chirilgan.\n"
+                    "<i>Iltimos, guruh egasidan botga ushbu huquqni berishini so‘rang.</i>",
+                    parse_mode="HTML"
+                )
+            else:
+                await message.reply(f"⚠️ Xatolik yuz berdi: {e.message}")
         return
 
     # 6. UNBAN: /unban, unban, разбан
@@ -957,41 +965,51 @@ async def cmd_promote_admin(message: types.Message, bot: Bot):
         return
 
     # 8. Huquqlarni taqsimlash
-    # Ramzbek (@khojayev_ramz) o'zini admin yoki moderator qilganda barcha huquqlar to'liq yoqiladi!
-    # Boshqalar uchun faqat kerakli nazorat buyruqlari yoqiladi.
-    is_ramzbek = (target_user.id in {8594505572} or (target_user.username and target_user.username.lower() == "khojayev_ramz"))
+    # Telegram qoidasiga ko'ra: Bot faqat o'zida bor huquqlarnigina boshqalarga bera oladi.
+    b_mng = bool(getattr(bot_member, "can_manage_chat", False))
+    b_del = bool(getattr(bot_member, "can_delete_messages", False))
+    b_vid = bool(getattr(bot_member, "can_manage_video_chats", False))
+    b_res = bool(getattr(bot_member, "can_restrict_members", False))
+    b_prom = bool(getattr(bot_member, "can_promote_members", False))
+    b_info = bool(getattr(bot_member, "can_change_info", False))
+    b_inv = bool(getattr(bot_member, "can_invite_users", False))
+    b_pin = bool(getattr(bot_member, "can_pin_messages", False))
+    b_top = bool(getattr(bot_member, "can_manage_topics", False))
+    b_p_stor = bool(getattr(bot_member, "can_post_stories", False))
+    b_e_stor = bool(getattr(bot_member, "can_edit_stories", False))
+    b_d_stor = bool(getattr(bot_member, "can_delete_stories", False))
 
     if is_ramzbek:
         promote_kwargs = dict(
             chat_id=message.chat.id,
             user_id=target_user.id,
             is_anonymous=False,
-            can_manage_chat=True,
-            can_delete_messages=True,
-            can_manage_video_chats=True,
-            can_restrict_members=True,
-            can_promote_members=bool(getattr(bot_member, "can_promote_members", True)),
-            can_change_info=True,
-            can_invite_users=True,
-            can_pin_messages=True,
-            can_manage_topics=bool(getattr(bot_member, "can_manage_topics", False)),
-            can_post_stories=bool(getattr(bot_member, "can_post_stories", True)),
-            can_edit_stories=bool(getattr(bot_member, "can_edit_stories", True)),
-            can_delete_stories=bool(getattr(bot_member, "can_delete_stories", True)),
+            can_manage_chat=b_mng,
+            can_delete_messages=b_del,
+            can_manage_video_chats=b_vid,
+            can_restrict_members=b_res,
+            can_promote_members=b_prom,
+            can_change_info=b_info,
+            can_invite_users=b_inv,
+            can_pin_messages=b_pin,
+            can_manage_topics=b_top,
+            can_post_stories=b_p_stor,
+            can_edit_stories=b_e_stor,
+            can_delete_stories=b_d_stor,
         )
     elif is_mod_cmd:
         promote_kwargs = dict(
             chat_id=message.chat.id,
             user_id=target_user.id,
             is_anonymous=False,
-            can_manage_chat=True,
-            can_delete_messages=True,
+            can_manage_chat=b_mng,
+            can_delete_messages=b_del,
             can_manage_video_chats=False,
-            can_restrict_members=True,
+            can_restrict_members=b_res,
             can_promote_members=False,
             can_change_info=False,
-            can_invite_users=True,
-            can_pin_messages=True,
+            can_invite_users=b_inv,
+            can_pin_messages=b_pin,
             can_manage_topics=False,
             can_post_stories=False,
             can_edit_stories=False,
@@ -1002,14 +1020,14 @@ async def cmd_promote_admin(message: types.Message, bot: Bot):
             chat_id=message.chat.id,
             user_id=target_user.id,
             is_anonymous=False,
-            can_manage_chat=True,
-            can_delete_messages=True,
-            can_manage_video_chats=True,
-            can_restrict_members=True,
+            can_manage_chat=b_mng,
+            can_delete_messages=b_del,
+            can_manage_video_chats=b_vid,
+            can_restrict_members=b_res,
             can_promote_members=False,
             can_change_info=False,
-            can_invite_users=True,
-            can_pin_messages=True,
+            can_invite_users=b_inv,
+            can_pin_messages=b_pin,
             can_manage_topics=False,
             can_post_stories=False,
             can_edit_stories=False,
@@ -1053,12 +1071,21 @@ async def cmd_promote_admin(message: types.Message, bot: Bot):
     promoter_name = escape(message.from_user.full_name) if message.from_user else "Bot Egasi"
     title_line = f"\n🏷 <b>Unvoni:</b> <code>{escape(custom_title)}</code>" if title_applied else ""
 
+    missing_notes = []
+    if not b_res:
+        missing_notes.append("bloklash")
+    if not b_inv:
+        missing_notes.append("taklif qilish")
+
     if is_ramzbek:
-        rights_desc = "⚡️ <i>Barcha huquqlar (yangi admin qo'shish, ma'lumotlarni o'zgartirish, pin, delete, restrict va hk.) 100% to'liq yoqildi!</i>"
+        rights_desc = "⚡️ <i>Botda mavjud barcha huquqlar (yangi admin qo'shish, ma'lumotlarni o'zgartirish, pin, delete va hk.) to'liq yoqildi!</i>"
     elif is_mod_cmd:
-        rights_desc = "⚡️ <i>Kerakli moderator huquqlari (xabarlarni o'chirish, bloklash, pin va a'zo taklif qilish) muvaffaqiyatli taqdim etildi.</i>"
+        rights_desc = "⚡️ <i>Kerakli moderator huquqlari (xabarlarni o'chirish, pin va hk.) muvaffaqiyatli taqdim etildi.</i>"
     else:
-        rights_desc = "⚡️ <i>Kerakli admin huquqlari (xabarlarni o'chirish, bloklash, pin, videochat va a'zo taklif qilish) muvaffaqiyatli taqdim etildi.</i>"
+        rights_desc = "⚡️ <i>Kerakli admin huquqlari (xabarlarni o'chirish, pin, videochat va hk.) muvaffaqiyatli taqdim etildi.</i>"
+
+    if missing_notes:
+        rights_desc += f"\n\n💡 <i>Eslatma: Botda ({', '.join(missing_notes)}) huquqi o'chiqligi sababli, yangi adminga ham faqat botdagi mavjud huquqlar berildi.</i>"
 
     role_title = "Moderator" if is_mod_cmd else "Administrator"
     await message.answer(
