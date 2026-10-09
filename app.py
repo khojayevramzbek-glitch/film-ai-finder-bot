@@ -6,7 +6,7 @@ import asyncio
 import traceback
 import psutil
 from fastapi import Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 import gradio as gr
 
 # Ensure UTF-8 output
@@ -39,28 +39,9 @@ def run_telegram_bot():
         time.sleep(3)
 
 
-def run_group_bot():
-    """Runs the Telegram Group Moderation Bot (@oken_sherda_bot) with auto-restart."""
-    if "4wrf" in os.getenv("RENDER_EXTERNAL_URL", ""):
-        print("⏸️ [Cluster] Standby node (4wrf) aniqlandi. Guruh boti polling faqat asosiy node (uc34) da ishlaydi.", flush=True)
-        return
-    while True:
-        print("🛡 [Cluster] Guruh Moderatsiya Boti (@oken_sherda_bot) ishga tushirilmoqda...", flush=True)
-        try:
-            from group_bot import bot as group_bot_module
-            asyncio.run(group_bot_module.main())
-        except Exception as e:
-            print(f"❌ [Group Bot Error] {e}. 3 soniyadan so'ng qayta ishga tushadi...", flush=True)
-            traceback.print_exc()
-        time.sleep(3)
-
-
-# Start both bots in background daemon threads
+# Start main film bot cluster in background daemon thread
 bot_thread = threading.Thread(target=run_telegram_bot, daemon=True)
 bot_thread.start()
-
-group_bot_thread = threading.Thread(target=run_group_bot, daemon=True)
-group_bot_thread.start()
 
 
 def get_system_stats():
@@ -73,24 +54,20 @@ def get_system_stats():
             f"🧠 RAM (Xotira): {ram.used / (1024*1024):.1f} MB / {ram.total / (1024*1024):.1f} MB ({ram.percent}%)\n"
             f"⚡️ CPU (Protsessor): {cpu}%\n"
             f"🎬 Kino Qidiruv Boti: @FilmAiFinderbot (Faol)\n"
-            f"👑 Kino Admin Boti: @filmfinder_admin_bot (Faol)\n"
-            f"🛡 Guruh Moderatsiya Boti: @oken_sherda_bot (Faol)"
+            f"👑 Kino Admin Boti: @filmfinder_admin_bot (Faol)"
         )
     except Exception as e:
         return f"🟢 Server Holati: ONLINE\nBotlar faol ishlamoqda. ({e})"
 
 
-from starlette.middleware import Middleware
-from group_bot.webapp_server import TelegramWebAppMiddleware, get_webapp_html, attach_fastapi_routes
-
 # Build Gradio Blocks (Hugging Face Spaces ZeroGPU runner & Render Web Service)
-with gr.Blocks(title="Blizkiy Moderatsiya — Guruh Boshqaruv Markazi") as demo:
+with gr.Blocks(title="Kino AI Finder — Boshqaruv Markazi") as demo:
     with gr.Column():
         gr.Markdown(
             """
-            # 🛡 Blizkiy Moderatsiya & Kino AI Klasteri
+            # 🎬 Kino AI Finder Klasteri
             **Server Holati:** 🟢 24/7 ONLINE (Doimiy Faol)  
-            **Mini App:** Telegram ilovasida to'liq integratsiya qilingan.
+            **Botlar:** @FilmAiFinderbot va @filmfinder_admin_bot faol ishlamoqda.
             """
         )
         stats_box = gr.Textbox(value=get_system_stats, every=30, label="Tizim Ko'rsatkichlari (Live)", interactive=False)
@@ -101,15 +78,12 @@ def keep_alive_worker():
     import urllib.request
     urls_to_ping = [
         "https://film-ai-finder-bot-uc34.onrender.com/health",
-        "https://film-ai-finder-bot-uc34.onrender.com/webapp",
     ]
     render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
     if render_url:
         full_render_health = f"{render_url.rstrip('/')}/health"
-        full_render_webapp = f"{render_url.rstrip('/')}/webapp"
-        for u in (full_render_health, full_render_webapp):
-            if u not in urls_to_ping:
-                urls_to_ping.append(u)
+        if full_render_health not in urls_to_ping:
+            urls_to_ping.append(full_render_health)
 
     # Server to'liq ishga tushishi uchun dastlabki 30 soniya kutish
     time.sleep(30)
@@ -132,11 +106,12 @@ keep_alive_thread.start()
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "7860"))
 
-    # Attach all FastAPI / Mini App / Health check routes to demo.app BEFORE launch
+    # Attach health check route to demo.app BEFORE launch
     try:
         if hasattr(demo, "app") and demo.app:
-            attach_fastapi_routes(demo.app)
-            demo.app.add_middleware(TelegramWebAppMiddleware)
+            @demo.app.get("/health")
+            async def health_check():
+                return JSONResponse({"status": "online", "ok": True, "service": "AI FilmFinder Bot Cluster"})
     except Exception as e:
         print(f"⚠️ [FastAPI Route Attach Warning] {e}", flush=True)
 
@@ -152,12 +127,9 @@ if __name__ == "__main__":
             server_port=port,
             prevent_thread_lock=True,
             ssr_mode=False,
-            css=css_style,
-            app_kwargs={
-                "middleware": [Middleware(TelegramWebAppMiddleware)]
-            }
+            css=css_style
         )
-        print(f"✅ [Server] Gradio va Mini App 0.0.0.0:{port} da muvaffaqiyatli ishga tushdi.", flush=True)
+        print(f"✅ [Server] Gradio 0.0.0.0:{port} da muvaffaqiyatli ishga tushdi.", flush=True)
     except Exception as e:
         print(f"⚠️ [Gradio Warning] {e}. Uvicorn orqali to'g'ridan-to'g'ri ishga tushirilmoqda...", flush=True)
         try:
@@ -172,4 +144,3 @@ if __name__ == "__main__":
 
     while True:
         time.sleep(3600)
-

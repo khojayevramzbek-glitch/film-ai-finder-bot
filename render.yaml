@@ -10,8 +10,6 @@ services:
         sync: false
       - key: ADMIN_BOT_TOKEN
         sync: false
-      - key: GROUP_BOT_TOKEN
-        sync: false
       - key: GEMINI_API_KEYS
         sync: false
       - key: GEMINI_MODEL
